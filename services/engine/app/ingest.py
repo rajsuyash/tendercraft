@@ -8,6 +8,8 @@ so every criterion keeps its page anchor (A-AC3).
 from __future__ import annotations
 
 import io
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 from pypdf import PdfReader
 
@@ -16,6 +18,9 @@ from .envelope import ApiError
 
 # A page with almost no extractable text is probably a scan — flag for manual OCR (EC-1).
 _MIN_CHARS_PER_PAGE = 20
+# Per-page extraction is one Gemini call each; sequential is minutes on a real RFP.
+# Fan out across pages, bounded so we don't hammer the API. Order restored after.
+_EXTRACT_WORKERS = int(os.environ.get("INGEST_EXTRACT_WORKERS", "8"))
 
 
 def parse_pdf_pages(data: bytes) -> list[tuple[int, str]]:
@@ -42,15 +47,18 @@ def ingest_pages(pages: list[tuple[int, str]]) -> dict:
     """
     from pipeline.extractor import extract_from_page
 
+    illegible_pages = [p for p, t in pages if len(t) < _MIN_CHARS_PER_PAGE]
+    legible = [(p, t) for p, t in pages if len(t) >= _MIN_CHARS_PER_PAGE]
+
+    # One Gemini call per page, fanned out. pool.map preserves input order and `legible` is
+    # page-ascending, so rows stay page-ascending without a re-sort (anchors ordered, A-AC3).
+    with ThreadPoolExecutor(max_workers=_EXTRACT_WORKERS) as pool:
+        per_page = pool.map(lambda pt: extract_from_page(pt[1], pt[0]), legible)
+
     rows: list[dict] = []
     low_conf = 0
-    illegible_pages: list[int] = []
-
-    for page_no, text in pages:
-        if len(text) < _MIN_CHARS_PER_PAGE:
-            illegible_pages.append(page_no)
-            continue
-        for c in extract_from_page(text, page_no):
+    for criteria in per_page:
+        for c in criteria:
             if c.needs_confirmation:
                 low_conf += 1
             rows.append(
