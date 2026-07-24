@@ -1,22 +1,20 @@
-"""Thin eval runner: load cases -> call component -> schema-validate -> score -> JSON report.
+"""Eval runner: load golden cases -> call the component -> score -> report.
 
-Usage: uv run python -m evals.run <component>   (components: extractor, eligibility-matcher)
+Usage: uv run python -m evals.run extractor
 
-Wire-up happens at M1/M2 when the pipeline components exist; until then this
-validates the harness (cases parse, schema stubs load) and exits non-zero on
-malformed cases so CI catches golden-set corruption early.
-
-Rules (binding, see .claude/agents/eval-runner.md):
-- never edit cases/thresholds to make a run pass
-- fault-injection cases ("inject": ...) must exercise retry-cap-1 + deterministic fallback
-- report schema-validity, per-field accuracy, p95 latency, cost per case
+Scores the Extractor against evals/extractor/cases.jsonl using live Gemini. Fault-injection
+cases ("inject") verify the deterministic fallback fires (empty result, no crash, no
+invention). Never edit cases/thresholds to make a run pass — thresholds are human PRD edits.
 """
+
+from __future__ import annotations
+
 import json
+import os
 import sys
 from pathlib import Path
 
-# ponytail: harness-only until pipeline components exist (M1); real invocation slots in here
-COMPONENTS = ("extractor", "eligibility-matcher")
+COMPONENTS = ("extractor",)
 
 
 def load_cases(component: str) -> list[dict]:
@@ -32,20 +30,77 @@ def load_cases(component: str) -> list[dict]:
     return cases
 
 
+def _check_case(crits, expected: dict) -> dict[str, bool]:
+    checks: dict[str, bool] = {"count": len(crits) == expected["count"]}
+    if expected["count"] > 0 and crits:
+        first = crits[0]
+        if "category" in expected:
+            checks["category"] = first.category == expected["category"]
+        if "requirement_level" in expected:
+            checks["req_level"] = first.requirement_level == expected["requirement_level"]
+        if "anchor_clause" in expected:
+            checks["anchor"] = expected["anchor_clause"] in first.anchor_clause
+        if "verbatim_contains" in expected:
+            needle = expected["verbatim_contains"].lower()
+            checks["verbatim"] = needle in first.verbatim_text.lower()
+    return checks
+
+
+def score_extractor() -> int:
+    from pipeline import extractor as ex
+
+    cases = load_cases("extractor")
+    normal = [c for c in cases if not c.get("inject")]
+    inject = [c for c in cases if c.get("inject")]
+
+    passed = 0
+    print("\n== Extractor golden set (live) ==")
+    for c in normal:
+        crits = ex.extract_from_page(c["input"]["text"], c["input"]["page"])
+        checks = _check_case(crits, c["expected"])
+        ok = all(checks.values())
+        passed += ok
+        failed = [k for k, v in checks.items() if not v]
+        print(f"  {c['id']:10} {'PASS' if ok else 'FAIL'}  extracted={len(crits)}"
+              + (f"  missed={failed}" if failed else ""))
+
+    # Fault injection: model failure must yield [] (fallback), never a crash or invention.
+    print("\n== Fault injection (fallback) ==")
+    inject_passed = 0
+    orig = ex.generate_json
+    for c in inject:
+        ex.generate_json = _raise  # type: ignore[assignment]
+        try:
+            crits = ex.extract_from_page(c["input"]["text"], c["input"]["page"])
+            ok = crits == []
+        except Exception:  # noqa: BLE001 — a crash is exactly the failure we test against
+            ok = False
+        finally:
+            ex.generate_json = orig  # type: ignore[assignment]
+        inject_passed += ok
+        print(f"  {c['id']:10} {'PASS' if ok else 'FAIL'}  ({c['inject']} -> fallback)")
+
+    total = len(normal) + len(inject)
+    total_pass = passed + inject_passed
+    print(f"\nSUMMARY: {total_pass}/{total} cases pass "
+          f"(normal {passed}/{len(normal)}, injection {inject_passed}/{len(inject)})")
+    print("NOTE: starter set proves the harness + fallback, not release-grade accuracy "
+          "(gold set is the PRD §6 corpus). Thresholds A-AC1/A-AC2 gate at that scale.")
+    return 0 if total_pass == total else 1
+
+
+def _raise(*_a, **_k):
+    from pipeline.client import ModelError
+
+    raise ModelError("injected failure")
+
+
 def main() -> None:
     if len(sys.argv) != 2 or sys.argv[1] not in COMPONENTS:
         sys.exit(f"usage: python -m evals.run <{'|'.join(COMPONENTS)}>")
-    component = sys.argv[1]
-    cases = load_cases(component)
-    starters = sum(1 for c in cases if c.get("starter"))
-    injections = sum(1 for c in cases if c.get("inject"))
-    print(json.dumps({
-        "component": component,
-        "cases": len(cases),
-        "starter_cases": starters,
-        "fault_injections": injections,
-        "status": "harness-ok (pipeline not wired yet — see run.py TODO at M1)",
-    }, indent=2))
+    if not os.environ.get("GEMINI_API_KEY"):
+        sys.exit("GEMINI_API_KEY not set — cannot run live evals")
+    sys.exit(score_extractor())
 
 
 if __name__ == "__main__":
