@@ -39,3 +39,17 @@
 **Evidence**: 60 unit + 5 live-isolation pytest green, ruff clean. RLS-on verified on all public tables.
 
 **Compliance flag (recorded, not blocking dev)**: the Supabase project is in `eu-north-1` (Stockholm). PRD §9 requires Indian data residency (DPDP) — production must move to `ap-south-1` (Mumbai) before real customer data. Propose PRD Appendix B entry.
+
+## 2026-07-24 (cont.) · M0 walking skeleton — COMPLETE, live-verified
+
+**Shipped**
+- **T1** engine: FastAPI app (`/health` public, `{ok,data,error}` envelope, JWKS ES256 auth, `/api/me`). 69 engine tests (60 unit + 5 isolation + 4 api-auth) green.
+- **T1** web: Next.js 15 App Router app — builds, typechecks, lints clean; Tailwind wired to tokens; 12 vitest.
+- **T3** auth (both sides): engine verifies Supabase JWT via JWKS + derives tenant from profile (never body); web uses @supabase/ssr with middleware route-gating + defense-in-depth layout check.
+- **T4** components: C1 Sidebar, C4 VerdictChip, C6 SlaChip, Skeleton — token-only, GLB-D3 (label not color alone).
+- **T5** seed: idempotent FIX-1 (`priya@meridian.test`, tenant "Meridian Infotech Pvt Ltd").
+- **T6/T7/T8**: S1 login, S2 dashboard shell, S13 error+404.
+
+**Live browser evidence** (`.claude/verify-artifacts/`): S1 login renders design-faithful (slate-blue brand panel, Lexend/Inter); FIX-1 sign-in works → S2 dashboard; RLS scopes the dashboard query end-to-end. Design ACs verified via DOM: **S1-D1** ([data-auth-error] on bad login), **S2-D2** ([data-empty-state] + CTA to /tenders/upload), C1 active-nav tint. Dev-server log clean (no hydration/runtime errors).
+
+**M0 exit criteria**: ✅ all commands green · ✅ S2-D2 · ✅ demoable (sign in as FIX-1 → empty dashboard; engine /health responds).

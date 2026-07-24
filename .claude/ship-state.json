@@ -15,21 +15,19 @@
     "g3": { "approved_at": null, "readiness_verdict": null }
   },
   "milestones": [
-    { "id": "M0", "status": "building", "exit_acs": ["S2-D2", "GLB-D1"],
+    { "id": "M0", "status": "verified", "exit_acs": ["S2-D2", "GLB-D1"], "completed_at": "2026-07-24",
       "tasks": [
-        { "id": "T1", "name": "Monorepo init", "complexity": "med", "status": "partial",
-          "note": "pnpm workspace + apps/web package done; full Next app + engine FastAPI app deferred (browser/credential-gated)",
-          "commit": "1fd3af1", "verified_layers": ["unit"] },
-        { "id": "T4", "name": "Design-system enabler (format + tokens)", "complexity": "med", "status": "partial",
-          "note": "format helpers + token->tailwind wiring done + tested; C1-C6 React components deferred (need Next+browser)",
-          "commit": "1fd3af1", "verified_layers": ["unit"] },
-        { "id": "T2", "name": "Supabase schema v0 + RLS + isolation harness", "complexity": "high", "status": "verified",
-          "note": "live: 5/5 ET-6 isolation tests pass; RLS on all tables; append-only audit; reviewed FIX_FIRST->fixed",
-          "commit": "da0adc5", "verified_layers": ["integration"] },
-        { "id": "T3", "name": "Auth wiring web+engine", "complexity": "high", "status": "pending",
-          "note": "needs Next.js app + FastAPI app stood up first (T1 completion)" }
+        { "id": "T1", "name": "Monorepo init (Next app + FastAPI app)", "complexity": "med", "status": "verified", "commit": "5f520de", "verified_layers": ["unit", "integration"] },
+        { "id": "T2", "name": "Supabase schema v0 + RLS + isolation harness", "complexity": "high", "status": "verified", "commit": "da0adc5", "verified_layers": ["integration"] },
+        { "id": "T3", "name": "Auth wiring web+engine", "complexity": "high", "status": "verified", "commit": "5f520de", "verified_layers": ["integration", "browser-verify"] },
+        { "id": "T4", "name": "Design-system enabler (format + tokens + C1/C4/C6)", "complexity": "med", "status": "verified", "commit": "5f520de", "verified_layers": ["unit", "design-review"] },
+        { "id": "T5", "name": "FIX-1 seed", "complexity": "low", "status": "verified", "commit": "5f520de", "verified_layers": ["unit"] },
+        { "id": "T6", "name": "S1 login", "complexity": "med", "status": "verified", "commit": "5f520de", "verified_layers": ["browser-verify", "design-review"] },
+        { "id": "T7", "name": "S2 dashboard shell", "complexity": "med", "status": "verified", "commit": "5f520de", "verified_layers": ["browser-verify", "design-review"] },
+        { "id": "T8", "name": "S13 error+404", "complexity": "med", "status": "verified", "commit": "5f520de", "verified_layers": ["browser-verify"] }
       ] },
-    { "id": "M1", "status": "pending", "exit_acs": ["A-AC3", "A-AC5", "S4-D1"] },
+    { "id": "M1", "status": "pending", "exit_acs": ["A-AC3", "A-AC5", "S4-D1"],
+      "note": "deterministic lock gate (A-AC5) core already built + tested in the engine; M1 wires ingestion (upload, Document AI OCR, extractor via Anthropic) around it. OCR provider = Google Document AI (needs GCP creds — not yet in .env)." },
     { "id": "M2", "status": "pending", "exit_acs": ["C-AC4", "C-AC5", "S7-D1", "S7-D2", "S7-D3"] },
     { "id": "M3", "status": "pending", "exit_acs": ["B-AC3", "S9-D1", "S9-D2", "S9-D3"] },
     { "id": "M4", "status": "pending", "exit_acs": ["E-AC2", "B-AC4", "E-AC1", "E-AC3", "S10-D1", "S10-D2", "S10-D3"] },
@@ -56,6 +54,9 @@
     "2026-07-24 G1 approved (offline-core scope, OCR=Document AI)",
     "2026-07-24 T1+T4-core committed 1fd3af1 (12 vitest green)",
     "2026-07-24 deterministic engine committed 3bc23af (60 pytest, 100% branch, reviewed APPROVE)",
-    "2026-07-24 pushed build/tendercraft -> github.com/rajsuyash/tendercraft"
+    "2026-07-24 pushed build/tendercraft -> github.com/rajsuyash/tendercraft",
+    "2026-07-24 T2 verified da0adc5 (5 live isolation tests, ET-6)",
+    "2026-07-24 engine app + JWKS auth 4721e6c (69 engine tests)",
+    "2026-07-24 M0 VERIFIED 5f520de — walking skeleton live (FIX-1 sign-in -> RLS dashboard); T1/T3/T4/T5/T6/T7/T8 done"
   ]
 }
