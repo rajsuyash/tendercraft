@@ -27,7 +27,7 @@
         { "id": "T8", "name": "S13 error+404", "complexity": "med", "status": "verified", "commit": "5f520de", "verified_layers": ["browser-verify"] }
       ] },
     { "id": "M1", "status": "pending", "exit_acs": ["A-AC3", "A-AC5", "S4-D1"],
-      "note": "deterministic lock gate (A-AC5) core already built + tested in the engine; M1 wires ingestion (upload, Document AI OCR, extractor via Anthropic) around it. OCR provider = Google Document AI (needs GCP creds — not yet in .env)." },
+      "note": "OCR/extract decision changed to GEMINI (user added GEMINI_API_KEY). Extractor built (T13/T14 core, commit 09e25bb): pipeline/client.py + extractor.py + prompt + eval harness; 10 unit tests green, fallback verified live. BLOCKED: provided GEMINI_API_KEY (AQ.Ab8... format) returns 403 — not an AI Studio key (those are AIza...). Need valid key for live extraction accuracy + to build T10/T12. Remaining M1 non-Gemini tasks buildable now: T15 verification-queue+lock wiring (lock gate core done), T10 upload backend, T11/T16/T17 screens." },
     { "id": "M2", "status": "pending", "exit_acs": ["C-AC4", "C-AC5", "S7-D1", "S7-D2", "S7-D3"] },
     { "id": "M3", "status": "pending", "exit_acs": ["B-AC3", "S9-D1", "S9-D2", "S9-D3"] },
     { "id": "M4", "status": "pending", "exit_acs": ["E-AC2", "B-AC4", "E-AC1", "E-AC3", "S10-D1", "S10-D2", "S10-D3"] },
