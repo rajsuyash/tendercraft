@@ -90,3 +90,5 @@
 **Whole-app (Phase 4)**: engine 125 tests (114 unit + 11 live integration), web 12 tests; both apps typecheck/lint/build clean; 17 API routes. Every cx:high piece opus-reviewed.
 
 **ALL FIVE MILESTONES VERIFIED.** Full pipeline demoable: upload → verify → lock → analyze (NO-BID) → generate (cite-or-flag) → export gate → score (suppressed).
+
+**Bid Readiness redesign**: bidder-first flow — upload RFP → `POST /tenders/{id}/prepare` (lock+analyze+generate) → deterministic P0/P1/P2 readiness (`app/deterministic/readiness.py`, 100% branch) → knowledge-base ingestion (`app/knowledge.py`: PDF/DOCX/PPTX/URL → Gemini classifier) → gated generate CTA. ReadinessHub + KnowledgeUpload UI. Engine 160 tests green. URL ingestion SSRF-hardened: per-hop DNS resolve-and-reject (private/loopback/link-local/reserved/multicast), manual redirect re-validation, streamed byte cap.

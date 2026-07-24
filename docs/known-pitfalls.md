@@ -48,3 +48,5 @@ Format: **symptom → cause → fix.**
 - RLS forgotten on a new table → silent cross-tenant reads → migration checklist: every table gets tenant_id + RLS policy + isolation test before merge
 - Service-role key used in web code → RLS bypassed entirely → service-role only in the engine; web uses anon key + session
 - pgvector similarity without tenant filter → ET-6 leak via retrieval → tenant filter BEFORE similarity ranking, tested in CI
+- User-supplied URL fetched with string-only host check → SSRF to cloud metadata via DNS-rebind or 302→169.254.169.254 → resolve every hop with getaddrinfo, reject any private/loopback/link-local/reserved/multicast IP, follow redirects manually with re-validation, stream with a byte cap (`app/knowledge.py::fetch_url_text`)
+- `follow_redirects=True` on any fetch of untrusted URLs → silently re-enables the redirect-to-metadata bypass → keep it False and re-validate each hop
