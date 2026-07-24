@@ -17,8 +17,11 @@ CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
 
 
 def create_app() -> FastAPI:
+    from .tenders import router as tenders_router
+
     app = FastAPI(title="TenderCraft Engine", version="0.1.0")
     app.add_exception_handler(ApiError, api_error_handler)
+    app.include_router(tenders_router)
 
     @app.get("/health")
     async def health() -> dict:
