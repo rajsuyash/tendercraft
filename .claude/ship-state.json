@@ -22,7 +22,12 @@
           "commit": "1fd3af1", "verified_layers": ["unit"] },
         { "id": "T4", "name": "Design-system enabler (format + tokens)", "complexity": "med", "status": "partial",
           "note": "format helpers + token->tailwind wiring done + tested; C1-C6 React components deferred (need Next+browser)",
-          "commit": "1fd3af1", "verified_layers": ["unit"] }
+          "commit": "1fd3af1", "verified_layers": ["unit"] },
+        { "id": "T2", "name": "Supabase schema v0 + RLS + isolation harness", "complexity": "high", "status": "verified",
+          "note": "live: 5/5 ET-6 isolation tests pass; RLS on all tables; append-only audit; reviewed FIX_FIRST->fixed",
+          "commit": "da0adc5", "verified_layers": ["integration"] },
+        { "id": "T3", "name": "Auth wiring web+engine", "complexity": "high", "status": "pending",
+          "note": "needs Next.js app + FastAPI app stood up first (T1 completion)" }
       ] },
     { "id": "M1", "status": "pending", "exit_acs": ["A-AC3", "A-AC5", "S4-D1"] },
     { "id": "M2", "status": "pending", "exit_acs": ["C-AC4", "C-AC5", "S7-D1", "S7-D2", "S7-D3"] },
@@ -39,8 +44,10 @@
       "note": "cores of cx:high tasks T15/T20/T33/T39 built ahead of milestones (pure + offline-verifiable); their I/O wrappers + service wiring remain for M1/M2/M4/M5 when Supabase is live"
     }
   },
-  "remote": "https://github.com/rajsuyash/tendercraft (branch build/tendercraft pushed)",
-  "blocked_on_user": "credentials for M0 T2 onward: Supabase URL+anon+service-role keys, ANTHROPIC_API_KEY, GCP Document AI creds. Then resume /prd-to-ship.",
+  "remote": "https://github.com/rajsuyash/tendercraft (branch build/tendercraft pushed through da0adc5)",
+  "credentials_available": "Supabase (URL+publishable+secret+legacy JWTs+PAT, live project dgbtlcumzqkzjivwmjqe eu-north-1), ANTHROPIC_API_KEY, GEMINI_API_KEY. Missing: Document AI GCP creds (OCR), Supabase DB password (not needed — migrations run via Management API).",
+  "next_task": "T3 auth — but requires standing up the Next.js app (apps/web) and FastAPI app (services/engine/app/main.py) first (T1 completion). Large step; checkpoint with user on scope before proceeding.",
+  "residency_finding": "project in eu-north-1; PRD §9 requires ap-south-1 (Mumbai) before real customer data. Recorded in BUILD-LOG; propose PRD Appendix B.",
   "failures": [],
   "log": [
     "2026-07-24 git init + baseline commit on build/tendercraft",
