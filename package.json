@@ -1,0 +1,13 @@
+{
+  "name": "tendercraft",
+  "private": true,
+  "packageManager": "pnpm@10.30.0",
+  "scripts": {
+    "dev": "pnpm --filter @tendercraft/web dev",
+    "build": "pnpm --filter @tendercraft/web build",
+    "typecheck": "pnpm --filter @tendercraft/web typecheck",
+    "lint": "pnpm --filter @tendercraft/web lint",
+    "test": "pnpm --filter @tendercraft/web test",
+    "seed": "pnpm --filter @tendercraft/web seed"
+  }
+}
