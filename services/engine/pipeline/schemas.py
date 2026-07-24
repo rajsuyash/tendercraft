@@ -28,6 +28,28 @@ CRITERION_EVAL_SCHEMA = {
     "required": ["check_type", "model_verdict", "confidence", "rationale", "evidence_ids"],
 }
 
+# Drafter output — narrative sentences, each tagged for the deterministic cite-or-flag check.
+DRAFT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "has_sufficient_evidence": {"type": "boolean"},
+        "sentences": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "citations": {"type": "array", "items": {"type": "string"}},
+                    "requires_citation": {"type": "boolean"},
+                    "is_financial": {"type": "boolean"},
+                },
+                "required": ["text", "requires_citation", "is_financial"],
+            },
+        },
+    },
+    "required": ["has_sufficient_evidence", "sentences"],
+}
+
 # Gemini responseSchema (OpenAPI subset) for criteria extraction.
 CRITERIA_SCHEMA = {
     "type": "object",

@@ -133,11 +133,27 @@ async function seedProfile(tenantId: string) {
   console.log("✓ FIX-2 vendor profile seeded (₹8.2 Cr avg turnover, MSE, ISO 9001 expired 03/2026)");
 }
 
+async function seedLibrary(tenantId: string) {
+  // FIX-4: content library docs (evidence corpus) with validity for the drafter/retrieval.
+  await fetch(`${SB_URL}/rest/v1/library_documents?tenant_id=eq.${tenantId}`, { method: "DELETE", headers: authHeaders });
+  const docs = [
+    { name: "turnover-certificate-FY25.pdf", doc_type: "financial", valid_to: null, text_content: "CA-certified statement: M/s Meridian Infotech recorded an average annual turnover of ₹8.2 Cr across FY23-FY25, with FY25 turnover of ₹9.7 Cr. Net worth ₹4.3 Cr.", structured_fields: { fy25_turnover_cr: 9.7, avg_turnover_cr: 8.2 } },
+    { name: "iso-9001-2015-cert.pdf", doc_type: "certification", valid_to: "2026-03-31", text_content: "ISO 9001:2015 Quality Management certification, cert no. IN-9001-44821, issued to Meridian Infotech.", structured_fields: { cert_no: "IN-9001-44821" } },
+    { name: "district-egovernance-completion-cert.pdf", doc_type: "completion", valid_to: null, text_content: "Completion certificate: District e-Governance hardware supply and installation, value ₹3.4 Cr, completed 11/2024 for a PSU client, executed satisfactorily.", structured_fields: { value_cr: 3.4 } },
+    { name: "standard-undertaking-annexure1.docx", doc_type: "undertaking", valid_to: null, text_content: "Standard undertaking of non-blacklisting and compliance with tender terms, on company letterhead, signed by the authorized signatory.", structured_fields: {} },
+    { name: "team-lead-cv-rahul-sharma.pdf", doc_type: "cv", valid_to: null, text_content: "Rahul Sharma, Project Lead. B.E. (Computer Science), PMP certified, 14 years experience in government IT hardware rollouts.", structured_fields: { qualification: "B.E., PMP" } },
+  ].map((d) => ({ ...d, tenant_id: tenantId }));
+  const res = await fetch(`${SB_URL}/rest/v1/library_documents`, { method: "POST", headers: authHeaders, body: JSON.stringify(docs) });
+  if (!res.ok) throw new Error(`library seed failed: ${res.status} ${await res.text()}`);
+  console.log(`✓ FIX-4 content library: ${docs.length} documents (1 expired for validity-filter test)`);
+}
+
 async function main() {
   console.log("seeding FIX-1…");
   await deleteExistingUser(FIX1_EMAIL);
   const tenantId = await upsertTenant(TENANT_NAME);
   await seedProfile(tenantId);
+  await seedLibrary(tenantId);
   await seedSampleTender(tenantId);
 
   const user = await j(

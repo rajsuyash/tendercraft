@@ -121,3 +121,52 @@ def get_analysis(tender_id: str, tenant_id: str) -> dict | None:
         params={"tender_id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "result"},
     )
     return rows[0]["result"] if rows else None
+
+
+# ---------- content library + proposals (Module B) ----------
+def get_valid_library_docs(tenant_id: str, today_iso: str) -> list[dict]:
+    """Retrieval with the validity HARD-filter: expired docs are excluded (never a model choice)."""
+    docs = _rest(
+        "GET", "library_documents",
+        params={"tenant_id": f"eq.{tenant_id}", "select": "id,name,doc_type,text_content,valid_to"},
+    ) or []
+    return [d for d in docs if not d.get("valid_to") or d["valid_to"] >= today_iso]
+
+
+def create_proposal(tenant_id: str, tender_id: str) -> dict:
+    rows = _rest(
+        "POST", "proposals",
+        params={"on_conflict": "tender_id"},
+        json={"tenant_id": tenant_id, "tender_id": tender_id, "status": "draft"},
+        prefer="resolution=merge-duplicates,return=representation",
+    )
+    return rows[0]
+
+
+def upsert_response(tenant_id: str, proposal_id: str, criterion_id: str, resp: dict) -> None:
+    _rest(
+        "POST", "proposal_responses",
+        params={"on_conflict": "proposal_id,criterion_id"},
+        json={
+            "tenant_id": tenant_id,
+            "proposal_id": proposal_id,
+            "criterion_id": criterion_id,
+            **resp,
+        },
+        prefer="resolution=merge-duplicates",
+    )
+
+
+def get_proposal_by_tender(tender_id: str, tenant_id: str) -> dict | None:
+    rows = _rest(
+        "GET", "proposals",
+        params={"tender_id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
+    )
+    return rows[0] if rows else None
+
+
+def get_responses(proposal_id: str, tenant_id: str) -> list[dict]:
+    return _rest(
+        "GET", "proposal_responses",
+        params={"proposal_id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
+    ) or []
