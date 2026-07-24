@@ -102,6 +102,24 @@ def admin_delete_users_by_email(*emails: str) -> None:
             admin_delete_user(user["id"])
 
 
+@pytest.fixture
+def one_user():
+    """Provision a single tenant + confirmed user + profile; yield sign-in details."""
+    email = "api-user@tendercraft.test"
+    pw = "Api-Test-Pw-24!"
+    admin_delete_users_by_email(email)
+    _, t = rest("POST", "tenants", bearer=SERVICE_KEY, key=SERVICE_KEY, body={"name": "API Tenant"})
+    tenant_id = t[0]["id"]
+    uid = admin_create_user(email, pw)
+    rest("POST", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY,
+         body={"user_id": uid, "tenant_id": tenant_id, "role": "admin"})
+    try:
+        yield {"email": email, "password": pw, "user_id": uid, "tenant_id": tenant_id}
+    finally:
+        admin_delete_user(uid)
+        rest("DELETE", "tenants", bearer=SERVICE_KEY, key=SERVICE_KEY, query=f"?id=eq.{tenant_id}")
+
+
 def sign_in(email: str, password: str) -> str:
     status, data = _request(
         "POST", "/auth/v1/token?grant_type=password", key=ANON_KEY,

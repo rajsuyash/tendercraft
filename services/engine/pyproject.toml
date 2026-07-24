@@ -3,7 +3,13 @@ name = "tendercraft-engine"
 version = "0.1.0"
 description = "TenderCraft engine — deterministic compliance gates + AI pipeline (FastAPI)"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pyjwt[crypto]>=2.10",
+    "httpx>=0.28",
+    "pydantic>=2.10",
+]
 
 [dependency-groups]
 dev = [
