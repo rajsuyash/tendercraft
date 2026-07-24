@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from pipeline.drafter import draft_response
+from pipeline.retrieval import select_evidence
 
 from . import db
 from .auth import AuthedUser, get_current_user
@@ -35,13 +36,24 @@ def do_generate(tenant_id: str, tender_id: str) -> dict:
     chunks = [
         {"id": d["id"], "name": d["name"], "text": d.get("text_content", "")} for d in evidence
     ]
+    # A doc the bidder attached to a specific item pins that item's evidence (reliable cites).
+    pinned_by = {
+        d["criterion_id"]: d.get("document_id")
+        for d in db.get_readiness_decisions(tender_id, tenant_id)
+        if d.get("document_id")
+    }
 
     proposal = db.create_proposal(tenant_id, tender_id)
 
     # Draft all criteria concurrently — each is an independent model call; sequential would
-    # blow the request budget on a large tender (retry cap keeps cost bounded per call).
+    # blow the request budget on a large tender (retry cap keeps cost bounded per call). Each
+    # criterion sees only its selected evidence (pinned doc or top-K relevant), not the whole pile.
+    def _draft(c: dict):
+        ev = select_evidence(c["verbatim_text"], chunks, pinned_by.get(c["id"]))
+        return draft_response(c["verbatim_text"], ev)
+
     with ThreadPoolExecutor(max_workers=6) as pool:
-        drafts = list(pool.map(lambda c: draft_response(c["verbatim_text"], chunks), criteria))
+        drafts = list(pool.map(_draft, criteria))
 
     coverage_rows: list[dict] = []
     total_flags = 0
