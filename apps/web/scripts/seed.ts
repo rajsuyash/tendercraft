@@ -83,6 +83,7 @@ async function seedSampleTender(tenantId: string) {
     { verbatim_text: "Three similar works of comparable nature, each ≥ ₹2 Cr.", category: "eligibility", requirement_level: "mandatory", confidence: 0.82, confirmed: true, anchor_page: 13, anchor_clause: "4.1(c)", evidence_required: null, evaluation_weight: null },
     { verbatim_text: "Valid ISO 9001:2015 certification on the bid date.", category: "technical", requirement_level: "desirable", confidence: 0.88, confirmed: true, anchor_page: 14, anchor_clause: "4.2", evidence_required: null, evaluation_weight: 5 },
     { verbatim_text: "OEM Manufacturer's Authorization Form in Annexure-VII.", category: "eligibility", requirement_level: "mandatory", confidence: 0.61, confirmed: false, anchor_page: 22, anchor_clause: "Annexure-VII", evidence_required: null, evaluation_weight: null },
+    { verbatim_text: "The bidder shall submit a declaration of non-blacklisting on company letterhead, signed by the authorized signatory.", category: "terms", requirement_level: "mandatory", confidence: 0.9, confirmed: true, anchor_page: 30, anchor_clause: "5.2", evidence_required: null, evaluation_weight: null },
   ];
   const criteria = raw.map((c) => ({ ...c, tenant_id: tenantId, tender_id: tid }));
   const critRes = await fetch(`${SB_URL}/rest/v1/criteria`, {
