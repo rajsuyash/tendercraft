@@ -1,0 +1,195 @@
+import { createClient } from "@/lib/supabase/server";
+
+// S12 — Workspace Settings. Read-mostly: RBAC roster, approval chain, immutable
+// audit log, deadline-escalation config (E-FR1–E-FR4, E-FR6).
+
+type Role = "writer" | "reviewer" | "compliance_checker" | "legal" | "approver" | "admin";
+
+const ROLE_CHIP: Record<Role, string> = {
+  writer: "border border-border bg-surface text-ink",
+  reviewer: "bg-warning-bg text-warning",
+  compliance_checker: "bg-info-bg text-info",
+  legal: "bg-info-bg text-info",
+  approver: "bg-success-bg text-success",
+  admin: "bg-primary text-on-primary",
+};
+
+const CHAIN: Role[] = ["writer", "reviewer", "compliance_checker", "approver"];
+
+const ESCALATION_THRESHOLDS = [
+  { id: "t-72h", label: "T-72h Warning", recipients: ["Bid owner"], channels: "Email only" },
+  {
+    id: "t-48h",
+    label: "T-48h Escalation",
+    recipients: ["Bid owner", "Approver"],
+    channels: "Email + in-app",
+  },
+  {
+    id: "t-24h",
+    label: "T-24h Critical",
+    recipients: ["Bid owner", "Approver", "Admin"],
+    channels: "Email + in-app + SMS",
+  },
+] as const;
+
+function roleLabel(role: Role): string {
+  return role
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function RoleChip({ role }: { role: Role }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${ROLE_CHIP[role]}`}
+    >
+      {roleLabel(role)}
+    </span>
+  );
+}
+
+export default async function SettingsPage() {
+  const supabase = await createClient();
+
+  // ponytail: profiles has no name/email column — only user_id + role. Roster
+  // shows a truncated user_id in place of a display name. Add name/email once
+  // the schema carries them (schema gap, not a UI shortcut).
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("user_id,role,created_at")
+    .order("created_at", { ascending: true });
+
+  const { data: auditEvents } = await supabase
+    .from("audit_events")
+    .select("id,actor,action,entity,entity_id,created_at")
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  return (
+    <main className="p-page">
+      <header className="mb-6">
+        <h1 className="font-heading text-2xl font-semibold text-ink">
+          Workspace — Meridian Infotech Pvt Ltd
+        </h1>
+        <p className="text-sm text-muted">
+          Manage enterprise settings, roles, and compliance workflows.
+        </p>
+      </header>
+
+      <nav className="mb-6 flex gap-6 border-b border-border text-sm">
+        {["Members & Roles", "Approval chains", "Audit log", "Deadlines & alerts"].map((tab) => (
+          <span key={tab} className="border-b-2 border-transparent py-2 text-muted first:border-primary first:text-ink first:font-medium">
+            {tab}
+          </span>
+        ))}
+      </nav>
+
+      <section className="mb-8">
+        <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Members & Roles</h2>
+        <div className="overflow-x-auto rounded-card border border-border bg-surface">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
+                <th className="p-card">User</th>
+                <th className="p-card">Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(profiles ?? []).map((p) => (
+                <tr key={p.user_id} className="h-11 border-b border-border last:border-0">
+                  <td className="p-card font-mono text-xs text-muted">{p.user_id.slice(0, 8)}…</td>
+                  <td className="p-card">
+                    <RoleChip role={p.role as Role} />
+                  </td>
+                </tr>
+              ))}
+              {(profiles ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={2} className="p-card text-sm text-muted">
+                    No members found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Approval chains</h2>
+        <div className="rounded-card border border-border bg-surface p-card">
+          <p className="mb-4 text-sm text-muted">
+            Defines the mandatory sequence before PDF/DOCX export is permitted.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            {CHAIN.map((role, i) => (
+              <div key={role} className="flex items-center gap-3">
+                <div className="rounded-card border border-border bg-surface-alt px-4 py-3">
+                  <RoleChip role={role} />
+                </div>
+                {i < CHAIN.length - 1 && <span className="text-muted">→</span>}
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-xs text-muted">
+            Export locks until all required approvals complete (admin override is logged).
+          </p>
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Audit log</h2>
+        <div className="rounded-card border border-border bg-surface">
+          <ul>
+            {(auditEvents ?? []).map((e) => (
+              <li
+                key={e.id}
+                data-audit-event
+                className="flex items-center gap-4 border-b border-border p-card text-sm last:border-0"
+              >
+                <span className="font-mono text-xs text-muted">{e.created_at}</span>
+                <span className="text-ink">{e.action}</span>
+                <span className="text-muted">{e.entity}</span>
+                <span className="ml-auto font-mono text-xs text-muted">
+                  {e.actor ? `${e.actor.slice(0, 8)}…` : "system"}
+                </span>
+              </li>
+            ))}
+            {(auditEvents ?? []).length === 0 && (
+              <li className="p-card text-sm text-muted">No audit events yet.</li>
+            )}
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Deadlines & alerts</h2>
+        <div className="space-y-3">
+          {ESCALATION_THRESHOLDS.map((t) => (
+            <div
+              key={t.id}
+              data-escalation-threshold
+              className="flex items-center justify-between rounded-card border border-border bg-surface p-card"
+            >
+              <div>
+                <p className="font-medium text-ink">{t.label}</p>
+                <p className="text-xs text-muted">{t.channels}</p>
+              </div>
+              <div className="flex gap-2">
+                {t.recipients.map((r) => (
+                  <span
+                    key={r}
+                    className="rounded-full bg-primary-tint px-2.5 py-0.5 text-xs font-medium text-primary"
+                  >
+                    {r}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
