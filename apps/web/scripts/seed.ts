@@ -96,12 +96,14 @@ async function seedSampleTender(tenantId: string) {
 
 async function seedProfile(tenantId: string) {
   // FIX-2: vendor profile matching the design fixture (₹8.2 Cr avg turnover, MSE, expired ISO).
-  const upsert = (table: string, rows: unknown[], conflict?: string) =>
-    fetch(`${SB_URL}/rest/v1/${table}${conflict ? `?on_conflict=${conflict}` : ""}`, {
+  const upsert = async (table: string, rows: unknown[], conflict?: string) => {
+    const res = await fetch(`${SB_URL}/rest/v1/${table}${conflict ? `?on_conflict=${conflict}` : ""}`, {
       method: "POST",
       headers: { ...authHeaders, Prefer: "resolution=merge-duplicates" },
       body: JSON.stringify(rows.map((r) => ({ ...(r as object), tenant_id: tenantId }))),
     });
+    if (!res.ok) throw new Error(`${table} seed failed: ${res.status} ${await res.text()}`);
+  };
   // clear child rows so re-seed is deterministic
   for (const t of ["profile_financials", "experience_records", "certifications"]) {
     await fetch(`${SB_URL}/rest/v1/${t}?tenant_id=eq.${tenantId}`, { method: "DELETE", headers: authHeaders });
@@ -116,11 +118,12 @@ async function seedProfile(tenantId: string) {
     { fy_label: "FY24", turnover_cr: 8.1 },
     { fy_label: "FY25", turnover_cr: 9.7 },
   ], "tenant_id,fy_label");
+  // uniform keys (PGRST102): every row carries evidence_ref, null where absent
   await upsert("experience_records", [
     { project_name: "District e-Governance rollout", client_type: "psu", value_cr: 3.4, scope_tags: ["hardware-supply", "installation"], completion_date: "2024-11-30", evidence_ref: "completion-cert-041.pdf" },
-    { project_name: "PSU desktop refresh 800 units", client_type: "psu", value_cr: 2.6, scope_tags: ["hardware-supply"], completion_date: "2023-03-15" },
-    { project_name: "Municipal CCTV network", client_type: "govt", value_cr: 2.1, scope_tags: ["surveillance", "installation"], completion_date: "2022-08-01" },
-    { project_name: "Ministry IT infra (turnkey)", client_type: "govt", value_cr: 4.9, scope_tags: ["hardware-supply", "installation", "turnkey"], completion_date: "2025-01-20" },
+    { project_name: "PSU desktop refresh 800 units", client_type: "psu", value_cr: 2.6, scope_tags: ["hardware-supply"], completion_date: "2023-03-15", evidence_ref: null },
+    { project_name: "Municipal CCTV network", client_type: "govt", value_cr: 2.1, scope_tags: ["surveillance", "installation"], completion_date: "2022-08-01", evidence_ref: null },
+    { project_name: "Ministry IT infra (turnkey)", client_type: "govt", value_cr: 4.9, scope_tags: ["hardware-supply", "installation", "turnkey"], completion_date: "2025-01-20", evidence_ref: null },
   ]);
   await upsert("certifications", [
     { name: "ISO 9001:2015", cert_no: "IN-9001-44821", valid_from: "2023-04-01", valid_to: "2026-03-31" },
