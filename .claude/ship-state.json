@@ -31,10 +31,14 @@
       "done": "All M1 tasks: T13 extractor (9/9 live incl. G-6 injection), T14 eval harness, T15 tender/criteria/lock endpoints, T10 ingest (PDF->extract->persist), T11 S3 upload, T16 S4 verify queue, T17 S5 TOM detail. Flow browser-verified live: upload->S4-D1 lock-blocked->confirm->lock->S5 TOM LOCKED. Reviewed FIX_FIRST->fixed (async event-loop stall). 85 engine + 12 web tests.",
       "note": "Not browser-verified: uploading a real live PDF end-to-end (ingest endpoint unit-tested; extractor 9/9 live; no real tender-PDF fixture used through the browser). A-AC1/A-AC2 accuracy gate at PRD §6 corpus scale (starter set only).",
       "note": "OCR/extract decision changed to GEMINI (user added GEMINI_API_KEY). Extractor built (T13/T14 core, commit 09e25bb): pipeline/client.py + extractor.py + prompt + eval harness; 10 unit tests green, fallback verified live. BLOCKED: provided GEMINI_API_KEY (AQ.Ab8... format) returns 403 — not an AI Studio key (those are AIza...). Need valid key for live extraction accuracy + to build T10/T12. Remaining M1 non-Gemini tasks buildable now: T15 verification-queue+lock wiring (lock gate core done), T10 upload backend, T11/T16/T17 screens." },
-    { "id": "M2", "status": "pending", "exit_acs": ["C-AC4", "C-AC5", "S7-D1", "S7-D2", "S7-D3"] },
-    { "id": "M3", "status": "pending", "exit_acs": ["B-AC3", "S9-D1", "S9-D2", "S9-D3"] },
-    { "id": "M4", "status": "pending", "exit_acs": ["E-AC2", "B-AC4", "E-AC1", "E-AC3", "S10-D1", "S10-D2", "S10-D3"] },
-    { "id": "M5", "status": "pending", "exit_acs": ["D-AC4", "D-AC5", "S11-D1", "S11-D2", "S11-D3"] }
+    { "id": "M2", "status": "verified", "exit_acs": ["C-AC4", "C-AC5", "S7-D1", "S7-D2", "S7-D3"], "completed_at": "2026-07-24", "commit": "6688fd2",
+      "note": "Analysis engine (model proposes/deterministic decides) + S6 profile + S7 dashboard, all live-verified. NO-BID with computed ₹8.2 Cr turnover fail, gaps, rationale+source. 96 engine tests. Fixed fastapi include_router version bug (pinned <0.116)." },
+    { "id": "M3", "status": "verified", "exit_acs": ["B-AC3", "S9-D1", "S9-D2", "S9-D3"], "completed_at": "2026-07-24", "commit": "f0831e2",
+      "note": "Cite-or-flag validator (100% branch) + Gemini drafter + generation (concurrent) + S8 library + S9 workspace. Live: generate -> AI DRAFT watermarks + placeholder blocks (drafter refuses to hallucinate). S9-D1/D3 live, B-AC3 tested." },
+    { "id": "M4", "status": "verified", "exit_acs": ["E-AC2", "B-AC4", "E-AC1", "S10-D1", "S10-D2", "S10-D3"], "completed_at": "2026-07-24", "commit": "44eedc0",
+      "note": "Export gate wired (B-AC4 non-overridable financial, E-AC2 override-able approvals) + approvals + immutable audit (E-AC1) + S10 export gate + S12 settings. Live: export blocked with blocker count, approve->audit event. E-AC3 (version restore/T32) deferred." },
+    { "id": "M5", "status": "verified", "exit_acs": ["D-AC4", "D-AC5", "S11-D1", "S11-D2", "S11-D3"], "completed_at": "2026-07-24", "commit": "b28f09c",
+      "note": "Estimator gated by suppression rule (D-AC4) + range/weak-sections/attribution (D-FR1/D-FR3/D-AC5) + S11. Live: cold-start suppression (0<30 outcomes) renders no number. S11-D1 range tested (needs >=30 outcomes to show live)." }
   ],
   "offline_core": {
     "deterministic_engine": {

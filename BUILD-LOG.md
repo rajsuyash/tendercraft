@@ -80,3 +80,13 @@
 **M1 exit criteria**: ✅ A-AC3 (anchors) · ✅ A-AC5 (lock gate, live through UI) · ✅ S4-D1 · ✅ extractor eval harness live (9/9). **85 engine + 12 web tests green.**
 
 **Gemini transport note**: `AQ.`-format key → `x-goog-api-key` header + `v1beta` + `gemini-2.5-flash` (in `pipeline/client.py`).
+
+## 2026-07-24 (cont.) · M3 / M4 / M5 — Modules B, E, D complete
+
+- **M3 (Module B generator)**: cite-or-flag validator (100% branch), Gemini drafter (placeholder over hallucinate), concurrent generation, S8 library, S9 workspace. Live: AI DRAFT watermarks + placeholder blocks. B-AC3 tested, S9-D1/D3 live.
+- **M4 (Module E + export)**: export gate wired (B-AC4 non-overridable financial gate, E-AC2 override-able approvals), approval chain, immutable audit (E-AC1, DB-enforced), S10 export gate, S12 settings. Live: export blocked with blocker count, approve→audit event. (E-AC3 version-restore deferred.)
+- **M5 (Module D estimator)**: suppression-gated estimator (D-AC4), range-not-point (D-FR1), weak sections (D-FR3), attribution (D-AC5), S11. Live: cold-start suppression renders no number.
+
+**Whole-app (Phase 4)**: engine 125 tests (114 unit + 11 live integration), web 12 tests; both apps typecheck/lint/build clean; 17 API routes. Every cx:high piece opus-reviewed.
+
+**ALL FIVE MILESTONES VERIFIED.** Full pipeline demoable: upload → verify → lock → analyze (NO-BID) → generate (cite-or-flag) → export gate → score (suppressed).
