@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -41,10 +42,15 @@ def generate_proposal(tender_id: str, user: CurrentUser) -> dict:
     ]
 
     proposal = db.create_proposal(user.tenant_id, tender_id)
+
+    # Draft all criteria concurrently — each is an independent model call; sequential would
+    # blow the request budget on a large tender (retry cap keeps cost bounded per call).
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        drafts = list(pool.map(lambda c: draft_response(c["verbatim_text"], chunks), criteria))
+
     coverage_rows: list[dict] = []
     total_flags = 0
-    for c in criteria:
-        drafted = draft_response(c["verbatim_text"], chunks)
+    for c, drafted in zip(criteria, drafts, strict=True):
         db.upsert_response(
             user.tenant_id, proposal["id"], c["id"],
             {
