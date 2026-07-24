@@ -50,9 +50,19 @@ def test_mandatory_fail_is_p0():
     assert _priority(r, "a") == "p0"
 
 
-def test_mandatory_missing_evidence_is_p0():
+def test_eligible_but_undrafted_is_p1_not_blocking():
+    # Passes eligibility (deterministic) but the drafter left a placeholder -> a proposal-
+    # completion task, NOT a blocking P0. The export gate enforces "no placeholder" at export.
     r = compute_readiness([_crit("a")], _analysis(_v("a", "pass")), [_resp("a", "placeholder")])
-    assert _priority(r, "a") == "p0"  # passes eligibility but no drafted evidence -> needs a doc
+    assert _priority(r, "a") == "p1"
+    assert r["summary"]["p0_blocking"] == 0
+    assert r["summary"]["ready_to_generate"] is True
+
+
+def test_no_verdict_undrafted_is_p0():
+    # Before analysis runs there's no verdict — stay conservative and block until matched.
+    r = compute_readiness([_crit("a")], _analysis(), [_resp("a", "placeholder")])
+    assert _priority(r, "a") == "p0"
 
 
 def test_exempted_fail_is_not_p0():

@@ -55,15 +55,22 @@ def _classify(
     is_mandatory = level is RequirementLevel.MANDATORY
 
     if is_mandatory:
+        # Eligibility is decided deterministically (PRD §2.4). Only a real eligibility FAIL is a
+        # blocking P0. A missing/placeholder DRAFT on a criterion the bidder actually MEETS is a
+        # proposal-completion task (P1) — the export gate enforces "no placeholder" at export,
+        # so it must not block the bid decision here.
         if verdict == "fail" and not exempted:
             return "p0", "Eligibility gap — you don't currently meet this", "fix"
-        if undrafted:
-            return "p0", "Needs a supporting document", "upload"
         if verdict == "needs_review":
             return "p1", "Borderline — needs your review", "review"
-        if draft_status == "unverified":
-            return "p1", "Draft has an unverified claim to source or attest", "review"
-        return "covered", "Covered by your knowledge base", "none"
+        if verdict == "pass" or exempted:
+            if draft_status == "unverified":
+                return "p1", "Draft has an unverified claim to source or attest", "review"
+            if undrafted:
+                return "p1", "Eligible — add a document to complete the response", "upload"
+            return "covered", "Covered by your knowledge base", "none"
+        # No verdict yet (analysis not run) — conservative: block until matched.
+        return "p0", "Run analysis to check eligibility", "upload"
 
     # desirable / self-attestation — never blocks the bid
     if verdict == "pass" and draft_status == "drafted":
