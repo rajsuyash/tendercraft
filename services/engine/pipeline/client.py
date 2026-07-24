@@ -15,7 +15,9 @@ import httpx
 
 logger = logging.getLogger("tendercraft.pipeline")
 
-_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+# v1beta (JSON mode / responseSchema lives here) + key in the x-goog-api-key header
+# (the AQ.-format keys 403 on the ?key= query param).
 _BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 _TIMEOUT = float(os.environ.get("GEMINI_TIMEOUT", "45"))
 _RETRY_CAP = 1  # PRD: unbounded retries = cost blowup
@@ -49,7 +51,10 @@ def generate_json(prompt: str, schema: dict, *, temperature: float = 0.0) -> dic
     for attempt in range(_RETRY_CAP + 1):
         try:
             resp = httpx.post(
-                url, params={"key": api_key}, json=body, timeout=_TIMEOUT
+                url,
+                headers={"x-goog-api-key": api_key},
+                json=body,
+                timeout=_TIMEOUT,
             )
             resp.raise_for_status()
             payload = resp.json()
