@@ -27,3 +27,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Live-API integration tests: long REST call lines read better unwrapped.
+"tests/isolation/*" = ["E501"]

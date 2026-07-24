@@ -27,3 +27,15 @@
 - OCR integration — provider decided (**Google Document AI**), needs GCP credentials.
 
 **Next session prerequisites**: provide `.env` (Supabase URL + anon + service-role keys, `ANTHROPIC_API_KEY`, GCP Document AI creds), then resume `/prd-to-ship` — it will pick up from ship-state at M0 T2.
+
+## 2026-07-24 (cont.) · T2 — Supabase schema + RLS + ET-6 isolation (live)
+
+**Unblocked**: user provided a Supabase Personal Access Token; keys fetched via the Management API (Supabase now uses new-format `sb_publishable_`/`sb_secret_` keys — legacy anon/service_role JWTs also pulled because the GoTrue admin API rejects the new secret key). ANTHROPIC_API_KEY + GEMINI_API_KEY also now in `.env`.
+
+**Shipped (T2)**
+- `services/engine/migrations/0001_init.sql` — schema v0 (tenants, RBAC profiles, tenders, TOM criteria, append-only audit), applied to live project via Management API. RLS enabled on all 5 tables; tenant-scoped policies via `current_tenant_id()`; audit immutability enforced by BEFORE UPDATE/DELETE triggers (E-AC1).
+- `services/engine/tests/isolation/` — ET-6 proof against the live project: user A sees only tenant A's rows, cross-tenant insert rejected by RLS with-check, service-role bypass documented, audit rejects updates. **5/5 passed live.** Skips gracefully when creds absent (clone-safe); runs in CI when secrets present.
+
+**Evidence**: 60 unit + 5 live-isolation pytest green, ruff clean. RLS-on verified on all public tables.
+
+**Compliance flag (recorded, not blocking dev)**: the Supabase project is in `eu-north-1` (Stockholm). PRD §9 requires Indian data residency (DPDP) — production must move to `ap-south-1` (Mumbai) before real customer data. Propose PRD Appendix B entry.
