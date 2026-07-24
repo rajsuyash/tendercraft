@@ -83,3 +83,73 @@ def get_proposal(tender_id: str, user: CurrentUser) -> dict:
         raise ApiError(404, "NO_PROPOSAL", "generate a proposal first")
     responses = db.get_responses(proposal["id"], user.tenant_id)
     return ok({"proposal": proposal, "responses": responses})
+
+
+def _load_export_context(tender_id: str, user: CurrentUser):
+    from . import export_service
+
+    proposal = db.get_proposal_by_tender(tender_id, user.tenant_id)
+    if not proposal:
+        raise ApiError(404, "NO_PROPOSAL", "generate a proposal first")
+    criteria = db.get_criteria(tender_id, user.tenant_id)
+    responses = db.get_responses(proposal["id"], user.tenant_id)
+    approvals = db.get_approvals(proposal["id"], user.tenant_id)
+    return export_service, proposal, criteria, responses, approvals
+
+
+def _matrix_payload(decision, rows) -> dict:
+    return {
+        "exportable": decision.exportable,
+        "hard_blockers": list(decision.hard_blockers),
+        "override_blockers": list(decision.override_blockers),
+        "override_used": decision.override_used,
+        "mandatory_coverage": decision.resolved_mandatory_fraction,
+        "rows": [
+            {
+                "criterion_id": r.criterion_id,
+                "requirement_level": r.requirement_level.value,
+                "status": r.status.value,
+                "has_uncited_financial_claim": r.has_uncited_financial_claim,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/api/tenders/{tender_id}/compliance-matrix")
+def compliance_matrix(tender_id: str, user: CurrentUser) -> dict:
+    export_service, proposal, criteria, responses, approvals = _load_export_context(tender_id, user)
+    decision, rows = export_service.evaluate(
+        criteria, responses, proposal.get("approvals_required", 2), len(approvals)
+    )
+    return ok({**_matrix_payload(decision, rows), "approvals": approvals,
+               "approvals_required": proposal.get("approvals_required", 2)})
+
+
+@router.post("/api/proposals/{proposal_id}/approve")
+def approve(proposal_id: str, user: CurrentUser, stage: str = "review") -> dict:
+    db.add_approval(user.tenant_id, proposal_id, stage, user.user_id)
+    db.write_audit(user.tenant_id, user.user_id, "approval", "proposal", proposal_id,
+                   after={"stage": stage})
+    return ok({"proposal_id": proposal_id, "stage": stage})
+
+
+@router.post("/api/tenders/{tender_id}/export")
+def export_proposal(tender_id: str, user: CurrentUser, override: bool = False) -> dict:
+    export_service, proposal, criteria, responses, approvals = _load_export_context(tender_id, user)
+    decision, rows = export_service.evaluate(
+        criteria, responses, proposal.get("approvals_required", 2), len(approvals),
+        admin_override=override,
+    )
+    if not decision.exportable:
+        blockers = list(decision.hard_blockers) + list(decision.override_blockers)
+        raise ApiError(409, "EXPORT_BLOCKED", " | ".join(blockers))
+
+    from datetime import UTC, datetime
+
+    when = datetime.now(UTC).isoformat()
+    db.mark_exported(proposal["id"], user.tenant_id, when)
+    db.write_audit(user.tenant_id, user.user_id, "export", "proposal", proposal["id"],
+                   after={"override_used": decision.override_used})
+    return ok({"proposal_id": proposal["id"], "exported_at": when,
+               "override_used": decision.override_used})

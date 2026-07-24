@@ -170,3 +170,48 @@ def get_responses(proposal_id: str, tenant_id: str) -> list[dict]:
         "GET", "proposal_responses",
         params={"proposal_id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
     ) or []
+
+
+# ---------- approvals + audit + export (Module E) ----------
+def get_approvals(proposal_id: str, tenant_id: str) -> list[dict]:
+    return _rest(
+        "GET", "proposal_approvals",
+        params={"proposal_id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
+    ) or []
+
+
+def add_approval(tenant_id: str, proposal_id: str, stage: str, approver: str) -> None:
+    _rest(
+        "POST", "proposal_approvals",
+        params={"on_conflict": "proposal_id,stage"},
+        json={
+            "tenant_id": tenant_id, "proposal_id": proposal_id,
+            "stage": stage, "approver": approver,
+        },
+        prefer="resolution=merge-duplicates",
+    )
+
+
+def mark_exported(proposal_id: str, tenant_id: str, when_iso: str) -> None:
+    _rest(
+        "PATCH", "proposals",
+        params={"id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}"},
+        json={"status": "exported", "exported_at": when_iso},
+    )
+
+
+def write_audit(tenant_id: str, actor: str | None, action: str, entity: str, entity_id: str | None,
+                before: dict | None = None, after: dict | None = None) -> None:
+    """Append an immutable audit event (E-FR4). Never fails the caller — audit is best-effort
+    at the app layer, but the DB triggers guarantee it can't be altered once written."""
+    try:
+        _rest(
+            "POST", "audit_events",
+            json={
+                "tenant_id": tenant_id, "actor": actor, "action": action,
+                "entity": entity, "entity_id": entity_id, "before": before, "after": after,
+            },
+            prefer="return=minimal",
+        )
+    except ApiError:
+        pass
