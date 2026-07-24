@@ -7,9 +7,12 @@ the classifier only; URL fetch is guarded against SSRF and bounded in size.
 
 from __future__ import annotations
 
+import datetime
 import io
 import ipaddress
 import re
+import socket
+import zipfile
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
@@ -22,6 +25,7 @@ from pipeline.schemas import KB_DOC_SCHEMA
 from .envelope import ApiError
 
 _MAX_FETCH_BYTES = 5 * 1024 * 1024
+_MAX_UNCOMPRESSED = 100 * 1024 * 1024  # zip-bomb ceiling for office (zip) formats
 _PROMPT = (Path(__file__).resolve().parents[1] / "prompts" / "kb_classifier.md").read_text()
 
 
@@ -40,7 +44,18 @@ def extract_text(filename: str, data: bytes) -> str:
     return data.decode("utf-8", errors="ignore").strip()
 
 
+def _guard_zip_bomb(data: bytes) -> None:
+    """Reject office files whose uncompressed size would blow up memory (decompression bomb)."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            if sum(i.file_size for i in z.infolist()) > _MAX_UNCOMPRESSED:
+                raise ApiError(413, "FILE_TOO_LARGE", "document expands to an unsafe size")
+    except zipfile.BadZipFile:
+        pass  # not a valid zip — the format parser below will reject it
+
+
 def _extract_docx(data: bytes) -> str:
+    _guard_zip_bomb(data)
     from docx import Document
 
     try:
@@ -51,6 +66,7 @@ def _extract_docx(data: bytes) -> str:
 
 
 def _extract_pptx(data: bytes) -> str:
+    _guard_zip_bomb(data)
     from pptx import Presentation
 
     try:
@@ -86,34 +102,64 @@ class _TextExtractor(HTMLParser):
 
 
 def fetch_url_text(url: str) -> str:
-    """Fetch a public webpage and strip it to text. Guards against SSRF + oversize responses."""
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ApiError(400, "BAD_URL", "only http(s) URLs are allowed")
-    host = parsed.hostname or ""
-    if _is_private_host(host):
+    """Fetch a public webpage and strip it to text.
+
+    SSRF-hardened: every hop's host is RESOLVED and every resolved IP checked against the
+    private/loopback/link-local ranges (defeats DNS-rebind), redirects are followed manually
+    (max 4) so each new target is re-validated (defeats redirect-to-metadata), and the body is
+    streamed with a hard byte cap (defeats oversize/OOM).
+    """
+    for _ in range(4):
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            raise ApiError(400, "BAD_URL", "only http(s) URLs are allowed")
+        host = parsed.hostname
+        if not host:
+            raise ApiError(400, "BAD_URL", "missing host")
+        _reject_private_host(host)
+
+        try:
+            with httpx.stream(
+                "GET", url, timeout=15, follow_redirects=False,
+                headers={"User-Agent": "TenderCraft/0.1"},
+            ) as resp:
+                if resp.is_redirect:
+                    loc = resp.headers.get("location")
+                    if not loc:
+                        raise ApiError(400, "FETCH_FAILED", "redirect without location")
+                    url = httpx.URL(url).join(loc).__str__()
+                    continue  # re-validate the new target on the next iteration
+                resp.raise_for_status()
+                buf = bytearray()
+                for chunk in resp.iter_bytes():
+                    buf.extend(chunk)
+                    if len(buf) > _MAX_FETCH_BYTES:
+                        break
+        except httpx.HTTPError as exc:
+            raise ApiError(400, "FETCH_FAILED", f"could not fetch URL: {exc}") from exc
+
+        p = _TextExtractor()
+        p.feed(bytes(buf[:_MAX_FETCH_BYTES]).decode("utf-8", errors="ignore"))
+        return re.sub(r"\s+\n", "\n", " ".join(p.chunks)).strip()
+
+    raise ApiError(400, "TOO_MANY_REDIRECTS", "the URL redirected too many times")
+
+
+def _reject_private_host(host: str) -> None:
+    """Resolve the host and reject if ANY resolved address is non-public."""
+    if host in ("localhost", "metadata.google.internal"):
         raise ApiError(400, "BLOCKED_URL", "internal/private hosts are not allowed")
     try:
-        resp = httpx.get(
-            url, timeout=15, follow_redirects=True,
-            headers={"User-Agent": "TenderCraft/0.1"},
-        )
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise ApiError(400, "FETCH_FAILED", f"could not fetch URL: {exc}") from exc
-    body = resp.content[:_MAX_FETCH_BYTES].decode("utf-8", errors="ignore")
-    p = _TextExtractor()
-    p.feed(body)
-    return re.sub(r"\s+\n", "\n", " ".join(p.chunks)).strip()
-
-
-def _is_private_host(host: str) -> bool:
-    if host in ("localhost", "", "metadata.google.internal"):
-        return True
-    try:
-        return ipaddress.ip_address(host).is_private or ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False  # a DNS name — resolution/egress control is a deployment concern
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        raise ApiError(400, "FETCH_FAILED", "could not resolve host") from exc
+    for info in infos:
+        addr = ipaddress.ip_address(info[4][0])
+        if (
+            addr.is_private or addr.is_loopback or addr.is_link_local
+            or addr.is_reserved or addr.is_multicast or addr.is_unspecified
+        ):
+            raise ApiError(400, "BLOCKED_URL", "internal/private hosts are not allowed")
 
 
 # ---------- classification ----------
@@ -134,9 +180,20 @@ def classify(text: str) -> dict:
     return {
         "name": r.get("name") or "Uploaded document",
         "doc_type": r.get("doc_type", "other"),
-        "valid_to": r.get("valid_to") or None,
+        "valid_to": _valid_iso_date(r.get("valid_to")),
         "structured_fields": fields,
     }
+
+
+def _valid_iso_date(value) -> str | None:
+    """Coerce the model's valid_to to a real ISO date or None — a bad string would corrupt the
+    validity hard-filter (string compare) that excludes expired docs from drafting."""
+    if not value:
+        return None
+    try:
+        return datetime.date.fromisoformat(str(value)).isoformat()
+    except ValueError:
+        return None
 
 
 def build_document(text: str) -> dict:

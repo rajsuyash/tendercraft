@@ -63,6 +63,67 @@ def test_url_blocks_private_and_loopback(url):
     assert e.value.code == "BLOCKED_URL"
 
 
+def test_url_blocks_dns_resolving_to_private(monkeypatch):
+    # A public-looking name that resolves to a link-local IP (DNS-rebind / metadata bypass).
+    monkeypatch.setattr(
+        knowledge.socket, "getaddrinfo",
+        lambda host, port: [(2, 1, 6, "", ("169.254.169.254", 0))],
+    )
+    with pytest.raises(ApiError) as e:
+        knowledge.fetch_url_text("http://evil.example.com/x")
+    assert e.value.code == "BLOCKED_URL"
+
+
+class _FakeResp:
+    def __init__(self, *, redirect_to=None, body=b""):
+        self._redirect_to = redirect_to
+        self._body = body
+        self.is_redirect = redirect_to is not None
+        self.headers = {"location": redirect_to} if redirect_to else {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def raise_for_status(self):
+        pass
+
+    def iter_bytes(self):
+        yield self._body
+
+
+def test_url_blocks_redirect_to_metadata(monkeypatch):
+    # First hop is a real public host; it 302s to the cloud metadata IP — must be re-validated.
+    monkeypatch.setattr(knowledge.socket, "getaddrinfo",
+                        lambda host, port: [(2, 1, 6, "", (host, 0))]
+                        if host == "169.254.169.254"
+                        else [(2, 1, 6, "", ("93.184.216.34", 0))])
+    monkeypatch.setattr(knowledge.httpx, "stream",
+                        lambda *a, **k: _FakeResp(redirect_to="http://169.254.169.254/latest"))
+    with pytest.raises(ApiError) as e:
+        knowledge.fetch_url_text("http://public.example.com/redir")
+    assert e.value.code == "BLOCKED_URL"
+
+
+def test_url_happy_path_streams_and_strips(monkeypatch):
+    monkeypatch.setattr(knowledge.socket, "getaddrinfo",
+                        lambda host, port: [(2, 1, 6, "", ("93.184.216.34", 0))])
+    monkeypatch.setattr(knowledge.httpx, "stream",
+                        lambda *a, **k: _FakeResp(body=b"<body><p>We build things.</p></body>"))
+    assert "We build things." in knowledge.fetch_url_text("http://public.example.com/")
+
+
+@pytest.mark.parametrize("bad", ["not-a-date", "2027-13-99", "", "soon"])
+def test_valid_iso_date_rejects_garbage(bad):
+    assert knowledge._valid_iso_date(bad) is None
+
+
+def test_valid_iso_date_passes_real_date():
+    assert knowledge._valid_iso_date("2027-09-01") == "2027-09-01"
+
+
 def test_html_stripped_to_text():
     p = knowledge._TextExtractor()
     p.feed("<html><style>.a{}</style><body><h1>About Us</h1><script>x()</script><p>We build things.</p></body></html>")

@@ -33,9 +33,10 @@ async def ingest_knowledge(
 ) -> dict:
     """Ingest one source (a file OR a url) into the knowledge base."""
     if file is not None:
-        if file.size and file.size > _MAX_UPLOAD_BYTES:
+        # Read with a hard ceiling regardless of a (possibly-absent/spoofed) content-length.
+        data = await file.read(_MAX_UPLOAD_BYTES + 1)
+        if len(data) > _MAX_UPLOAD_BYTES:
             raise ApiError(413, "FILE_TOO_LARGE", "document exceeds 25 MB")
-        data = await file.read()
         text = await run_in_threadpool(knowledge.extract_text, file.filename or "upload", data)
     elif url:
         text = await run_in_threadpool(knowledge.fetch_url_text, url)
