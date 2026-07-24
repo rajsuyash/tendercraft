@@ -1,38 +1,36 @@
 /**
  * Tailwind theme wired from the approved design contract (design/tokens.json).
- *
- * Per docs/conventions.md, tokens are the ONLY source of color/type/spacing values —
- * hardcoded hexes and font stacks fail review. This config is the single mapping point:
- * change a token, the whole UI follows. Consumed once Next.js + Tailwind land (M0 T6–T8).
+ * Tokens are the ONLY source of color/type/spacing (docs/conventions.md) — hardcoded
+ * hexes/font stacks fail /design-review. Fonts come through CSS vars set by next/font.
  */
-import tokens from "../../design/tokens.json" with { type: "json" };
+const tokens = require("../../design/tokens.json");
 
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        primary: { DEFAULT: tokens.color.primary, hover: tokens.color["primary-hover"], tint: tokens.color["primary-tint"] },
+        primary: {
+          DEFAULT: tokens.color.primary,
+          hover: tokens.color["primary-hover"],
+          tint: tokens.color["primary-tint"],
+        },
+        "on-primary": tokens.color["on-primary"],
         surface: { DEFAULT: tokens.color.surface, alt: tokens.color["surface-alt"] },
         border: tokens.color.border,
         ink: tokens.color.text,
         muted: tokens.color["text-muted"],
-        // Verdict semantics — reserved (design contract §C), never repurposed.
         success: { DEFAULT: tokens.color.success, bg: tokens.color["success-bg"] },
         danger: { DEFAULT: tokens.color.danger, bg: tokens.color["danger-bg"] },
         warning: { DEFAULT: tokens.color.warning, bg: tokens.color["warning-bg"] },
         info: { DEFAULT: tokens.color.info, bg: tokens.color["info-bg"] },
       },
       fontFamily: {
-        heading: tokens.font.heading.split(",").map((s) => s.trim()),
-        body: tokens.font.body.split(",").map((s) => s.trim()),
-        mono: tokens.font.mono.split(",").map((s) => s.trim()),
+        heading: ["var(--font-heading)", "sans-serif"],
+        body: ["var(--font-body)", "sans-serif"],
       },
-      borderRadius: {
-        DEFAULT: `${tokens.radius.default}px`,
-        card: `${tokens.radius.card}px`,
-      },
+      borderRadius: { DEFAULT: `${tokens.radius.default}px`, card: `${tokens.radius.card}px` },
       spacing: {
         sidebar: `${tokens.space["sidebar-width"]}px`,
         page: `${tokens.space["page-padding"]}px`,

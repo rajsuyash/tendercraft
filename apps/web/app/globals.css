@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-surface-alt text-ink font-body antialiased;
+}
+
+h1,
+h2,
+h3 {
+  @apply font-heading;
+}
