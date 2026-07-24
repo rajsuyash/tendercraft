@@ -26,22 +26,17 @@ def list_library(user: CurrentUser) -> dict:
     return ok({"documents": docs, "count": len(docs)})
 
 
-@router.post("/api/tenders/{tender_id}/generate")
-def generate_proposal(tender_id: str, user: CurrentUser) -> dict:
-    tender = db.get_tender(tender_id, user.tenant_id)
-    if not tender:
-        raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
-    if tender.get("status") != "locked":
-        raise ApiError(409, "TOM_NOT_LOCKED", "lock the TOM before generating a proposal")
-
-    criteria = db.get_criteria(tender_id, user.tenant_id)
+def do_generate(tenant_id: str, tender_id: str) -> dict:
+    """Draft every criterion from the library and persist responses. Caller ensures the TOM
+    is locked. Reused by both /generate and the readiness /prepare orchestration."""
+    criteria = db.get_criteria(tender_id, tenant_id)
     today = datetime.now(UTC).date().isoformat()
-    evidence = db.get_valid_library_docs(user.tenant_id, today)
+    evidence = db.get_valid_library_docs(tenant_id, today)
     chunks = [
         {"id": d["id"], "name": d["name"], "text": d.get("text_content", "")} for d in evidence
     ]
 
-    proposal = db.create_proposal(user.tenant_id, tender_id)
+    proposal = db.create_proposal(tenant_id, tender_id)
 
     # Draft all criteria concurrently — each is an independent model call; sequential would
     # blow the request budget on a large tender (retry cap keeps cost bounded per call).
@@ -52,7 +47,7 @@ def generate_proposal(tender_id: str, user: CurrentUser) -> dict:
     total_flags = 0
     for c, drafted in zip(criteria, drafts, strict=True):
         db.upsert_response(
-            user.tenant_id, proposal["id"], c["id"],
+            tenant_id, proposal["id"], c["id"],
             {
                 "draft_text": drafted.draft_text,
                 "sentences": drafted.sentences,
@@ -65,15 +60,22 @@ def generate_proposal(tender_id: str, user: CurrentUser) -> dict:
             {"requirement_level": c["requirement_level"], "draft_status": drafted.draft_status}
         )
 
-    coverage = mandatory_coverage(coverage_rows)
-    return ok(
-        {
-            "proposal_id": proposal["id"],
-            "responses": len(criteria),
-            "mandatory_coverage": coverage,
-            "open_flags": total_flags,
-        }
-    )
+    return {
+        "proposal_id": proposal["id"],
+        "responses": len(criteria),
+        "mandatory_coverage": mandatory_coverage(coverage_rows),
+        "open_flags": total_flags,
+    }
+
+
+@router.post("/api/tenders/{tender_id}/generate")
+def generate_proposal(tender_id: str, user: CurrentUser) -> dict:
+    tender = db.get_tender(tender_id, user.tenant_id)
+    if not tender:
+        raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
+    if tender.get("status") != "locked":
+        raise ApiError(409, "TOM_NOT_LOCKED", "lock the TOM before generating a proposal")
+    return ok(do_generate(user.tenant_id, tender_id))
 
 
 @router.get("/api/tenders/{tender_id}/proposal")

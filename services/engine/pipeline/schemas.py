@@ -4,6 +4,31 @@ Tender text is untrusted; the model may only emit JSON matching these shapes —
 text, no tool calls. Anything off-schema is rejected by the client and routed to fallback.
 """
 
+# Knowledge-base document classification (auto-derive metadata from ingested text).
+KB_DOC_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "doc_type": {
+            "type": "string",
+            "enum": [
+                "financial", "certification", "completion", "undertaking",
+                "cv", "company_profile", "other",
+            ],
+        },
+        "valid_to": {"type": "string", "nullable": True},  # ISO date the doc expires, or null
+        "structured_fields": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"key": {"type": "string"}, "value": {"type": "string"}},
+                "required": ["key", "value"],
+            },
+        },
+    },
+    "required": ["name", "doc_type"],
+}
+
 # Per-criterion eligibility evaluation against the vendor profile.
 # The model EXTRACTS values and proposes a verdict; the deterministic layer DECIDES
 # (compare_numeric for numeric, the 0.75 router for fuzzy) — §2.4.

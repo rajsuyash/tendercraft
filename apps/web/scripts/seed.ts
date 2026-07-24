@@ -149,6 +149,35 @@ async function seedLibrary(tenantId: string) {
   console.log(`✓ FIX-4 content library: ${docs.length} documents (1 expired for validity-filter test)`);
 }
 
+async function seedWinnableTender(tenantId: string) {
+  // FIX-5: a tender this bidder actually qualifies for (₹5 Cr turnover threshold ≤ their ₹8.2 Cr,
+  // similar works they have, an undertaking their library supports). Demonstrates the happy path.
+  const title = "e-Office Software Implementation";
+  const existing = await j(
+    await fetch(`${SB_URL}/rest/v1/tenders?tenant_id=eq.${tenantId}&title=eq.${encodeURIComponent(title)}&select=id`, { headers: authHeaders }),
+  );
+  for (const t of existing ?? []) {
+    await fetch(`${SB_URL}/rest/v1/criteria?tender_id=eq.${t.id}`, { method: "DELETE", headers: authHeaders });
+    await fetch(`${SB_URL}/rest/v1/tenders?id=eq.${t.id}`, { method: "DELETE", headers: authHeaders });
+  }
+  const tender = await j(
+    await fetch(`${SB_URL}/rest/v1/tenders`, {
+      method: "POST",
+      headers: { ...authHeaders, Prefer: "return=representation" },
+      body: JSON.stringify({ tenant_id: tenantId, title, tender_number: "MAHA/IT/2026/4415", authority: "MahaIT", status: "verification" }),
+    }),
+  );
+  const tid = tender[0].id;
+  const criteria = [
+    { verbatim_text: "Average annual turnover of not less than ₹5 Crores over FY23–FY25.", category: "eligibility", requirement_level: "mandatory", confidence: 0.95, confirmed: true, anchor_page: 8, anchor_clause: "3.1(a)", evidence_required: null, evaluation_weight: null },
+    { verbatim_text: "At least three similar works of software/IT implementation, each ≥ ₹2 Cr.", category: "eligibility", requirement_level: "mandatory", confidence: 0.9, confirmed: true, anchor_page: 8, anchor_clause: "3.1(c)", evidence_required: null, evaluation_weight: null },
+    { verbatim_text: "Declaration of non-blacklisting on company letterhead.", category: "terms", requirement_level: "mandatory", confidence: 0.92, confirmed: true, anchor_page: 15, anchor_clause: "5.1", evidence_required: null, evaluation_weight: null },
+  ].map((c) => ({ ...c, tenant_id: tenantId, tender_id: tid }));
+  const res = await fetch(`${SB_URL}/rest/v1/criteria`, { method: "POST", headers: authHeaders, body: JSON.stringify(criteria) });
+  if (!res.ok) throw new Error(`winnable criteria failed: ${res.status} ${await res.text()}`);
+  console.log(`✓ FIX-5 winnable tender "${title}" (${criteria.length} criteria bidder meets) = ${tid}`);
+}
+
 async function main() {
   console.log("seeding FIX-1…");
   await deleteExistingUser(FIX1_EMAIL);
@@ -156,6 +185,7 @@ async function main() {
   await seedProfile(tenantId);
   await seedLibrary(tenantId);
   await seedSampleTender(tenantId);
+  await seedWinnableTender(tenantId);
 
   const user = await j(
     await fetch(`${SB_URL}/auth/v1/admin/users`, {

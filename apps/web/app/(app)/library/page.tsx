@@ -1,3 +1,4 @@
+import { KnowledgeUpload } from "@/components/KnowledgeUpload";
 import { formatDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
@@ -48,9 +49,17 @@ export default async function LibraryPage() {
     <main className="p-page">
       <header className="mb-6">
         <h1 className="font-heading text-2xl font-semibold text-ink">
-          Content Library <span className="text-muted">— {docs.length} documents</span>
+          Knowledge Base <span className="text-muted">— {docs.length} documents</span>
         </h1>
+        <p className="text-sm text-muted">
+          Your company&apos;s evidence corpus. Proposals cite only from here, and expired documents
+          are hard-excluded from drafting.
+        </p>
       </header>
+
+      <div className="mb-6">
+        <KnowledgeUpload />
+      </div>
 
       {expiredCount > 0 && (
         <div

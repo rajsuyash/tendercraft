@@ -124,6 +124,14 @@ def get_analysis(tender_id: str, tenant_id: str) -> dict | None:
 
 
 # ---------- content library + proposals (Module B) ----------
+def insert_library_document(tenant_id: str, doc: dict, uploaded_by: str | None) -> dict:
+    rows = _rest(
+        "POST", "library_documents",
+        json={**doc, "tenant_id": tenant_id, "uploaded_by": uploaded_by},
+    )
+    return rows[0]
+
+
 def get_valid_library_docs(tenant_id: str, today_iso: str) -> list[dict]:
     """Retrieval with the validity HARD-filter: expired docs are excluded (never a model choice)."""
     docs = _rest(

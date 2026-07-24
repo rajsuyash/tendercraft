@@ -32,7 +32,7 @@ export default function UploadPage() {
       setIllegible({ tenderId: body.data.tender_id, pages });
       return;
     }
-    router.push(`/tenders/${body.data.tender_id}/verify`);
+    router.push(`/tenders/${body.data.tender_id}/readiness`);
   }
 
   return (
@@ -83,7 +83,7 @@ export default function UploadPage() {
             verification.
           </p>
           <button
-            onClick={() => router.push(`/tenders/${illegible.tenderId}/verify`)}
+            onClick={() => router.push(`/tenders/${illegible.tenderId}/readiness`)}
             className="mt-3 rounded border border-warning px-3 py-1 text-xs font-medium hover:bg-warning/10"
           >
             Continue with what was extracted

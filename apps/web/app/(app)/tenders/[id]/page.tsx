@@ -50,16 +50,16 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
         {locked && (
           <div className="mt-3 flex gap-2">
             <Link
-              href={`/tenders/${id}/analysis`}
+              href={`/tenders/${id}/readiness`}
               className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-on-primary hover:bg-primary-hover"
             >
-              Run eligibility analysis
+              Bid readiness
             </Link>
             <Link
-              href={`/proposals/${id}`}
+              href={`/tenders/${id}/analysis`}
               className="rounded border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary-tint"
             >
-              Generate proposal
+              Eligibility analysis
             </Link>
           </div>
         )}

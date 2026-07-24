@@ -41,7 +41,9 @@ export default async function TendersPage() {
       ) : (
         <ul className="space-y-2">
           {tenders!.map((t) => {
-            const target = t.status === "verification" ? `/tenders/${t.id}/verify` : `/tenders/${t.id}`;
+            // Readiness hub is the primary destination; the detailed TOM view stays at /tenders/[id].
+            const target =
+              t.status === "exported" ? `/tenders/${t.id}` : `/tenders/${t.id}/readiness`;
             return (
               <li key={t.id}>
                 <Link
