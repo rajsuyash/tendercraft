@@ -11,6 +11,7 @@ Every verdict carries a rationale + source anchor (C-AC4).
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from pipeline.analyzer import ModelEval, evaluate_criterion
@@ -90,10 +91,15 @@ def _weighted_score(verdicts: list[CriterionVerdict]) -> int:
 
 def analyze(criteria_rows: list[dict], profile_json: dict) -> dict:
     """Full analysis over a locked TOM's criteria vs the vendor profile."""
-    verdicts = [
-        decide(row, evaluate_criterion(row["verbatim_text"], profile_json))
-        for row in criteria_rows
-    ]
+    # Evaluate criteria concurrently — each is an independent model call; sequential blows
+    # the request budget on a large tender (retry cap bounds cost per call).
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        evals = list(
+            pool.map(
+                lambda row: evaluate_criterion(row["verbatim_text"], profile_json), criteria_rows
+            )
+        )
+    verdicts = [decide(row, ev) for row, ev in zip(criteria_rows, evals, strict=True)]
 
     outcomes = [
         CriterionOutcome(

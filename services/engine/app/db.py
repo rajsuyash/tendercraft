@@ -215,3 +215,34 @@ def write_audit(tenant_id: str, actor: str | None, action: str, entity: str, ent
         )
     except ApiError:
         pass
+
+
+# ---------- score estimates (Module D) ----------
+def count_cluster_outcomes(tenant_id: str, authority_cluster: str, category_cluster: str) -> int:
+    rows = _rest(
+        "GET", "outcomes",
+        params={
+            "tenant_id": f"eq.{tenant_id}",
+            "authority_cluster": f"eq.{authority_cluster}",
+            "category_cluster": f"eq.{category_cluster}",
+            "select": "id",
+        },
+    ) or []
+    return len(rows)
+
+
+def save_estimate(tenant_id: str, tender_id: str, result: dict) -> None:
+    _rest(
+        "POST", "score_estimates",
+        params={"on_conflict": "tender_id"},
+        json={"tenant_id": tenant_id, "tender_id": tender_id, "result": result},
+        prefer="resolution=merge-duplicates,return=minimal",
+    )
+
+
+def get_estimate(tender_id: str, tenant_id: str) -> dict | None:
+    rows = _rest(
+        "GET", "score_estimates",
+        params={"tender_id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "result"},
+    )
+    return rows[0]["result"] if rows else None
