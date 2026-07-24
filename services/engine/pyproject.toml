@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "TenderCraft engine — deterministic compliance gates + AI pipeline (FastAPI)"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115",
+    # Pin: fastapi 0.139/starlette 1.3 broke include_router (routes mount as path=None).
+    "fastapi>=0.115,<0.116",
     "uvicorn[standard]>=0.32",
     "pyjwt[crypto]>=2.10",
     "httpx>=0.28",
@@ -37,5 +38,5 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-# Live-API integration tests: long REST call lines read better unwrapped.
-"tests/isolation/*" = ["E501"]
+# Test fixtures (long parametrize rows, REST calls, model-eval literals) read better unwrapped.
+"tests/*" = ["E501"]

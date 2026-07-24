@@ -94,10 +94,47 @@ async function seedSampleTender(tenantId: string) {
   console.log(`✓ FIX-3 tender "${tender[0].title}" (${criteria.length} criteria, 1 low-confidence) = ${tid}`);
 }
 
+async function seedProfile(tenantId: string) {
+  // FIX-2: vendor profile matching the design fixture (₹8.2 Cr avg turnover, MSE, expired ISO).
+  const upsert = (table: string, rows: unknown[], conflict?: string) =>
+    fetch(`${SB_URL}/rest/v1/${table}${conflict ? `?on_conflict=${conflict}` : ""}`, {
+      method: "POST",
+      headers: { ...authHeaders, Prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify(rows.map((r) => ({ ...(r as object), tenant_id: tenantId }))),
+    });
+  // clear child rows so re-seed is deterministic
+  for (const t of ["profile_financials", "experience_records", "certifications"]) {
+    await fetch(`${SB_URL}/rest/v1/${t}?tenant_id=eq.${tenantId}`, { method: "DELETE", headers: authHeaders });
+  }
+  await upsert("vendor_profiles", [{
+    cin: "U72200MH2011PTC214563", pan: "AAECM4321F", gst: "27AAECM4321F1ZP",
+    udyam_registration: "UDYAM-MH-18-0034521", dpiit_registered: false,
+    net_worth_cr: 4.3, working_capital_cr: 2.1, oem_status: "system_integrator",
+  }], "tenant_id");
+  await upsert("profile_financials", [
+    { fy_label: "FY23", turnover_cr: 6.8 },
+    { fy_label: "FY24", turnover_cr: 8.1 },
+    { fy_label: "FY25", turnover_cr: 9.7 },
+  ], "tenant_id,fy_label");
+  await upsert("experience_records", [
+    { project_name: "District e-Governance rollout", client_type: "psu", value_cr: 3.4, scope_tags: ["hardware-supply", "installation"], completion_date: "2024-11-30", evidence_ref: "completion-cert-041.pdf" },
+    { project_name: "PSU desktop refresh 800 units", client_type: "psu", value_cr: 2.6, scope_tags: ["hardware-supply"], completion_date: "2023-03-15" },
+    { project_name: "Municipal CCTV network", client_type: "govt", value_cr: 2.1, scope_tags: ["surveillance", "installation"], completion_date: "2022-08-01" },
+    { project_name: "Ministry IT infra (turnkey)", client_type: "govt", value_cr: 4.9, scope_tags: ["hardware-supply", "installation", "turnkey"], completion_date: "2025-01-20" },
+  ]);
+  await upsert("certifications", [
+    { name: "ISO 9001:2015", cert_no: "IN-9001-44821", valid_from: "2023-04-01", valid_to: "2026-03-31" },
+    { name: "ISO 27001", cert_no: "IN-27001-9920", valid_from: "2024-09-01", valid_to: "2027-09-01" },
+    { name: "CMMI L3", cert_no: "CMMI-3-5521", valid_from: "2025-01-01", valid_to: "2028-01-01" },
+  ]);
+  console.log("✓ FIX-2 vendor profile seeded (₹8.2 Cr avg turnover, MSE, ISO 9001 expired 03/2026)");
+}
+
 async function main() {
   console.log("seeding FIX-1…");
   await deleteExistingUser(FIX1_EMAIL);
   const tenantId = await upsertTenant(TENANT_NAME);
+  await seedProfile(tenantId);
   await seedSampleTender(tenantId);
 
   const user = await j(

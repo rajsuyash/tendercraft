@@ -22,13 +22,16 @@ def _headers() -> dict[str, str]:
     return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
 
-def _rest(method: str, path: str, *, params: dict | None = None, json: Any = None) -> Any:
+def _rest(
+    method: str, path: str, *, params: dict | None = None, json: Any = None,
+    prefer: str = "return=representation",
+) -> Any:
     s = get_settings()
     try:
         r = httpx.request(
             method,
             f"{s.supabase_url}/rest/v1/{path}",
-            headers={**_headers(), "Prefer": "return=representation"},
+            headers={**_headers(), "Prefer": prefer},
             params=params,
             json=json,
             timeout=15,
@@ -81,3 +84,40 @@ def set_tender_locked(tender_id: str, tenant_id: str, locked_at: str) -> None:
         params={"id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}"},
         json={"status": "locked", "locked_at": locked_at},
     )
+
+
+# ---------- vendor profile (Module C) ----------
+def get_profile_context(tenant_id: str) -> dict:
+    """Assemble the full structured profile for eligibility evaluation."""
+    scope = {"tenant_id": f"eq.{tenant_id}"}
+
+    def sel(table: str, cols: str) -> list:
+        return _rest("GET", table, params={**scope, "select": cols}) or []
+
+    legal = sel("vendor_profiles", "*")
+    return {
+        "legal_identity": legal[0] if legal else {},
+        "financials": sel("profile_financials", "fy_label,turnover_cr"),
+        "experience_records": sel(
+            "experience_records", "id,project_name,client_type,value_cr,scope_tags,completion_date"
+        ),
+        "certifications": sel("certifications", "id,name,cert_no,valid_from,valid_to"),
+    }
+
+
+# ---------- analyses ----------
+def save_analysis(tenant_id: str, tender_id: str, result: dict) -> None:
+    _rest(
+        "POST", "analyses",
+        params={"on_conflict": "tender_id"},
+        json={"tenant_id": tenant_id, "tender_id": tender_id, "result": result},
+        prefer="resolution=merge-duplicates",
+    )
+
+
+def get_analysis(tender_id: str, tenant_id: str) -> dict | None:
+    rows = _rest(
+        "GET", "analyses",
+        params={"tender_id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "result"},
+    )
+    return rows[0]["result"] if rows else None

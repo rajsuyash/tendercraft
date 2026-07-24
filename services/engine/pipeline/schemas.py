@@ -4,6 +4,30 @@ Tender text is untrusted; the model may only emit JSON matching these shapes —
 text, no tool calls. Anything off-schema is rejected by the client and routed to fallback.
 """
 
+# Per-criterion eligibility evaluation against the vendor profile.
+# The model EXTRACTS values and proposes a verdict; the deterministic layer DECIDES
+# (compare_numeric for numeric, the 0.75 router for fuzzy) — §2.4.
+CRITERION_EVAL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "check_type": {
+            "type": "string",
+            "enum": ["numeric", "date", "experience", "registration", "other"],
+        },
+        "required_value_cr": {"type": "number", "nullable": True},
+        "operator": {"type": "string", "enum": [">=", "<=", ">", "<", "=="], "nullable": True},
+        "actual_value_cr": {"type": "number", "nullable": True},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "model_verdict": {"type": "string", "enum": ["pass", "fail", "needs_review"]},
+        "confidence": {"type": "number"},
+        "rationale": {"type": "string"},
+        "gap_note": {"type": "string"},
+        "exemption_applies": {"type": "boolean"},
+        "exemption_clause": {"type": "string"},
+    },
+    "required": ["check_type", "model_verdict", "confidence", "rationale", "evidence_ids"],
+}
+
 # Gemini responseSchema (OpenAPI subset) for criteria extraction.
 CRITERIA_SCHEMA = {
     "type": "object",

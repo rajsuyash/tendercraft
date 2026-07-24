@@ -21,6 +21,8 @@ Format: **symptom → cause → fix.**
 
 ## Engine (FastAPI)
 
+- `include_router` silently adds nothing (routes vanish, only inline `@app.get` survive) → fastapi 0.139+/starlette 1.3+ broke `include_router` (mounts routes as `path=None`). A stray `uv sync` upgraded into it. Fix: pin `fastapi>=0.115,<0.116` (pulls starlette 0.46). Symptom check: `[r.path for r in app.routes]` shows a `None`.
+
 - Sync work in async handlers (OCR, PDF parse) → event-loop stall → background jobs; handlers stay I/O-thin
 - Pydantic v1 syntax in v2 → `.dict()`/`validator` errors → v2 idioms (`model_dump`, `field_validator`)
 - Forgotten `await` → coroutine never runs, silent no-op → ruff async lint rules on
