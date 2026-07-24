@@ -8,7 +8,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from . import db
@@ -16,6 +17,9 @@ from .auth import AuthedUser, get_current_user
 from .deterministic.lock import evaluate_lock
 from .deterministic.types import Criterion, RequirementLevel, SourceAnchor
 from .envelope import ApiError, ok
+from .ingest import ingest_pages, parse_pdf_pages
+
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB guard
 
 router = APIRouter()
 CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
@@ -50,14 +54,46 @@ def _to_domain(row: dict) -> Criterion:
     )
 
 
+def _process_ingest(tenant_id: str, data: bytes, title: str) -> dict:
+    """CPU/IO-bound ingest pipeline — run off the event loop via a threadpool."""
+    pages = parse_pdf_pages(data)
+    result = ingest_pages(pages)
+    tender = db.create_tender(tenant_id, title)
+    if result["criteria_rows"]:
+        db.insert_criteria(tenant_id, tender["id"], result["criteria_rows"])
+    return {
+        "tender_id": tender["id"],
+        "pages": len(pages),
+        "extracted": result["extracted"],
+        "low_confidence": result["low_confidence"],
+        "illegible_pages": result["illegible_pages"],
+    }
+
+
+@router.post("/api/tenders/ingest")
+async def ingest_tender(
+    user: CurrentUser, file: Annotated[UploadFile, File()], title: str = ""
+) -> dict:
+    # Reject oversize BEFORE reading the whole body into memory (DoS guard).
+    if file.size and file.size > _MAX_UPLOAD_BYTES:
+        raise ApiError(413, "FILE_TOO_LARGE", "tender document exceeds 50 MB")
+    data = await file.read()
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise ApiError(413, "FILE_TOO_LARGE", "tender document exceeds 50 MB")
+    name = title or file.filename or "Untitled tender"
+    # Parsing + extraction + inserts are blocking; keep the event loop free.
+    return ok(await run_in_threadpool(_process_ingest, user.tenant_id, data, name))
+
+
+# Sync bodies (only blocking db calls) -> FastAPI runs them in a threadpool, off the loop.
 @router.post("/api/tenders")
-async def create_tender(body: CreateTender, user: CurrentUser) -> dict:
+def create_tender_route(body: CreateTender, user: CurrentUser) -> dict:
     tender = db.create_tender(user.tenant_id, body.title)
     return ok({"id": tender["id"], "status": tender["status"]})
 
 
 @router.post("/api/tenders/{tender_id}/criteria")
-async def add_criteria(tender_id: str, body: list[CriterionIn], user: CurrentUser) -> dict:
+def add_criteria(tender_id: str, body: list[CriterionIn], user: CurrentUser) -> dict:
     if not db.get_tender(tender_id, user.tenant_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
     rows = db.insert_criteria(user.tenant_id, tender_id, [c.model_dump() for c in body])
@@ -70,7 +106,7 @@ async def add_criteria(tender_id: str, body: list[CriterionIn], user: CurrentUse
 
 
 @router.post("/api/criteria/{criterion_id}/confirm")
-async def confirm(criterion_id: str, user: CurrentUser) -> dict:
+def confirm(criterion_id: str, user: CurrentUser) -> dict:
     updated = db.confirm_criterion(criterion_id, user.tenant_id)
     if not updated:
         raise ApiError(404, "CRITERION_NOT_FOUND", "criterion not found in your workspace")
@@ -78,7 +114,7 @@ async def confirm(criterion_id: str, user: CurrentUser) -> dict:
 
 
 @router.post("/api/tenders/{tender_id}/lock")
-async def lock(tender_id: str, user: CurrentUser) -> dict:
+def lock(tender_id: str, user: CurrentUser) -> dict:
     if not db.get_tender(tender_id, user.tenant_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
     rows = db.get_criteria(tender_id, user.tenant_id)
