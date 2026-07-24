@@ -1,0 +1,54 @@
+{
+  "version": 2,
+  "prd": { "path": "tendercraft-PRD.md", "sha256": "915d25d1ee1ff5cba34be0db3a698f178dd720fb5d36045381bd3bba597d0838", "shape": "foreign+execution-wrapper" },
+  "plan": { "path": "docs/EXECUTION_PLAN.md", "schema": "execution-plan/v1.1", "status": "approved" },
+  "capabilities": {
+    "plan": true, "verify": true, "verify-api": true, "verify-ext": false, "evals": true,
+    "review": true, "ship": true, "design-review": true, "tdd": false, "uat-runner": false,
+    "autoplan": false, "code-review": true, "devfleet": true, "search-first": false,
+    "investigate": false, "browse": true, "qa": true, "land-and-deploy": true, "canary": true,
+    "claude-mem": true
+  },
+  "gates": {
+    "g1": { "approved_at": "2026-07-24T00:05:00Z", "user_notes": "Scope: offline core (M0 + deterministic engines, fully unit-tested); stop before live Supabase/Claude/OCR. OCR provider decided: Google Document AI (for M1). Toolchain verified: node25/pnpm10/python3.14/uv." },
+    "g2": { "approved_at": "2026-07-24T00:00:00Z", "modifications": [], "source": "project-planning-orchestrator (Gate P pre-approved)" },
+    "g3": { "approved_at": null, "readiness_verdict": null }
+  },
+  "milestones": [
+    { "id": "M0", "status": "building", "exit_acs": ["S2-D2", "GLB-D1"],
+      "tasks": [
+        { "id": "T1", "name": "Monorepo init", "complexity": "med", "status": "partial",
+          "note": "pnpm workspace + apps/web package done; full Next app + engine FastAPI app deferred (browser/credential-gated)",
+          "commit": "1fd3af1", "verified_layers": ["unit"] },
+        { "id": "T4", "name": "Design-system enabler (format + tokens)", "complexity": "med", "status": "partial",
+          "note": "format helpers + token->tailwind wiring done + tested; C1-C6 React components deferred (need Next+browser)",
+          "commit": "1fd3af1", "verified_layers": ["unit"] }
+      ] },
+    { "id": "M1", "status": "pending", "exit_acs": ["A-AC3", "A-AC5", "S4-D1"] },
+    { "id": "M2", "status": "pending", "exit_acs": ["C-AC4", "C-AC5", "S7-D1", "S7-D2", "S7-D3"] },
+    { "id": "M3", "status": "pending", "exit_acs": ["B-AC3", "S9-D1", "S9-D2", "S9-D3"] },
+    { "id": "M4", "status": "pending", "exit_acs": ["E-AC2", "B-AC4", "E-AC1", "E-AC3", "S10-D1", "S10-D2", "S10-D3"] },
+    { "id": "M5", "status": "pending", "exit_acs": ["D-AC4", "D-AC5", "S11-D1", "S11-D2", "S11-D3"] }
+  ],
+  "offline_core": {
+    "deterministic_engine": {
+      "status": "verified",
+      "modules": ["lock (A-AC5/A-AC3)", "eligibility (C-FR1/C-FR3/C-FR5)", "export_gate (B-AC4/E-AC2)", "suppression (D-AC4/D-FR2/RB-4)"],
+      "evidence": "60 pytest, 100% branch coverage, ruff clean, code-reviewer APPROVE 0-critical",
+      "commit": "3bc23af",
+      "note": "cores of cx:high tasks T15/T20/T33/T39 built ahead of milestones (pure + offline-verifiable); their I/O wrappers + service wiring remain for M1/M2/M4/M5 when Supabase is live"
+    }
+  },
+  "remote": "https://github.com/rajsuyash/tendercraft (branch build/tendercraft pushed)",
+  "blocked_on_user": "credentials for M0 T2 onward: Supabase URL+anon+service-role keys, ANTHROPIC_API_KEY, GCP Document AI creds. Then resume /prd-to-ship.",
+  "failures": [],
+  "log": [
+    "2026-07-24 git init + baseline commit on build/tendercraft",
+    "2026-07-24 capability probe complete",
+    "2026-07-24 G2 pre-approved via EXECUTION_PLAN.md §J (Gate P)",
+    "2026-07-24 G1 approved (offline-core scope, OCR=Document AI)",
+    "2026-07-24 T1+T4-core committed 1fd3af1 (12 vitest green)",
+    "2026-07-24 deterministic engine committed 3bc23af (60 pytest, 100% branch, reviewed APPROVE)",
+    "2026-07-24 pushed build/tendercraft -> github.com/rajsuyash/tendercraft"
+  ]
+}

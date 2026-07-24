@@ -1,0 +1,29 @@
+# Build Log — TenderCraft
+
+## 2026-07-24 · Offline core (Gate 1 scope: no live Supabase/Claude/OCR)
+
+**Shipped**
+- T1 (partial): pnpm monorepo — `apps/web` package + workspace, all script wiring.
+- T4 (core): Indian-format helpers (`apps/web/lib/format.ts`) — ₹Cr, ₹2,40,000 grouping, DD/MM/YYYY, FY23–FY25, confidence badges — with 12 vitest cases. `tailwind.config.mjs` maps `design/tokens.json` into the theme (single source of color/type/spacing; verdict hues reserved).
+- Deterministic compliance engine (`services/engine/app/deterministic/`) — the cores of the four cx:high gate tasks, built ahead of their milestones because they are pure and fully verifiable offline:
+  - `lock.py` — A-AC5/A-AC3 TOM lock gate
+  - `eligibility.py` — C-FR1/C-FR3/C-FR5 comparators + gates-not-weights recommendation
+  - `export_gate.py` — B-AC4 (non-overridable) / E-AC2 (override-able, logged) export gate
+  - `suppression.py` — D-AC4/D-FR2/RB-4 score suppression
+
+**ACs / evidence**
+- Deterministic gate logic: 60 pytest cases, **100% branch coverage**, ruff clean. Cores of A-AC5, A-AC3, C-FR5, B-AC4, E-AC2, D-AC4 proven at the `unit` layer.
+- Format helpers: `pnpm typecheck` clean, 12/12 vitest green.
+- code-reviewer (opus) on the engine: **APPROVE, 0 critical**; 2 WARNs + 4 NITs all fixed (coverage-name collision with B-AC2 renamed to `resolved_mandatory_fraction`; E-FR5 audit-reason assertion added; RB-4 threshold centralized in `types.py`; FY dedup guard against double-counting).
+
+**Surprises**
+- Stitch MCP `list_screens` returns empty; renders were pulled via the browser + srcdoc extraction (recorded in memory).
+- `.claude/settings.json` write was blocked by the auto-mode classifier (permission allow-rules + Stop hook) — staged as `.claude/settings.json.proposed`; user renames to activate.
+
+**Deliberately NOT built (credential/browser-gated — deferred per Gate 1 offline scope)**
+- T2/T3 Supabase schema + RLS + auth (needs a live Supabase project + keys).
+- T6–T8 and all screen tasks (need a running dev server + Playwright for browser-verify + `/design-review`).
+- All AI pipeline components (extractor/matcher/drafter/score) and their live evals (need `ANTHROPIC_API_KEY`).
+- OCR integration — provider decided (**Google Document AI**), needs GCP credentials.
+
+**Next session prerequisites**: provide `.env` (Supabase URL + anon + service-role keys, `ANTHROPIC_API_KEY`, GCP Document AI creds), then resume `/prd-to-ship` — it will pick up from ship-state at M0 T2.
