@@ -162,6 +162,34 @@ def test_classify_maps_structured_fields(monkeypatch):
     assert meta["structured_fields"] == {"cert_no": "IN-9001-44821"}
 
 
+def _stub_ingest(monkeypatch):
+    from app import db, knowledge_routes
+    monkeypatch.setattr(knowledge_routes.knowledge, "build_document",
+                        lambda t: {"name": "X", "doc_type": "completion", "valid_to": None,
+                                   "text_content": t, "structured_fields": {}})
+    monkeypatch.setattr(db, "insert_library_document",
+                        lambda tid, doc, actor: {"id": "doc-1", "name": "X",
+                                                 "doc_type": "completion", "valid_to": None})
+    calls: list = []
+    monkeypatch.setattr(db, "upsert_readiness_decision", lambda *a, **k: calls.append((a, k)))
+    return knowledge_routes, calls
+
+
+def test_ingest_links_document_to_criterion(monkeypatch):
+    knowledge_routes, calls = _stub_ingest(monkeypatch)
+    res = knowledge_routes._ingest_text("t1", "u1", "text", "crit-1", "tender-1")
+    assert res["id"] == "doc-1"
+    assert len(calls) == 1
+    assert calls[0][1]["document_id"] == "doc-1"
+    assert calls[0][0] == ("t1", "tender-1", "crit-1")
+
+
+def test_ingest_without_criterion_does_not_link(monkeypatch):
+    knowledge_routes, calls = _stub_ingest(monkeypatch)
+    knowledge_routes._ingest_text("t1", "u1", "text")  # no criterion/tender
+    assert calls == []
+
+
 def test_build_document_shape(monkeypatch):
     monkeypatch.setattr(knowledge, "generate_json", lambda p, s, **k: {
         "name": "Completion Cert", "doc_type": "completion", "valid_to": None, "structured_fields": [],

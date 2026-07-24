@@ -4,14 +4,27 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 // Add a document to the knowledge base: a file (PDF/DOCX/PPTX) or a website URL.
-// Reused on the Library page and inline on the Readiness hub.
-export function KnowledgeUpload({ compact = false }: { compact?: boolean }) {
+// Reused on the Library page and inline on the Readiness hub. When criterionId + tenderId are
+// passed, the uploaded doc is linked to that specific readiness item.
+export function KnowledgeUpload({
+  compact = false,
+  criterionId,
+  tenderId,
+}: {
+  compact?: boolean;
+  criterionId?: string;
+  tenderId?: string;
+}) {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function send(body: FormData) {
+    if (criterionId && tenderId) {
+      body.append("criterion_id", criterionId);
+      body.append("tender_id", tenderId);
+    }
     setBusy(true);
     setMsg(null);
     const res = await fetch("/api/knowledge/ingest", { method: "POST", body });

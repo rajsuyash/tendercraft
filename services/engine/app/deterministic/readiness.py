@@ -22,6 +22,10 @@ from .types import EXTRACTION_CONFIRM_THRESHOLD, RequirementLevel
 
 # Evidence states that mean "no usable drafted response yet".
 _UNDRAFTED = {"missing", "placeholder", None}
+# Decisions the bidder can make that soften a P0 block (accept-the-gap vs drop-the-requirement).
+# Both stop a P0 from blocking generation; the difference is intent/labeling only.
+OVERRIDDEN_DECISIONS = {"ignore", "do_not_proceed"}
+_DEFAULT_DECISION = "resolve"
 
 
 @dataclass(frozen=True)
@@ -35,6 +39,9 @@ class ReadinessItem:
     action: str  # "confirm" | "upload" | "fix" | "review" | "optional" | "none"
     rationale: str
     gap_note: str
+    decision: str  # "resolve" | "ignore" | "do_not_proceed"
+    comment: str
+    document_id: str | None
 
 
 _PRIORITY_ORDER = {"confirm": 0, "p0": 1, "p1": 2, "p2": 3, "covered": 4}
@@ -68,10 +75,16 @@ def compute_readiness(
     criteria: Sequence[dict],
     analysis: dict | None,
     responses: Sequence[dict],
+    decisions: Sequence[dict] = (),
 ) -> dict:
-    """Combine criteria + analysis + drafted responses into a prioritized readiness list."""
+    """Combine criteria + analysis + drafted responses + bidder decisions into a prioritized list.
+
+    A P0 item the bidder has chosen to ignore or drop no longer blocks generation (it's still
+    shown, styled as overridden). `ready_to_generate` gates on the *blocking* P0 count only.
+    """
     verdict_by = {v["criterion_id"]: v for v in (analysis or {}).get("verdicts", [])}
     status_by = {r["criterion_id"]: r.get("draft_status") for r in responses}
+    decision_by = {d["criterion_id"]: d for d in decisions}
 
     items: list[ReadinessItem] = []
     for c in criteria:
@@ -79,6 +92,10 @@ def compute_readiness(
         level = RequirementLevel(c["requirement_level"])
         v = verdict_by.get(cid)
         anchor = (v or {}).get("source_anchor") or _anchor(c)
+        d = decision_by.get(cid) or {}
+        decision = d.get("decision") or _DEFAULT_DECISION
+        comment = d.get("comment") or ""
+        document_id = d.get("document_id")
 
         # Fold-in of the verify step: an unconfirmed sub-0.80 extraction comes first.
         low_conf = float(c.get("confidence", 1.0)) < EXTRACTION_CONFIRM_THRESHOLD
@@ -86,7 +103,7 @@ def compute_readiness(
             items.append(ReadinessItem(
                 cid, c["verbatim_text"], level.value, anchor, "confirm",
                 "Confirm this AI-extracted requirement before matching", "confirm",
-                (v or {}).get("rationale", ""), "",
+                (v or {}).get("rationale", ""), "", decision, comment, document_id,
             ))
             continue
 
@@ -99,6 +116,7 @@ def compute_readiness(
         items.append(ReadinessItem(
             cid, c["verbatim_text"], level.value, anchor, priority, status, action,
             (v or {}).get("rationale", ""), (v or {}).get("gap_note", ""),
+            decision, comment, document_id,
         ))
 
     items.sort(key=lambda i: _PRIORITY_ORDER[i.priority])
@@ -106,15 +124,22 @@ def compute_readiness(
     def n(p: str) -> int:
         return sum(1 for i in items if i.priority == p)
 
+    p0_overridden = sum(
+        1 for i in items if i.priority == "p0" and i.decision in OVERRIDDEN_DECISIONS
+    )
+    p0_blocking = n("p0") - p0_overridden
+
     return {
         "summary": {
             "confirm_open": n("confirm"),
             "p0_open": n("p0"),
+            "p0_blocking": p0_blocking,
+            "p0_overridden": p0_overridden,
             "p1_open": n("p1"),
             "p2_open": n("p2"),
             "covered": n("covered"),
             "total": len(items),
-            "ready_to_generate": n("confirm") == 0 and n("p0") == 0,
+            "ready_to_generate": n("confirm") == 0 and p0_blocking == 0,
         },
         "items": [i.__dict__ for i in items],
     }

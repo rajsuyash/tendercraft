@@ -99,6 +99,28 @@ def test_service_role_sees_all_tenants(two_tenants):
 
 
 @requires_supabase
+def test_readiness_decision_is_tenant_scoped(two_tenants):
+    # A per-criterion decision for tenant A must never appear in tenant B's authed session (ET-6).
+    tenant_a = two_tenants["tenant_a"]
+    _, td = rest("POST", "tenders", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                 body={"tenant_id": tenant_a, "title": "Tender A — decision scope"})
+    tender_id = td[0]["id"]
+    _, cr = rest("POST", "criteria", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                 body={"tenant_id": tenant_a, "tender_id": tender_id,
+                       "verbatim_text": "x", "category": "eligibility",
+                       "requirement_level": "mandatory", "confidence": 0.9, "confirmed": True})
+    rest("POST", "readiness_decisions", bearer=SERVICE_KEY, key=SERVICE_KEY,
+         body={"tenant_id": tenant_a, "tender_id": tender_id, "criterion_id": cr[0]["id"],
+               "decision": "ignore", "comment": "A-only"})
+
+    jwt_b = sign_in(EMAIL_B, PW)
+    status, rows = rest("GET", "readiness_decisions", bearer=jwt_b, key=ANON_KEY, query="?select=comment")
+    assert status == 200
+    assert rows == [], f"cross-tenant readiness-decision leak: {rows}"
+    # teardown cascade (tenders delete by tenant_id) removes the tender/criterion/decision
+
+
+@requires_supabase
 def test_audit_events_are_immutable(two_tenants):
     # E-AC1: append-only enforced at the DB, even for the service role
     _, rows = rest("POST", "audit_events", bearer=SERVICE_KEY, key=SERVICE_KEY,

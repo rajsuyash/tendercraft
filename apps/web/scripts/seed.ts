@@ -121,10 +121,15 @@ async function seedProfile(tenantId: string) {
   ], "tenant_id,fy_label");
   // uniform keys (PGRST102): every row carries evidence_ref, null where absent
   await upsert("experience_records", [
+    // Hardware works — comparable for the desktop-supply tender (FIX-3).
     { project_name: "District e-Governance rollout", client_type: "psu", value_cr: 3.4, scope_tags: ["hardware-supply", "installation"], completion_date: "2024-11-30", evidence_ref: "completion-cert-041.pdf" },
     { project_name: "PSU desktop refresh 800 units", client_type: "psu", value_cr: 2.6, scope_tags: ["hardware-supply"], completion_date: "2023-03-15", evidence_ref: null },
     { project_name: "Municipal CCTV network", client_type: "govt", value_cr: 2.1, scope_tags: ["surveillance", "installation"], completion_date: "2022-08-01", evidence_ref: null },
     { project_name: "Ministry IT infra (turnkey)", client_type: "govt", value_cr: 4.9, scope_tags: ["hardware-supply", "installation", "turnkey"], completion_date: "2025-01-20", evidence_ref: null },
+    // Software/IT implementation works — comparable for the e-Office software tender (FIX-5).
+    { project_name: "State e-Office & file-workflow software implementation", client_type: "govt", value_cr: 3.8, scope_tags: ["software-implementation", "workflow-automation"], completion_date: "2024-06-30", evidence_ref: "eoffice-completion-cert.pdf" },
+    { project_name: "GST citizen-services portal development & rollout", client_type: "govt", value_cr: 2.9, scope_tags: ["software-development", "software-implementation"], completion_date: "2023-09-10", evidence_ref: null },
+    { project_name: "Hospital Management Information System (HMIS) deployment", client_type: "psu", value_cr: 2.4, scope_tags: ["software-implementation"], completion_date: "2025-02-15", evidence_ref: null },
   ]);
   await upsert("certifications", [
     { name: "ISO 9001:2015", cert_no: "IN-9001-44821", valid_from: "2023-04-01", valid_to: "2026-03-31" },
@@ -141,6 +146,9 @@ async function seedLibrary(tenantId: string) {
     { name: "turnover-certificate-FY25.pdf", doc_type: "financial", valid_to: null, text_content: "CA-certified statement: M/s Meridian Infotech recorded an average annual turnover of ₹8.2 Cr across FY23-FY25, with FY25 turnover of ₹9.7 Cr. Net worth ₹4.3 Cr.", structured_fields: { fy25_turnover_cr: 9.7, avg_turnover_cr: 8.2 } },
     { name: "iso-9001-2015-cert.pdf", doc_type: "certification", valid_to: "2026-03-31", text_content: "ISO 9001:2015 Quality Management certification, cert no. IN-9001-44821, issued to Meridian Infotech.", structured_fields: { cert_no: "IN-9001-44821" } },
     { name: "district-egovernance-completion-cert.pdf", doc_type: "completion", valid_to: null, text_content: "Completion certificate: District e-Governance hardware supply and installation, value ₹3.4 Cr, completed 11/2024 for a PSU client, executed satisfactorily.", structured_fields: { value_cr: 3.4 } },
+    { name: "eoffice-completion-cert.pdf", doc_type: "completion", valid_to: null, text_content: "Completion certificate: State e-Office and file-workflow software implementation, value ₹3.8 Cr, completed 06/2024 for a Government department, delivered and accepted satisfactorily.", structured_fields: { value_cr: 3.8 } },
+    { name: "gst-portal-completion-cert.pdf", doc_type: "completion", valid_to: null, text_content: "Completion certificate: GST citizen-services portal software development and rollout, value ₹2.9 Cr, completed 09/2023 for a Government client.", structured_fields: { value_cr: 2.9 } },
+    { name: "hmis-completion-cert.pdf", doc_type: "completion", valid_to: null, text_content: "Completion certificate: Hospital Management Information System (HMIS) software deployment, value ₹2.4 Cr, completed 02/2025 for a PSU hospital.", structured_fields: { value_cr: 2.4 } },
     { name: "standard-undertaking-annexure1.docx", doc_type: "undertaking", valid_to: null, text_content: "Standard undertaking of non-blacklisting and compliance with tender terms, on company letterhead, signed by the authorized signatory.", structured_fields: {} },
     { name: "team-lead-cv-rahul-sharma.pdf", doc_type: "cv", valid_to: null, text_content: "Rahul Sharma, Project Lead. B.E. (Computer Science), PMP certified, 14 years experience in government IT hardware rollouts.", structured_fields: { qualification: "B.E., PMP" } },
   ].map((d) => ({ ...d, tenant_id: tenantId }));

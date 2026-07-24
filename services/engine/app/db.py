@@ -78,6 +78,19 @@ def confirm_criterion(criterion_id: str, tenant_id: str) -> list[dict]:
     )
 
 
+def get_criterion_in_tender(criterion_id: str, tender_id: str, tenant_id: str) -> dict | None:
+    """Existence check that a criterion belongs to this tender AND this tenant — the guard on any
+    write that binds a criterion (decisions, per-item doc links). One query covers ET-6."""
+    rows = _rest(
+        "GET", "criteria",
+        params={
+            "id": f"eq.{criterion_id}", "tender_id": f"eq.{tender_id}",
+            "tenant_id": f"eq.{tenant_id}", "select": "id",
+        },
+    )
+    return rows[0] if rows else None
+
+
 def set_tender_locked(tender_id: str, tenant_id: str, locked_at: str) -> None:
     _rest(
         "PATCH", "tenders",
@@ -177,6 +190,43 @@ def get_responses(proposal_id: str, tenant_id: str) -> list[dict]:
     return _rest(
         "GET", "proposal_responses",
         params={"proposal_id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
+    ) or []
+
+
+# ---------- per-criterion readiness decisions (bidder resolve/ignore/do-not-proceed) ----------
+def upsert_readiness_decision(
+    tenant_id: str, tender_id: str, criterion_id: str, *,
+    decision: str | None = None, comment: str | None = None,
+    document_id: str | None = None, actor: str | None = None,
+) -> dict:
+    """Upsert one item's decision. Partial: only provided fields change; omitted ones keep their
+    prior value on conflict (PostgREST merge only writes the columns in the payload)."""
+    payload: dict[str, Any] = {
+        "tenant_id": tenant_id, "tender_id": tender_id, "criterion_id": criterion_id,
+    }
+    if decision is not None:
+        payload["decision"] = decision
+    if comment is not None:
+        payload["comment"] = comment
+    if document_id is not None:
+        payload["document_id"] = document_id
+    if actor is not None:
+        payload["updated_by"] = actor
+    rows = _rest(
+        "POST", "readiness_decisions",
+        # tenant_id in the conflict target so a merge can never cross tenants (defense-in-depth
+        # behind the endpoint's ownership guard — the engine bypasses RLS).
+        params={"on_conflict": "tenant_id,tender_id,criterion_id"},
+        json=payload,
+        prefer="resolution=merge-duplicates,return=representation",
+    )
+    return rows[0] if rows else {}
+
+
+def get_readiness_decisions(tender_id: str, tenant_id: str) -> list[dict]:
+    return _rest(
+        "GET", "readiness_decisions",
+        params={"tender_id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
     ) or []
 
 

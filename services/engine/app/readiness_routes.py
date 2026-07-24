@@ -7,20 +7,26 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field
 
 from . import analysis, db
 from .auth import AuthedUser, get_current_user
 from .deterministic.lock import evaluate_lock
-from .deterministic.readiness import compute_readiness
+from .deterministic.readiness import OVERRIDDEN_DECISIONS, compute_readiness
 from .deterministic.types import Criterion, RequirementLevel, SourceAnchor
 from .envelope import ApiError, ok
 
 router = APIRouter()
 CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
+
+
+class DecisionIn(BaseModel):
+    decision: Literal["resolve", "ignore", "do_not_proceed"] | None = None
+    comment: str | None = Field(default=None, max_length=2000)
 
 
 def _to_domain(row: dict) -> Criterion:
@@ -38,13 +44,34 @@ def _readiness_payload(tenant_id: str, tender_id: str) -> dict:
     analysis_result = db.get_analysis(tender_id, tenant_id)
     proposal = db.get_proposal_by_tender(tender_id, tenant_id)
     responses = db.get_responses(proposal["id"], tenant_id) if proposal else []
-    return compute_readiness(criteria, analysis_result, responses)
+    decisions = db.get_readiness_decisions(tender_id, tenant_id)
+    return compute_readiness(criteria, analysis_result, responses, decisions)
 
 
 @router.get("/api/tenders/{tender_id}/readiness")
 def get_readiness(tender_id: str, user: CurrentUser) -> dict:
     if not db.get_tender(tender_id, user.tenant_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
+    return ok(_readiness_payload(user.tenant_id, tender_id))
+
+
+@router.put("/api/tenders/{tender_id}/criteria/{criterion_id}/decision")
+def set_decision(tender_id: str, criterion_id: str, body: DecisionIn, user: CurrentUser) -> dict:
+    """Record the bidder's per-item decision (resolve/ignore/do_not_proceed) + comment. Ignoring or
+    dropping a P0 softens the deterministic block, so those decisions are audited."""
+    # ET-6 + integrity: the criterion must belong to this tender AND this tenant before we write.
+    if not db.get_criterion_in_tender(criterion_id, tender_id, user.tenant_id):
+        raise ApiError(404, "CRITERION_NOT_FOUND", "criterion not found in this tender")
+    # Audit BEFORE softening the gate: an override must never take effect without an audit trail.
+    if body.decision in OVERRIDDEN_DECISIONS:
+        db.write_audit(
+            user.tenant_id, user.user_id, "readiness_decision", "criterion", criterion_id,
+            after={"decision": body.decision},
+        )
+    db.upsert_readiness_decision(
+        user.tenant_id, tender_id, criterion_id,
+        decision=body.decision, comment=body.comment, actor=user.user_id,
+    )
     return ok(_readiness_payload(user.tenant_id, tender_id))
 
 

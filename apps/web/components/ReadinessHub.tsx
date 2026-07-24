@@ -6,6 +6,8 @@ import { useState } from "react";
 
 import { KnowledgeUpload } from "@/components/KnowledgeUpload";
 
+type Decision = "resolve" | "ignore" | "do_not_proceed";
+
 interface Item {
   criterion_id: string;
   verbatim_text: string;
@@ -16,10 +18,15 @@ interface Item {
   action: string;
   rationale: string;
   gap_note: string;
+  decision: Decision;
+  comment: string;
+  document_id: string | null;
 }
 interface Summary {
   confirm_open: number;
   p0_open: number;
+  p0_blocking: number;
+  p0_overridden: number;
   p1_open: number;
   p2_open: number;
   covered: number;
@@ -30,6 +37,16 @@ export interface Readiness {
   summary: Summary;
   items: Item[];
 }
+
+const DECISIONS: { key: Decision; label: string }[] = [
+  { key: "resolve", label: "I’ll resolve" },
+  { key: "ignore", label: "Ignore & proceed" },
+  { key: "do_not_proceed", label: "Do not proceed" },
+];
+const OVERRIDDEN_BADGE: Partial<Record<Decision, string>> = {
+  ignore: "Proceeding despite gap",
+  do_not_proceed: "Dropped from bid",
+};
 
 const PRIORITY: Record<Item["priority"], { label: string; cls: string }> = {
   confirm: { label: "CONFIRM", cls: "bg-primary-tint text-primary" },
@@ -55,6 +72,7 @@ export function ReadinessHub({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [comments, setComments] = useState<Record<string, string>>({});
   const { summary, items } = readiness;
 
   async function post(url: string, tag: string) {
@@ -66,6 +84,23 @@ export function ReadinessHub({
     } else {
       const b = await res.json().catch(() => null);
       setError(b?.error?.message ?? "Action failed");
+    }
+    setBusy(null);
+  }
+
+  async function saveDecision(cid: string, patch: { decision?: Decision; comment?: string }, tag: string) {
+    setBusy(tag);
+    setError(null);
+    const res = await fetch(`/api/tenders/${tenderId}/criteria/${cid}/decision`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (res.ok) {
+      router.refresh();
+    } else {
+      const b = await res.json().catch(() => null);
+      setError(b?.error?.message ?? "Save failed");
     }
     setBusy(null);
   }
@@ -132,12 +167,22 @@ export function ReadinessHub({
         </section>
       ) : (
         <>
+          {busy === "prepare" && (
+            <p className="mb-3 text-xs text-muted">
+              Re-matching — re-running eligibility checks and re-drafting from your knowledge base.
+              This calls the AI per requirement and can take 15–30s.
+            </p>
+          )}
+
           {/* progress + generate */}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface p-card">
             <div className="flex flex-wrap gap-4 text-sm">
-              <span data-p0-progress className={summary.p0_open > 0 ? "text-danger" : "text-success"}>
-                {summary.p0_open} P0 blocking
+              <span data-p0-progress className={summary.p0_blocking > 0 ? "text-danger" : "text-success"}>
+                {summary.p0_blocking} P0 blocking
               </span>
+              {summary.p0_overridden > 0 && (
+                <span className="text-muted">{summary.p0_overridden} overridden</span>
+              )}
               <span className="text-warning">{summary.p1_open} P1</span>
               <span className="text-info">{summary.p2_open} P2</span>
               <span className="text-success">{summary.covered} covered</span>
@@ -172,12 +217,18 @@ export function ReadinessHub({
           <ul className="space-y-3">
             {checklist.map((i) => {
               const p = PRIORITY[i.priority];
+              const overridden = i.decision === "ignore" || i.decision === "do_not_proceed";
+              const showPanel = i.priority !== "covered";
+              const commentVal = comments[i.criterion_id] ?? i.comment;
               return (
                 <li
                   key={i.criterion_id}
                   data-readiness-item
                   data-priority={i.priority}
-                  className="rounded-card border border-border bg-surface p-card"
+                  data-decision={i.decision}
+                  className={`rounded-card border border-border p-card ${
+                    overridden ? "bg-surface-alt opacity-75" : "bg-surface"
+                  }`}
                 >
                   <div className="mb-2 flex items-start justify-between gap-3">
                     <div>
@@ -186,19 +237,104 @@ export function ReadinessHub({
                       </span>
                       <span className="ml-2 text-xs text-muted">{i.source_anchor}</span>
                     </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${p.cls}`}>
-                      {p.label}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {overridden && (
+                        <span className="rounded-full bg-surface-alt px-2.5 py-0.5 text-xs font-medium text-muted">
+                          {OVERRIDDEN_BADGE[i.decision]}
+                        </span>
+                      )}
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${p.cls}`}>
+                        {p.label}
+                      </span>
+                    </div>
                   </div>
                   <p className="text-sm text-ink">{i.verbatim_text}</p>
                   <p className="mt-1 text-xs text-muted">
                     {i.status}
                     {i.gap_note ? ` — ${i.gap_note}` : ""}
                   </p>
-                  {(i.action === "upload" || i.action === "fix") && (
+                  {i.action === "upload" && (
                     <p className="mt-2 text-xs text-primary">
-                      Add the supporting document via “Add to knowledge base” above, then Re-match.
+                      Attach the supporting document below, then Re-match.
                     </p>
+                  )}
+                  {i.action === "fix" && (
+                    <p className="mt-2 text-xs text-primary">
+                      This is decided from your structured{" "}
+                      <Link href="/profile" className="underline">
+                        Vendor Profile
+                      </Link>{" "}
+                      (turnover, experience, certifications) — not from an uploaded document. Update
+                      it there and Re-match, or Ignore &amp; proceed below.
+                    </p>
+                  )}
+                  {i.action === "review" && (
+                    <p className="mt-2 text-xs text-warning">
+                      Open the{" "}
+                      <Link href={`/proposals/${tenderId}`} className="underline">
+                        proposal draft
+                      </Link>{" "}
+                      to attest or cite a source for this claim.
+                    </p>
+                  )}
+
+                  {showPanel && (
+                    <div data-decision-panel className="mt-3 space-y-3 border-t border-border pt-3">
+                      {/* decision: resolve / ignore / do not proceed */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted">Your call:</span>
+                        {DECISIONS.map((d) => {
+                          const selected = i.decision === d.key;
+                          return (
+                            <button
+                              key={d.key}
+                              onClick={() =>
+                                saveDecision(i.criterion_id, { decision: d.key }, `${i.criterion_id}:dec`)
+                              }
+                              disabled={busy !== null}
+                              className={`rounded border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${
+                                selected
+                                  ? "border-primary bg-primary text-on-primary"
+                                  : "border-border text-muted hover:text-ink"
+                              }`}
+                            >
+                              {d.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* attach a document to this specific item */}
+                      <div>
+                        <p className="mb-1 text-xs text-muted">Attach a supporting document:</p>
+                        <KnowledgeUpload compact criterionId={i.criterion_id} tenderId={tenderId} />
+                        {i.document_id && (
+                          <p className="mt-1 text-xs text-success">Document attached ✓</p>
+                        )}
+                      </div>
+
+                      {/* free-text comment */}
+                      <div className="flex gap-2">
+                        <textarea
+                          value={commentVal}
+                          rows={2}
+                          onChange={(e) =>
+                            setComments((c) => ({ ...c, [i.criterion_id]: e.target.value }))
+                          }
+                          placeholder="Add a note (optional)"
+                          className="flex-1 rounded border border-border px-3 py-1.5 text-sm outline-none focus:border-primary"
+                        />
+                        <button
+                          onClick={() =>
+                            saveDecision(i.criterion_id, { comment: commentVal }, `${i.criterion_id}:cmt`)
+                          }
+                          disabled={busy !== null || commentVal === i.comment}
+                          className="shrink-0 self-start rounded border border-border px-3 py-1.5 text-sm font-medium text-muted hover:text-ink disabled:opacity-50"
+                        >
+                          {busy === `${i.criterion_id}:cmt` ? "…" : "Save note"}
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </li>
               );

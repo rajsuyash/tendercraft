@@ -16,9 +16,18 @@ CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
 _MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
-def _ingest_text(tenant_id: str, actor: str, text: str) -> dict:
+def _ingest_text(
+    tenant_id: str, actor: str, text: str,
+    criterion_id: str | None = None, tender_id: str | None = None,
+) -> dict:
     doc = knowledge.build_document(text)
     row = db.insert_library_document(tenant_id, doc, actor)
+    # If the upload targets a specific readiness item, link the doc to it (keeps any prior
+    # decision — attaching evidence doesn't reset an ignore/do-not-proceed choice).
+    if criterion_id and tender_id:
+        db.upsert_readiness_decision(
+            tenant_id, tender_id, criterion_id, document_id=row["id"], actor=actor,
+        )
     return {
         "id": row["id"], "name": row["name"],
         "doc_type": row["doc_type"], "valid_to": row.get("valid_to"),
@@ -30,8 +39,22 @@ async def ingest_knowledge(
     user: CurrentUser,
     file: Annotated[UploadFile | None, File()] = None,
     url: Annotated[str | None, Form()] = None,
+    criterion_id: Annotated[str | None, Form()] = None,
+    tender_id: Annotated[str | None, Form()] = None,
 ) -> dict:
-    """Ingest one source (a file OR a url) into the knowledge base."""
+    """Ingest one source (a file OR a url) into the knowledge base. Optional criterion_id +
+    tender_id link the resulting document to a specific readiness item."""
+    # If linking to an item, both ids are required and the criterion must belong to this tender
+    # AND this tenant — validate BEFORE any work (ET-6: the engine bypasses RLS).
+    if (criterion_id is None) != (tender_id is None):
+        raise ApiError(400, "BAD_LINK", "criterion_id and tender_id must be provided together")
+    if criterion_id and tender_id:
+        owned = await run_in_threadpool(
+            db.get_criterion_in_tender, criterion_id, tender_id, user.tenant_id,
+        )
+        if not owned:
+            raise ApiError(404, "CRITERION_NOT_FOUND", "criterion not found in this tender")
+
     if file is not None:
         # Read with a hard ceiling regardless of a (possibly-absent/spoofed) content-length.
         data = await file.read(_MAX_UPLOAD_BYTES + 1)
@@ -46,5 +69,7 @@ async def ingest_knowledge(
     if not text.strip():
         raise ApiError(422, "NO_TEXT", "no readable text found in the source")
 
-    result = await run_in_threadpool(_ingest_text, user.tenant_id, user.user_id, text)
+    result = await run_in_threadpool(
+        _ingest_text, user.tenant_id, user.user_id, text, criterion_id, tender_id,
+    )
     return ok(result)

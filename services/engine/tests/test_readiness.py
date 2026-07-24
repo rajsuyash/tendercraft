@@ -129,3 +129,65 @@ def test_summary_counts_and_ready_flag():
     assert r["summary"]["covered"] == 2
     assert r["summary"]["p0_open"] == 0
     assert r["summary"]["ready_to_generate"] is True
+
+
+# ---------- per-item decisions ----------
+def _dec(cid, decision, comment="", document_id=None):
+    return {"criterion_id": cid, "decision": decision, "comment": comment, "document_id": document_id}
+
+
+def _p0():
+    return [_crit("a")], _analysis(_v("a", "fail")), [_resp("a", "placeholder")]
+
+
+def test_default_decision_is_resolve_and_p0_blocks():
+    crit, an, resp = _p0()
+    r = compute_readiness(crit, an, resp)  # no decisions -> default resolve
+    item = r["items"][0]
+    assert item["decision"] == "resolve" and item["comment"] == "" and item["document_id"] is None
+    assert r["summary"]["p0_blocking"] == 1
+    assert r["summary"]["p0_overridden"] == 0
+    assert r["summary"]["ready_to_generate"] is False
+
+
+def test_ignored_p0_stops_blocking_but_still_shows():
+    crit, an, resp = _p0()
+    r = compute_readiness(crit, an, resp, [_dec("a", "ignore", "accepting the gap")])
+    assert _priority(r, "a") == "p0"  # still a P0 visually
+    assert r["summary"]["p0_open"] == 1
+    assert r["summary"]["p0_blocking"] == 0
+    assert r["summary"]["p0_overridden"] == 1
+    assert r["summary"]["ready_to_generate"] is True
+    assert r["items"][0]["comment"] == "accepting the gap"
+
+
+def test_do_not_proceed_p0_also_stops_blocking():
+    crit, an, resp = _p0()
+    r = compute_readiness(crit, an, resp, [_dec("a", "do_not_proceed")])
+    assert r["summary"]["p0_blocking"] == 0
+    assert r["summary"]["ready_to_generate"] is True
+
+
+def test_one_ignored_one_open_still_blocks():
+    criteria = [_crit("a"), _crit("b")]
+    an = _analysis(_v("a", "fail"), _v("b", "fail"))
+    resp = [_resp("a", "placeholder"), _resp("b", "placeholder")]
+    r = compute_readiness(criteria, an, resp, [_dec("a", "ignore")])
+    assert r["summary"]["p0_open"] == 2
+    assert r["summary"]["p0_overridden"] == 1
+    assert r["summary"]["p0_blocking"] == 1
+    assert r["summary"]["ready_to_generate"] is False
+
+
+def test_decision_document_id_surfaces_on_item():
+    crit, an, resp = _p0()
+    r = compute_readiness(crit, an, resp, [_dec("a", "resolve", document_id="doc-123")])
+    assert r["items"][0]["document_id"] == "doc-123"
+
+
+def test_confirm_item_carries_decision_fields():
+    r = compute_readiness([_crit("a", conf=0.6, confirmed=False)], None, [],
+                          [_dec("a", "ignore", "note")])
+    item = r["items"][0]
+    assert item["priority"] == "confirm"
+    assert item["decision"] == "ignore" and item["comment"] == "note"
