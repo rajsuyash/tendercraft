@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AnalysisRunner } from "@/components/AnalysisRunner";
@@ -70,11 +71,19 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
 
   return (
     <main className="p-page">
-      <header className="mb-6">
-        <h1 className="font-heading text-2xl font-semibold text-ink">{tender.title}</h1>
-        <p className="text-sm text-muted">
-          {tender.tender_number} · {tender.authority}
-        </p>
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-semibold text-ink">{tender.title}</h1>
+          <p className="text-sm text-muted">
+            {tender.tender_number} · {tender.authority}
+          </p>
+        </div>
+        <Link
+          href={`/proposals/${id}`}
+          className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover"
+        >
+          Generate Proposal
+        </Link>
       </header>
 
       <div className="mb-8 grid gap-4 lg:grid-cols-3">

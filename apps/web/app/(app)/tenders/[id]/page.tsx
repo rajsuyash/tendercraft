@@ -47,6 +47,22 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
         <p className="text-sm text-muted">
           {tender.tender_number} · {tender.authority}
         </p>
+        {locked && (
+          <div className="mt-3 flex gap-2">
+            <Link
+              href={`/tenders/${id}/analysis`}
+              className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-on-primary hover:bg-primary-hover"
+            >
+              Run eligibility analysis
+            </Link>
+            <Link
+              href={`/proposals/${id}`}
+              className="rounded border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary-tint"
+            >
+              Generate proposal
+            </Link>
+          </div>
+        )}
       </header>
 
       {CATEGORIES.map((cat) => {

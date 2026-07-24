@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -91,13 +92,27 @@ export function ProposalWorkspace({
             {placeholders === 0 && openFlags === 0 && "ready for review"}
           </p>
         </div>
-        <button
-          onClick={generate}
-          disabled={busy}
-          className="rounded border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary-tint disabled:opacity-50"
-        >
-          {busy ? "Regenerating…" : "Regenerate"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={generate}
+            disabled={busy}
+            className="rounded border border-border px-3 py-1.5 text-sm font-medium text-muted hover:text-ink disabled:opacity-50"
+          >
+            {busy ? "Regenerating…" : "Regenerate"}
+          </button>
+          <Link
+            href={`/proposals/${tenderId}/export`}
+            className="rounded border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary-tint"
+          >
+            Export gate
+          </Link>
+          <Link
+            href={`/proposals/${tenderId}/score`}
+            className="rounded border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary-tint"
+          >
+            Score
+          </Link>
+        </div>
       </header>
 
       <ul className="space-y-4">
