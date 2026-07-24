@@ -26,9 +26,10 @@
         { "id": "T7", "name": "S2 dashboard shell", "complexity": "med", "status": "verified", "commit": "5f520de", "verified_layers": ["browser-verify", "design-review"] },
         { "id": "T8", "name": "S13 error+404", "complexity": "med", "status": "verified", "commit": "5f520de", "verified_layers": ["browser-verify"] }
       ] },
-    { "id": "M1", "status": "building", "exit_acs": ["A-AC3", "A-AC5", "S4-D1"],
-      "done": "T13 extractor (9/9 live incl. G-6 injection), T14 eval harness (live), T15 core tender/criteria/lock endpoints (A-AC5+A-AC3 live, commit 133c64d). Gemini transport fixed (v1beta+x-goog-api-key header+gemini-2.5-flash).",
-      "remaining": "T10 upload backend (PDF->page text->extractor->persist), T11 S3 upload screen, T16 S4 verification-queue screen (S4-D1), T17 S5 TOM detail screen. M1 exit needs S4-D1 (UI) — the deterministic exits A-AC3/A-AC5 are already met.",
+    { "id": "M1", "status": "verified", "exit_acs": ["A-AC3", "A-AC5", "S4-D1"], "completed_at": "2026-07-24",
+      "commit": "84c3607",
+      "done": "All M1 tasks: T13 extractor (9/9 live incl. G-6 injection), T14 eval harness, T15 tender/criteria/lock endpoints, T10 ingest (PDF->extract->persist), T11 S3 upload, T16 S4 verify queue, T17 S5 TOM detail. Flow browser-verified live: upload->S4-D1 lock-blocked->confirm->lock->S5 TOM LOCKED. Reviewed FIX_FIRST->fixed (async event-loop stall). 85 engine + 12 web tests.",
+      "note": "Not browser-verified: uploading a real live PDF end-to-end (ingest endpoint unit-tested; extractor 9/9 live; no real tender-PDF fixture used through the browser). A-AC1/A-AC2 accuracy gate at PRD §6 corpus scale (starter set only).",
       "note": "OCR/extract decision changed to GEMINI (user added GEMINI_API_KEY). Extractor built (T13/T14 core, commit 09e25bb): pipeline/client.py + extractor.py + prompt + eval harness; 10 unit tests green, fallback verified live. BLOCKED: provided GEMINI_API_KEY (AQ.Ab8... format) returns 403 — not an AI Studio key (those are AIza...). Need valid key for live extraction accuracy + to build T10/T12. Remaining M1 non-Gemini tasks buildable now: T15 verification-queue+lock wiring (lock gate core done), T10 upload backend, T11/T16/T17 screens." },
     { "id": "M2", "status": "pending", "exit_acs": ["C-AC4", "C-AC5", "S7-D1", "S7-D2", "S7-D3"] },
     { "id": "M3", "status": "pending", "exit_acs": ["B-AC3", "S9-D1", "S9-D2", "S9-D3"] },
@@ -59,6 +60,8 @@
     "2026-07-24 pushed build/tendercraft -> github.com/rajsuyash/tendercraft",
     "2026-07-24 T2 verified da0adc5 (5 live isolation tests, ET-6)",
     "2026-07-24 engine app + JWKS auth 4721e6c (69 engine tests)",
-    "2026-07-24 M0 VERIFIED 5f520de — walking skeleton live (FIX-1 sign-in -> RLS dashboard); T1/T3/T4/T5/T6/T7/T8 done"
+    "2026-07-24 M0 VERIFIED 5f520de — walking skeleton live (FIX-1 sign-in -> RLS dashboard); T1/T3/T4/T5/T6/T7/T8 done",
+    "2026-07-24 extractor 9/9 live 2835087 (G-6 injection defense holds live); Gemini transport fixed",
+    "2026-07-24 M1 VERIFIED 84c3607 — ingestion+lock+screens live (upload->S4-D1->confirm->lock->S5 TOM LOCKED); A-AC3/A-AC5/S4-D1 met. Next: M2 (analyzer/eligibility)."
   ]
 }
