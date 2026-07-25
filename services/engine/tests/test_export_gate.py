@@ -106,3 +106,71 @@ def test_no_mandatory_rows_is_full_coverage():
     rows = [_row("d", level=DES)]
     d = evaluate_export(rows, DONE)
     assert d.resolved_mandatory_fraction == 1.0
+
+
+# --- long-form document sections (the B-FR4 human-approval control) ---
+
+
+def _crow():
+    from app.deterministic.types import ComplianceRow, CoverageStatus, RequirementLevel
+    return ComplianceRow("c1", RequirementLevel.MANDATORY, CoverageStatus.COVERED)
+
+
+def _sect(**kw):
+    from app.deterministic.export_gate import SectionRow
+    from app.deterministic.types import SectionKind
+    base = dict(key="methodology", kind=SectionKind.NARRATIVE, status="drafted",
+                approved=True, narrative_sentences=0, has_uncited_financial_claim=False)
+    base.update(kw)
+    return SectionRow(**base)
+
+
+def _decide(sections, done=2):
+    from app.deterministic.export_gate import ApprovalChain, evaluate_export
+    return evaluate_export([_crow()], ApprovalChain(2, done), False, sections)
+
+
+def test_sections_absent_leaves_behaviour_unchanged():
+    assert _decide(()).exportable
+
+
+def test_unapproved_ai_narrative_blocks_export():
+    d = _decide([_sect(approved=False, narrative_sentences=40)])
+    assert not d.exportable
+    assert any("not human-approved" in b for b in d.override_blockers)
+
+
+def test_approved_narrative_does_not_block():
+    assert _decide([_sect(approved=True, narrative_sentences=40)]).exportable
+
+
+def test_narrative_with_no_ai_sentences_needs_no_approval():
+    assert _decide([_sect(approved=False, narrative_sentences=0)]).exportable
+
+
+def test_assembled_section_never_needs_narrative_approval():
+    from app.deterministic.types import SectionKind
+    d = _decide([_sect(kind=SectionKind.COMPLIANCE, approved=False, narrative_sentences=5)])
+    assert d.exportable
+
+
+def test_placeholder_section_blocks_export():
+    d = _decide([_sect(status="placeholder")])
+    assert not d.exportable
+    assert any("placeholder" in b for b in d.override_blockers)
+
+
+def test_financial_claim_in_a_section_is_a_HARD_blocker():
+    """Without this the document layer is a hole straight around B-AC4."""
+    from app.deterministic.export_gate import ApprovalChain, evaluate_export
+    d = evaluate_export([_crow()], ApprovalChain(2, 2), True,
+                        [_sect(has_uncited_financial_claim=True)])
+    assert not d.exportable, "an admin override must NOT clear a fabricated figure"
+    assert any("non-overridable" in b for b in d.hard_blockers)
+
+
+def test_section_blockers_clear_under_admin_override():
+    from app.deterministic.export_gate import ApprovalChain, evaluate_export
+    d = evaluate_export([_crow()], ApprovalChain(2, 2), True,
+                        [_sect(approved=False, narrative_sentences=10, status="placeholder")])
+    assert d.exportable and d.override_used

@@ -15,14 +15,26 @@ _THRESHOLD = 70  # typical technical-qualifying mark
 
 
 def estimate(
-    cluster_outcome_count: int, analysis: dict, directional_accuracy: float | None = None
+    cluster_outcome_count: int, analysis: dict, directional_accuracy: float | None = None,
+    rubric_total: float | None = None,
 ) -> dict:
-    """Return a suppressed marker or a score-range estimate for a proposal's analysis."""
+    """Return a suppressed marker or a score-range estimate for a proposal's analysis.
+
+    `rubric_total` is the measured technical-competence score of the actual document
+    (app/deterministic/rubric.py). Without it the basis is purely a pre-drafting
+    eligibility pass-rate that never read the proposal — regenerating the document could
+    not move the estimate by a single point.
+    """
     decision = evaluate_suppression(cluster_outcome_count, directional_accuracy)
     if decision.suppressed:
         return {"suppressed": True, "reason": decision.reason}
 
-    base = int(analysis.get("weighted_score", 0))
+    eligibility_score = int(analysis.get("weighted_score", 0))
+    base = (
+        round(0.5 * eligibility_score + 0.5 * rubric_total)
+        if rubric_total is not None
+        else eligibility_score
+    )
     # Band tightens as the corpus grows past the floor (never a point — D-FR1).
     band = max(5, round(20 * (30 / cluster_outcome_count)))
     low, high = max(0, base - band), min(100, base + band)
