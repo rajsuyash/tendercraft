@@ -15,6 +15,7 @@ from .conftest import (
     admin_create_user,
     admin_delete_user,
     admin_delete_users_by_email,
+    grant_membership,
     requires_supabase,
     rest,
     sign_in,
@@ -42,10 +43,8 @@ def two_workspaces():
         uid_b = admin_create_user(EMAIL_B, PW)
         created_users += [uid_a, uid_b]
 
-        rest("POST", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY,
-             body={"user_id": uid_a, "workspace_id": workspace_a, "role": "admin"})
-        rest("POST", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY,
-             body={"user_id": uid_b, "workspace_id": workspace_b, "role": "admin"})
+        grant_membership(uid_a, workspace_a)
+        grant_membership(uid_b, workspace_b)
 
         rest("POST", "tenders", bearer=SERVICE_KEY, key=SERVICE_KEY,
              body={"workspace_id": workspace_a, "title": "Tender A — desktops"})

@@ -29,7 +29,8 @@ def _jwks_client() -> PyJWKClient:
 class AuthedUser:
     user_id: str
     workspace_id: str
-    role: str
+    role: str            # role IN this workspace (workspace_members.role)
+    is_org_admin: bool = False
 
 
 def verify_jwt(token: str) -> dict:
@@ -49,8 +50,25 @@ def verify_jwt(token: str) -> dict:
         raise ApiError(401, "INVALID_TOKEN", f"authentication failed: {exc}") from exc
 
 
+def _rest_get(path: str, params: dict) -> list:
+    settings = get_settings()
+    if not settings.supabase_service_key:
+        raise ApiError(500, "ENGINE_MISCONFIGURED", "service key not configured")
+    resp = httpx.get(
+        f"{settings.supabase_url}/rest/v1/{path}",
+        params=params,
+        headers={
+            "apikey": settings.supabase_service_key,
+            "Authorization": f"Bearer {settings.supabase_service_key}",
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 def _lookup_profile(user_id: str) -> dict | None:
-    """Fetch the user's profile (workspace + role) via the service role (bypasses RLS).
+    """Fetch the user's profile row via the service role (bypasses RLS).
 
     Returns None when the user has no profile. Raises AMBIGUOUS_PROFILE when they have
     more than one — never picks a row.
@@ -59,25 +77,13 @@ def _lookup_profile(user_id: str) -> dict | None:
     rows PostgREST returns them in physical heap order, which changes after any UPDATE or
     VACUUM. Taking rows[0] would silently resolve a request into a NON-DETERMINISTIC
     workspace — a 200 response with every downstream query correctly scoped to the wrong
-    workspace, and no error anywhere. Today `profiles.user_id` is the PRIMARY KEY so this
-    is unreachable; the guard exists so it stays unreachable when membership becomes
-    many-to-many. Fail closed, always.
+    workspace, and no error anywhere. Fail closed, always.
     """
-    settings = get_settings()
-    if not settings.supabase_service_key:
-        raise ApiError(500, "ENGINE_MISCONFIGURED", "service key not configured")
-    resp = httpx.get(
-        f"{settings.supabase_url}/rest/v1/profiles",
+    rows = _rest_get(
+        "profiles",
         # limit=2 rather than 1: we need to be able to DETECT a second row, not hide it.
-        params={"user_id": f"eq.{user_id}", "select": "workspace_id,role", "limit": "2"},
-        headers={
-            "apikey": settings.supabase_service_key,
-            "Authorization": f"Bearer {settings.supabase_service_key}",
-        },
-        timeout=10,
+        {"user_id": f"eq.{user_id}", "select": "active_workspace_id,is_org_admin", "limit": "2"},
     )
-    resp.raise_for_status()
-    rows = resp.json()
     if not rows:
         return None
     if len(rows) > 1:
@@ -88,13 +94,54 @@ def _lookup_profile(user_id: str) -> dict | None:
     return rows[0]
 
 
-async def get_current_user(authorization: str = Header(default="")) -> AuthedUser:
-    """FastAPI dependency: authenticated user with a server-derived workspace."""
+def _resolve_membership(user_id: str, workspace_id: str) -> dict | None:
+    """The caller's role IN this workspace, or None if they are not a member.
+
+    This MUST mirror public.current_workspace_id() exactly. RLS resolves the scope in SQL;
+    the engine resolves it here with the service role (RLS bypassed), so these are two
+    implementations of one rule and drift between them is a cross-workspace read. The
+    agreement is pinned by tests/isolation/test_workspace_membership.py.
+    """
+    rows = _rest_get(
+        "workspace_members",
+        {"user_id": f"eq.{user_id}", "workspace_id": f"eq.{workspace_id}",
+         "select": "role", "limit": "1"},
+    )
+    return rows[0] if rows else None
+
+
+async def get_current_user(
+    authorization: str = Header(default=""),
+    x_workspace_id: str = Header(default=""),
+) -> AuthedUser:
+    """Authenticated user, scoped to ONE workspace derived server-side.
+
+    Resolution order mirrors public.current_workspace_id(): the X-Workspace-Id header if
+    present, else the stored active workspace — and EITHER WAY validated against
+    workspace_members. A header naming a workspace the caller does not belong to is not an
+    error to explain, it is simply not a workspace they have: 403, never a fallback to a
+    different one.
+    """
     if not authorization.startswith("Bearer "):
         raise ApiError(401, "NO_TOKEN", "missing bearer token")
     claims = verify_jwt(authorization.removeprefix("Bearer ").strip())
     user_id = claims["sub"]
+
     profile = _lookup_profile(user_id)
     if not profile:
         raise ApiError(403, "NO_PROFILE", "user has no workspace profile")
-    return AuthedUser(user_id=user_id, workspace_id=profile["workspace_id"], role=profile["role"])
+
+    workspace_id = x_workspace_id.strip() or profile.get("active_workspace_id")
+    if not workspace_id:
+        raise ApiError(403, "NO_WORKSPACE", "no active workspace selected")
+
+    membership = _resolve_membership(user_id, workspace_id)
+    if not membership:
+        raise ApiError(403, "NOT_A_MEMBER", "you are not a member of this workspace")
+
+    return AuthedUser(
+        user_id=user_id,
+        workspace_id=workspace_id,
+        role=membership["role"],
+        is_org_admin=bool(profile.get("is_org_admin")),
+    )

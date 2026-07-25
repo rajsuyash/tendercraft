@@ -97,3 +97,29 @@ def test_missing_service_key_is_a_misconfiguration(monkeypatch):
     with pytest.raises(ApiError) as exc:
         auth._lookup_profile("u1")
     assert exc.value.code == "ENGINE_MISCONFIGURED"
+
+
+# --- workspace resolution (must mirror public.current_workspace_id) ---
+
+
+def _stub_paths(monkeypatch, by_path: dict):
+    """Stub PostgREST by table name so profile and membership lookups differ."""
+    def fake_get(url, **kw):
+        table = url.rstrip("/").rsplit("/", 1)[-1]
+        return _Resp(by_path.get(table, []))
+
+    monkeypatch.setattr(auth.httpx, "get", fake_get)
+
+
+def test_active_workspace_is_used_when_no_header(monkeypatch):
+    _stub_paths(monkeypatch, {
+        "profiles": [{"active_workspace_id": "ws-a", "is_org_admin": True}],
+        "workspace_members": [{"role": "admin"}],
+    })
+    assert auth._lookup_profile("u1")["active_workspace_id"] == "ws-a"
+    assert auth._resolve_membership("u1", "ws-a") == {"role": "admin"}
+
+
+def test_non_membership_resolves_to_none(monkeypatch):
+    _stub_paths(monkeypatch, {"workspace_members": []})
+    assert auth._resolve_membership("u1", "ws-not-mine") is None

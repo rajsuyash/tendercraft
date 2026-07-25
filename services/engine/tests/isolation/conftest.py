@@ -53,13 +53,18 @@ requires_supabase = pytest.mark.skipif(
 
 
 def _request(method: str, path: str, *, key: str, bearer: str | None = None,
-             body: dict | None = None, prefer: str | None = None):
+             body: dict | None = None, prefer: str | None = None,
+             headers: dict | None = None):
     url = f"{SUPABASE_URL}{path}"
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("apikey", key)
     req.add_header("Authorization", f"Bearer {bearer or key}")
     req.add_header("Content-Type", "application/json")
+    # Extra headers let a test drive the x-workspace-id path that current_workspace_id()
+    # prefers — PostgREST exposes them to RLS via current_setting('request.headers').
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
     if method in ("POST", "PATCH"):
         # `prefer` lets a test model an engine upsert exactly (resolution=merge-duplicates),
         # which is how the cross-workspace approval regression is reproduced.
@@ -79,10 +84,11 @@ def _request(method: str, path: str, *, key: str, bearer: str | None = None,
 
 
 def rest(method: str, table: str, *, bearer: str, key: str, body=None, query: str = "",
-         prefer: str | None = None):
+         prefer: str | None = None, headers: dict | None = None):
     """PostgREST call. Pass a user JWT as `bearer` to exercise RLS as that user."""
     return _request(
-        method, f"/rest/v1/{table}{query}", key=key, bearer=bearer, body=body, prefer=prefer
+        method, f"/rest/v1/{table}{query}", key=key, bearer=bearer, body=body,
+        prefer=prefer, headers=headers,
     )
 
 
@@ -110,6 +116,20 @@ def admin_delete_users_by_email(*emails: str) -> None:
             admin_delete_user(user["id"])
 
 
+def grant_membership(user_id: str, workspace_id: str, role: str = "admin") -> None:
+    """Give a user access to a workspace, the way the product does.
+
+    Since migration 0011 a profiles row alone grants NOTHING: current_workspace_id()
+    resolves the active workspace and then validates it against workspace_members. A
+    fixture that writes only a profile silently produces a user who can see zero rows.
+    """
+    rest("POST", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY,
+         body={"user_id": user_id, "workspace_id": workspace_id, "role": role,
+               "active_workspace_id": workspace_id})
+    rest("POST", "workspace_members", bearer=SERVICE_KEY, key=SERVICE_KEY,
+         body={"user_id": user_id, "workspace_id": workspace_id, "role": role})
+
+
 @pytest.fixture
 def one_user():
     """Provision a single workspace + confirmed user + profile; yield sign-in details."""
@@ -119,8 +139,7 @@ def one_user():
     _, t = rest("POST", "workspaces", bearer=SERVICE_KEY, key=SERVICE_KEY, body={"name": "API Workspace"})
     workspace_id = t[0]["id"]
     uid = admin_create_user(email, pw)
-    rest("POST", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY,
-         body={"user_id": uid, "workspace_id": workspace_id, "role": "admin"})
+    grant_membership(uid, workspace_id)
     try:
         yield {"email": email, "password": pw, "user_id": uid, "workspace_id": workspace_id}
     finally:
