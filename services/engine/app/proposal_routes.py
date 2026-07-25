@@ -9,7 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from pipeline.drafter import draft_response
-from pipeline.retrieval import select_evidence
+from pipeline.retrieval import chunk_docs, select_evidence
 
 from . import db
 from .auth import AuthedUser, get_current_user
@@ -33,9 +33,9 @@ def do_generate(tenant_id: str, tender_id: str) -> dict:
     criteria = db.get_criteria(tender_id, tenant_id)
     today = datetime.now(UTC).date().isoformat()
     evidence = db.get_valid_library_docs(tenant_id, today)
-    chunks = [
-        {"id": d["id"], "name": d["name"], "text": d.get("text_content", "")} for d in evidence
-    ]
+    chunks = chunk_docs(
+        [{"id": d["id"], "name": d["name"], "text": d.get("text_content", "")} for d in evidence]
+    )
     # A doc the bidder attached to a specific item pins that item's evidence (reliable cites).
     pinned_by = {
         d["criterion_id"]: d.get("document_id")
