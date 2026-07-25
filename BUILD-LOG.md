@@ -96,3 +96,36 @@
 **Readiness per-item decisions**: each P0/P1/P2 item carries a bidder decision (resolve | ignore & proceed | do_not_proceed) + comment + optional attached doc. Ignore/do_not_proceed drop the item from the P0 blocking count (audited, E-FR5); gate = `p0_blocking == 0 && confirm == 0`. New `readiness_decisions` table (migration 0007, tenant RLS + isolation test; tenant_id in the unique key so an upsert merge can't cross tenants). `PUT /api/tenders/{id}/criteria/{cid}/decision` + ingest `criterion_id` link, both ownership-guarded (`get_criterion_in_tender`) — closes a review-found cross-tenant-upsert CRITICAL. Also: FIX-5 seed made genuinely winnable (software/IT experience + evidence); eligibility gaps routed to Vendor Profile, evidence to KB; per-page tender extraction parallelized. Engine 175 tests green; decision flow verified live.
 
 **Readiness/drafting correctness pass**: (1) eligibility decides P0, not AI draft status — an eligible-but-undrafted mandatory item is P1 (proposal-completion), only a real eligibility fail blocks (PRD §2.4). (2) Per-criterion evidence selection (`pipeline/retrieval.py`): attached doc guaranteed included but relevance-ordered so a noisy attachment can't bury the good cert; no attachment → top-K lexical. (3) Drafter prompt: assert compliance + cite, never author a financial figure (B-AC4/B-FR3) — new drafter golden set + `/evals` (5/5). Result: the winnable tender now drafts turnover + works to Covered, 0 P0 blocking, generate enabled. Engine 184 tests + drafter evals green.
+
+## 2026-07-25 · Workflow test + long-form proposal + technical scoring
+
+**Phase 0 — tested what existed.** Parallel agents (test-runner, eval-runner, browser-verifier) plus a direct API drive of the whole journey. Baseline was genuinely green: 184 engine + 12 web tests, 100% branch on `app/deterministic`, isolation tests proven to actually run live (control experiment: blanking creds flips them to skipped), extractor 9/9 and drafter 5/5 evals, 16 routes walked with zero console errors.
+
+Stages 1–4 of the bidder journey (upload → capability check → P0/P1/P2 → fix-or-ignore) worked correctly end-to-end, including the quantified gap ("₹8.2 Cr against ₹10 Cr, shortfall ₹1.8 Cr"), the 409 `LOCK_BLOCKED` gate, decision overrides surviving re-match, and the audit trail.
+
+Stages 5–6 did not exist, and two defects sat underneath:
+
+- **The whole proposal was 84 words** — one short paragraph per criterion, no document model, no ordering, no headings.
+- **Export emitted zero bytes.** `POST /export` flipped a status and returned JSON.
+- **The score never read the proposal** and was suppressed 100% of the time (nothing ever inserts into `outcomes`).
+- **B-AC4 was enforced by prompt, not by code.** `is_financial` was model-supplied and `prompts/drafter.md` said "in practice keep it `false`", so the "hard, non-overridable" financial gate was unreachable. Proven empirically; live eval drf-004 was already violating the prompt while passing with 0 flags.
+- **The AI-draft watermark could never clear** — nothing ever wrote `proposals.status='approved'`.
+
+Also found: `evals/eligibility-matcher/` has 5 golden cases that have never run (not in `COMPONENTS`, and no `pipeline/matcher.py` exists at all — C-AC5 has zero automated coverage), and **GLB-D2 fails** (no `[data-nav-toggle]` anywhere; below 1024px the sidebar is `display:none` with no toggle, so nav is unreachable).
+
+**Shipped**
+- **Deterministic sentence classifier** (`app/deterministic/drafting.py`): the model proposes only `claim|narrative`; Python derives `requires_citation`/`is_financial` from the TEXT and coerces one-directionally toward CLAIM. Mislabelling can only ever get stricter. Tuned on live output — named credentials only, enumeration labels/reference numbers neutralised, digits inside forward commitments exempt, money caught unconditionally.
+- **Retrieval**: 1500-char overlapping chunks (`<doc_id>#<n>`), IDF weighting, and a pinned-id fix that chunking would otherwise have silently broken.
+- **Section model** (migration 0008 + `app/sections.py`): 17 sections on the MeitY Appendix-I Form packet, 8 deterministically assembled. These carry the first real B-FR3 transclusion in the codebase — a figure from `experience_records.value_cr` with a `source_ref`, exempt from the hard gate precisely because Python emitted it.
+- **Section drafter** (`prompts/section_drafter.md` + `section_briefs.md`, `pipeline/section_drafter.py`): 9 narrative sections with structure. `needs_bidder_evidence` keeps the bail decision deterministic — the model was self-vetoing writable sections on noisy retrieval.
+- **DOCX export** (`app/docx_export.py`): real bytes, cover page, TOC field, repeating table headers, per-section + page watermark. Gate runs before any rendering.
+- **Technical-competence rubric** (`app/deterministic/rubric.py`): 9 heads weighted from MeitY §2.6.2.2 and CAG OIOS §7, both real gates modelled (≥45% per head, ≥65% aggregate). Every feature observable from a DB row. Suggestions carry computed deltas, replacing the hardcoded `"+2–5 marks"`.
+- **Web**: document view with per-section approval, rubric card with per-head bars and deep-linked suggestions, 4 route handlers.
+
+**Evidence**
+- FIX-5 (e-Office): **9,239 words / 17 sections / 0 placeholders**, 60KB .docx downloaded — 18 H1s, 6 tables, watermark correctly absent post-approval. **82.1/100**, technically qualified.
+- FIX-3 (desktops): **57.5/100, NOT qualified, failing `experience`** — their software record doesn't match a hardware tender. Top suggestion `+12.00 ADD_EXPERIENCE_RECORD`. The score discriminates on scope, not word count.
+- The gate caught **fabricated credentials** in live output ("digitization of over two million legacy physical files", "trained over 800 administrative staff") — none in the evidence, all flagged.
+- 296 engine + 13 live-isolation + 12 web tests green, **100% branch on `app/deterministic` held**, ruff/typecheck/lint clean, extractor 9/9 + drafter 5/5 evals live, browser 15/15 ACs with zero console errors.
+
+**Known gaps (not built, deliberately)**: PDF export (needs LibreOffice in the container); `PUT /api/profile` so an eligibility P0's `action:"fix"` leads somewhere other than a dead button; GLB-D2 nav toggle; the orphaned matcher eval set + missing `pipeline/matcher.py`.
