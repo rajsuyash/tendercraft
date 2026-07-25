@@ -110,6 +110,25 @@ def _resolve_membership(user_id: str, workspace_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
+@dataclass(frozen=True)
+class IdentifiedUser:
+    """Authenticated, but NOT yet scoped to a workspace.
+
+    The bootstrap case: someone accepting their first invitation has no membership and no
+    active workspace, so get_current_user would 403 them out of the very endpoint that
+    would give them one. Use this ONLY where a workspace genuinely cannot exist yet.
+    """
+
+    user_id: str
+
+
+async def get_identified_user(authorization: str = Header(default="")) -> IdentifiedUser:
+    if not authorization.startswith("Bearer "):
+        raise ApiError(401, "NO_TOKEN", "missing bearer token")
+    claims = verify_jwt(authorization.removeprefix("Bearer ").strip())
+    return IdentifiedUser(user_id=claims["sub"])
+
+
 async def get_current_user(
     authorization: str = Header(default=""),
     x_workspace_id: str = Header(default=""),

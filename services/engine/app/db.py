@@ -400,3 +400,205 @@ def get_estimate(tender_id: str, workspace_id: str) -> dict | None:
         },
     )
     return rows[0]["result"] if rows else None
+
+
+# ---------- workspaces, membership, invitations ----------
+def get_user_workspaces(user_id: str) -> list[dict]:
+    """Every workspace this user belongs to — the switcher. One of only two places a SET
+    of workspaces is the right answer; every data query stays scoped to the active one."""
+    rows = _rest(
+        "GET", "workspace_members",
+        params={
+            "user_id": f"eq.{user_id}",
+            "select": "workspace_id,role,workspaces(id,name)",
+        },
+    ) or []
+    return [
+        {
+            "id": r["workspace_id"],
+            "name": (r.get("workspaces") or {}).get("name"),
+            "role": r.get("role"),
+        }
+        for r in rows
+    ]
+
+
+def get_membership(user_id: str, workspace_id: str) -> dict | None:
+    rows = _rest(
+        "GET", "workspace_members",
+        params={
+            "user_id": f"eq.{user_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "role",
+            "limit": "1",
+        },
+    )
+    return rows[0] if rows else None
+
+
+def get_workspace_members(workspace_id: str) -> list[dict]:
+    """Roster with names. Two queries joined in Python rather than a PostgREST embed:
+    workspace_members and profiles both reference auth.users but have no FK BETWEEN them,
+    so `profiles(...)` is not an embeddable relationship and 400s."""
+    rows = _rest(
+        "GET", "workspace_members",
+        params={
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "user_id,role,created_at",
+            "order": "created_at.asc",
+        },
+    ) or []
+    if not rows:
+        return []
+    ids = ",".join(r["user_id"] for r in rows)
+    people = _rest(
+        "GET", "profiles",
+        params={"user_id": f"in.({ids})", "select": "user_id,full_name,email"},
+    ) or []
+    by_id = {p["user_id"]: p for p in people}
+    return [
+        {
+            "user_id": r["user_id"],
+            "role": r["role"],
+            "created_at": r.get("created_at"),
+            "full_name": by_id.get(r["user_id"], {}).get("full_name"),
+            "email": by_id.get(r["user_id"], {}).get("email"),
+        }
+        for r in rows
+    ]
+
+
+def count_workspace_admins(workspace_id: str) -> int:
+    rows = _rest(
+        "GET", "workspace_members",
+        params={
+            "workspace_id": f"eq.{workspace_id}",
+            "role": "eq.admin",
+            "select": "user_id",
+        },
+    ) or []
+    return len(rows)
+
+
+def add_workspace_member(user_id: str, workspace_id: str, role: str, added_by: str) -> None:
+    _rest(
+        "POST", "workspace_members",
+        params={"on_conflict": "user_id,workspace_id"},
+        json={"user_id": user_id, "workspace_id": workspace_id, "role": role,
+              "added_by": added_by},
+        prefer="resolution=merge-duplicates",
+    )
+
+
+def set_member_role(user_id: str, workspace_id: str, role: str) -> None:
+    _rest(
+        "PATCH", "workspace_members",
+        params={"user_id": f"eq.{user_id}", "workspace_id": f"eq.{workspace_id}"},
+        json={"role": role},
+    )
+
+
+def remove_workspace_member(user_id: str, workspace_id: str) -> None:
+    _rest(
+        "DELETE", "workspace_members",
+        params={"user_id": f"eq.{user_id}", "workspace_id": f"eq.{workspace_id}"},
+    )
+
+
+def set_active_workspace(user_id: str, workspace_id: str) -> None:
+    _rest(
+        "PATCH", "profiles",
+        params={"user_id": f"eq.{user_id}"},
+        json={"active_workspace_id": workspace_id},
+    )
+
+
+def clear_active_workspace(user_id: str, workspace_id: str) -> None:
+    """Null the active workspace only if it is the one being revoked — a member removed
+    from workspace B must keep their active workspace A."""
+    _rest(
+        "PATCH", "profiles",
+        params={"user_id": f"eq.{user_id}", "active_workspace_id": f"eq.{workspace_id}"},
+        json={"active_workspace_id": None},
+    )
+
+
+def upsert_profile_identity(user_id: str, email: str, workspace_id: str) -> None:
+    """Record who this person is, and give them an active workspace if they had none.
+
+    full_name/email are denormalized from the verified JWT because auth.users is not
+    readable through PostgREST — without them a roster renders truncated UUIDs.
+    """
+    existing = _rest(
+        "GET", "profiles",
+        params={"user_id": f"eq.{user_id}", "select": "active_workspace_id", "limit": "1"},
+    )
+    payload = {"user_id": user_id, "email": email}
+    if not existing or not existing[0].get("active_workspace_id"):
+        payload["active_workspace_id"] = workspace_id
+    _rest(
+        "POST", "profiles",
+        params={"on_conflict": "user_id"},
+        json=payload,
+        prefer="resolution=merge-duplicates",
+    )
+
+
+def get_user_email(user_id: str) -> str | None:
+    """Authoritative email from the auth system, for the invitation identity check."""
+    s = get_settings()
+    try:
+        r = httpx.get(
+            f"{s.supabase_url}/auth/v1/admin/users/{user_id}",
+            headers=_headers(),
+            timeout=10,
+        )
+        r.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise ApiError(502, "DB_ERROR", f"auth lookup failed: {exc}") from exc
+    return (r.json() or {}).get("email")
+
+
+def create_invitation(workspace_id: str, email: str, role: str, invited_by: str,
+                      token_hash: str) -> None:
+    # Replace any live invitation for this address rather than stacking them — the partial
+    # unique index would reject the insert otherwise.
+    _rest(
+        "DELETE", "workspace_invitations",
+        params={"workspace_id": f"eq.{workspace_id}", "email": f"eq.{email}",
+                "accepted_at": "is.null"},
+    )
+    _rest(
+        "POST", "workspace_invitations",
+        json={"workspace_id": workspace_id, "email": email, "role": role,
+              "invited_by": invited_by, "token_hash": token_hash},
+    )
+
+
+def get_invitation_by_hash(token_hash: str) -> dict | None:
+    rows = _rest(
+        "GET", "workspace_invitations",
+        params={"token_hash": f"eq.{token_hash}", "select": "*", "limit": "1"},
+    )
+    return rows[0] if rows else None
+
+
+def get_pending_invitations(workspace_id: str) -> list[dict]:
+    return _rest(
+        "GET", "workspace_invitations",
+        params={
+            "workspace_id": f"eq.{workspace_id}",
+            "accepted_at": "is.null",
+            # token_hash deliberately not selected — nothing outside the accept path needs it.
+            "select": "id,email,role,expires_at,created_at",
+            "order": "created_at.desc",
+        },
+    ) or []
+
+
+def mark_invitation_accepted(invitation_id: str, user_id: str, when_iso: str) -> None:
+    _rest(
+        "PATCH", "workspace_invitations",
+        params={"id": f"eq.{invitation_id}"},
+        json={"accepted_at": when_iso, "accepted_by": user_id},
+    )
