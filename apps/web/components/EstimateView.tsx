@@ -48,7 +48,7 @@ export function EstimateView({
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-page">
+    <div className="space-y-4">
       <h1 className="mb-1 font-heading text-2xl font-semibold text-ink">Score Estimate</h1>
       <p className="mb-6 text-sm text-muted">{tenderTitle}</p>
 
@@ -140,6 +140,6 @@ export function EstimateView({
           </p>
         </>
       )}
-    </main>
+    </div>
   );
 }

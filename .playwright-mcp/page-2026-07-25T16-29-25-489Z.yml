@@ -1,0 +1,129 @@
+- generic [ref=f5e2]:
+  - navigation [ref=f5e3]:
+    - generic [ref=f5e4]:
+      - generic [ref=f5e5]: TC
+      - generic [ref=f5e6]: TenderCraft
+    - list [ref=f5e7]:
+      - listitem [ref=f5e8]:
+        - link "Dashboard" [ref=f5e9] [cursor=pointer]:
+          - /url: /dashboard
+      - listitem [ref=f5e10]:
+        - link "Tenders" [ref=f5e11] [cursor=pointer]:
+          - /url: /tenders
+      - listitem [ref=f5e12]:
+        - link "Proposals" [ref=f5e13] [cursor=pointer]:
+          - /url: /proposals
+      - listitem [ref=f5e14]:
+        - link "Knowledge Base" [ref=f5e15] [cursor=pointer]:
+          - /url: /library
+      - listitem [ref=f5e16]:
+        - link "Vendor Profile" [ref=f5e17] [cursor=pointer]:
+          - /url: /profile
+      - listitem [ref=f5e18]:
+        - link "Settings" [ref=f5e19] [cursor=pointer]:
+          - /url: /settings
+  - generic [ref=f5e21]:
+    - main [ref=f5e22]:
+      - heading "Score Estimate" [level=1] [ref=f5e23]
+      - paragraph [ref=f5e24]: Supply of 500 Desktop Computers
+      - generic [ref=f5e25]:
+        - paragraph [ref=f5e26]: No estimate yet
+        - button "Estimate technical score" [ref=f5e27] [cursor=pointer]
+    - generic [ref=f5e28]:
+      - generic [ref=f5e29]:
+        - generic [ref=f5e30]:
+          - heading "Technical competence" [level=2] [ref=f5e31]
+          - button "Recompute" [ref=f5e32] [cursor=pointer]
+        - paragraph [ref=f5e33]: 57.5 / 100
+        - paragraph [ref=f5e34]: Technically disqualified — below the 65% aggregate
+        - paragraph [ref=f5e35]: Measured from this document, not predicted. Indian government IT tenders require ≥45% on every evaluation head and ≥65% in aggregate (MeitY Model RFP §2.6.2, CAG OIOS §7) — below either, the commercial cover is never opened.
+      - generic [ref=f5e36]:
+        - heading "Marks by evaluation head" [level=3] [ref=f5e37]
+        - generic [ref=f5e38]:
+          - generic [ref=f5e39]:
+            - generic [ref=f5e40]: Understanding of scope
+            - generic [ref=f5e43]: 8.0/10
+          - generic [ref=f5e44]:
+            - generic [ref=f5e45]: Proposed solution & technology
+            - generic [ref=f5e48]: 10.4/20
+          - generic [ref=f5e49]:
+            - generic [ref=f5e50]: Approach, methodology & work plan
+            - generic [ref=f5e53]: 10.3/15
+          - generic [ref=f5e54]:
+            - generic [ref=f5e55]: Team composition & key personnel
+            - generic [ref=f5e58]: 7.0/15
+          - generic [ref=f5e59]:
+            - generic [ref=f5e60]: Relevant experience & past performance
+            - generic [ref=f5e63]: 3.0/15
+          - generic [ref=f5e64]:
+            - generic [ref=f5e65]: Quality assurance & testing
+            - generic [ref=f5e68]: 5.8/8
+          - generic [ref=f5e69]:
+            - generic [ref=f5e70]: Training & capacity building
+            - generic [ref=f5e73]: 4.8/6
+          - generic [ref=f5e74]:
+            - generic [ref=f5e75]: Support, SLA & O&M
+            - generic [ref=f5e78]: 5.1/7
+          - generic [ref=f5e79]:
+            - generic [ref=f5e80]: Risk management & mitigation
+            - generic [ref=f5e83]: 3.0/4
+      - generic [ref=f5e84]:
+        - heading "How to improve this score" [level=3] [ref=f5e85]
+        - paragraph [ref=f5e86]: Each figure is the marks actually recoverable on that head — computed, not estimated.
+        - list [ref=f5e87]:
+          - listitem [ref=f5e88]:
+            - generic [ref=f5e89]: "+12.00"
+            - generic [ref=f5e90]:
+              - text: Relevant experience & past performance
+              - generic [ref=f5e91]: Add completed projects matching this tender's scope and value threshold, with completion certificates.
+              - link "Fix this →" [ref=f5e92] [cursor=pointer]:
+                - /url: /profile
+          - listitem [ref=f5e93]:
+            - generic [ref=f5e94]: "+8.00"
+            - generic [ref=f5e95]:
+              - text: Team composition & key personnel
+              - generic [ref=f5e96]: Upload CVs for key personnel — team profile carries up to 20% of the technical marks.
+              - link "Fix this →" [ref=f5e97] [cursor=pointer]:
+                - /url: /library
+          - listitem [ref=f5e98]:
+            - generic [ref=f5e99]: "+5.58"
+            - generic [ref=f5e100]:
+              - text: Proposed solution & technology
+              - generic [ref=f5e101]: Section is materially shorter than a government technical bid expects.
+              - link "Fix this →" [ref=f5e102] [cursor=pointer]:
+                - /url: /proposals/28e99bbf-cb09-4a2c-a677-dcbb3d92012d
+          - listitem [ref=f5e103]:
+            - generic [ref=f5e104]: "+4.00"
+            - generic [ref=f5e105]:
+              - text: Proposed solution & technology
+              - generic [ref=f5e106]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+              - link "Fix this →" [ref=f5e107] [cursor=pointer]:
+                - /url: /proposals/28e99bbf-cb09-4a2c-a677-dcbb3d92012d
+          - listitem [ref=f5e108]:
+            - generic [ref=f5e109]: "+3.00"
+            - generic [ref=f5e110]:
+              - text: Approach, methodology & work plan
+              - generic [ref=f5e111]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+              - link "Fix this →" [ref=f5e112] [cursor=pointer]:
+                - /url: /proposals/28e99bbf-cb09-4a2c-a677-dcbb3d92012d
+          - listitem [ref=f5e113]:
+            - generic [ref=f5e114]: "+2.00"
+            - generic [ref=f5e115]:
+              - text: Understanding of scope
+              - generic [ref=f5e116]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+              - link "Fix this →" [ref=f5e117] [cursor=pointer]:
+                - /url: /proposals/28e99bbf-cb09-4a2c-a677-dcbb3d92012d
+          - listitem [ref=f5e118]:
+            - generic [ref=f5e119]: "+1.60"
+            - generic [ref=f5e120]:
+              - text: Quality assurance & testing
+              - generic [ref=f5e121]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+              - link "Fix this →" [ref=f5e122] [cursor=pointer]:
+                - /url: /proposals/28e99bbf-cb09-4a2c-a677-dcbb3d92012d
+          - listitem [ref=f5e123]:
+            - generic [ref=f5e124]: "+1.46"
+            - generic [ref=f5e125]:
+              - text: Approach, methodology & work plan
+              - generic [ref=f5e126]: Section is materially shorter than a government technical bid expects.
+              - link "Fix this →" [ref=f5e127] [cursor=pointer]:
+                - /url: /proposals/28e99bbf-cb09-4a2c-a677-dcbb3d92012d

@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 
-import { ProposalWorkspace, type Response } from "@/components/ProposalWorkspace";
+import { ProposalDocument, type DocSection } from "@/components/ProposalDocument";
 import { createClient } from "@/lib/supabase/server";
 
-// S9 — Proposal review workspace. `id` here is the tender id (one proposal per tender).
+// S9 — Proposal document. `id` here is the tender id (one proposal per tender).
 export default async function ProposalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -20,21 +20,23 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
     .eq("tender_id", id)
     .maybeSingle();
 
-  let responses: Response[] = [];
+  let sections: DocSection[] = [];
   if (proposal) {
     const { data } = await supabase
-      .from("proposal_responses")
-      .select("id,criterion_id,draft_text,sentences,draft_status,flags")
-      .eq("proposal_id", proposal.id);
-    responses = (data ?? []) as Response[];
+      .from("proposal_sections")
+      .select("key,heading,kind,status,body_md,word_count,flags,approved_at")
+      .eq("proposal_id", proposal.id)
+      .order("order_index", { ascending: true });
+    sections = (data ?? []) as DocSection[];
   }
 
   return (
-    <ProposalWorkspace
+    <ProposalDocument
       tenderId={id}
+      proposalId={proposal?.id ?? null}
       tenderTitle={tender.title}
-      responses={responses}
-      approved={proposal?.status === "approved"}
+      sections={sections}
+      totalWords={sections.reduce((n, s) => n + (s.word_count ?? 0), 0)}
     />
   );
 }

@@ -1,0 +1,51 @@
+- generic [active] [ref=f50e1]:
+  - button "Open Next.js Dev Tools" [ref=f50e27] [cursor=pointer]
+  - alert [ref=f50e21]
+  - generic [ref=f50e31]:
+    - navigation [ref=f50e32]:
+      - generic [ref=f50e33]:
+        - generic [ref=f50e34]: TC
+        - generic [ref=f50e35]: TenderCraft
+      - list [ref=f50e36]:
+        - listitem [ref=f50e37]:
+          - link "Dashboard" [ref=f50e38] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f50e39]:
+          - link "Tenders" [ref=f50e40] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f50e41]:
+          - link "Proposals" [ref=f50e42] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f50e43]:
+          - link "Knowledge Base" [ref=f50e44] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f50e45]:
+          - link "Vendor Profile" [ref=f50e46] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f50e47]:
+          - link "Settings" [ref=f50e48] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f50e50]:
+      - generic [ref=f50e51]:
+        - heading "Dashboard" [level=1] [ref=f50e52]
+        - paragraph [ref=f50e53]: Your active tenders and what needs attention.
+      - generic [ref=f50e54]:
+        - generic [ref=f50e55]:
+          - paragraph [ref=f50e56]: Active tenders
+          - paragraph [ref=f50e57]: "4"
+        - generic [ref=f50e58]:
+          - paragraph [ref=f50e59]: Awaiting verification
+          - paragraph [ref=f50e60]: "0"
+        - generic [ref=f50e61]:
+          - paragraph [ref=f50e62]: Drafts in review
+          - paragraph [ref=f50e63]: "0"
+        - generic [ref=f50e64]:
+          - paragraph [ref=f50e65]: Analyses left
+          - paragraph [ref=f50e66]: Unlimited
+      - generic [ref=f50e67]:
+        - heading "Deadlines" [level=2] [ref=f50e68]
+        - list [ref=f50e69]:
+          - listitem [ref=f50e70]: e-Office Software Implementation
+          - listitem [ref=f50e71]: Supply of 500 Desktop Computers
+          - listitem [ref=f50e72]: NABARD RFP.pdf
+          - listitem [ref=f50e73]: NABARD RFP.pdf

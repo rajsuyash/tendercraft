@@ -1,0 +1,130 @@
+- generic [ref=f4e2]:
+  - navigation [ref=f4e3]:
+    - generic [ref=f4e4]:
+      - generic [ref=f4e5]: TC
+      - generic [ref=f4e6]: TenderCraft
+    - list [ref=f4e7]:
+      - listitem [ref=f4e8]:
+        - link "Dashboard" [ref=f4e9] [cursor=pointer]:
+          - /url: /dashboard
+      - listitem [ref=f4e10]:
+        - link "Tenders" [ref=f4e11] [cursor=pointer]:
+          - /url: /tenders
+      - listitem [ref=f4e12]:
+        - link "Proposals" [ref=f4e13] [cursor=pointer]:
+          - /url: /proposals
+      - listitem [ref=f4e14]:
+        - link "Knowledge Base" [ref=f4e15] [cursor=pointer]:
+          - /url: /library
+      - listitem [ref=f4e16]:
+        - link "Vendor Profile" [ref=f4e17] [cursor=pointer]:
+          - /url: /profile
+      - listitem [ref=f4e18]:
+        - link "Settings" [ref=f4e19] [cursor=pointer]:
+          - /url: /settings
+  - generic [ref=f4e21]:
+    - main [ref=f4e22]:
+      - heading "Score Estimate" [level=1] [ref=f4e23]
+      - paragraph [ref=f4e24]: e-Office Software Implementation
+      - generic [ref=f4e25]:
+        - paragraph [ref=f4e26]: Insufficient historical data
+        - paragraph [ref=f4e27]: "insufficient historical data: 0 < 30 comparable outcomes (D-FR2)"
+        - paragraph [ref=f4e28]: The estimator suppresses itself rather than guess on thin data. It activates once this authority/category cluster accumulates enough comparable outcomes.
+    - generic [ref=f4e29]:
+      - generic [ref=f4e30]:
+        - generic [ref=f4e31]:
+          - heading "Technical competence" [level=2] [ref=f4e32]
+          - button "Recompute" [ref=f4e33] [cursor=pointer]
+        - paragraph [ref=f4e34]: 82.1 / 100
+        - paragraph [ref=f4e35]: Clears both technical gates
+        - paragraph [ref=f4e36]: Measured from this document, not predicted. Indian government IT tenders require ≥45% on every evaluation head and ≥65% in aggregate (MeitY Model RFP §2.6.2, CAG OIOS §7) — below either, the commercial cover is never opened.
+      - generic [ref=f4e37]:
+        - heading "Marks by evaluation head" [level=3] [ref=f4e38]
+        - generic [ref=f4e39]:
+          - generic [ref=f4e40]:
+            - generic [ref=f4e41]: Understanding of scope
+            - generic [ref=f4e44]: 9.7/10
+          - generic [ref=f4e45]:
+            - generic [ref=f4e46]: Proposed solution & technology
+            - generic [ref=f4e49]: 14.5/20
+          - generic [ref=f4e50]:
+            - generic [ref=f4e51]: Approach, methodology & work plan
+            - generic [ref=f4e54]: 13.2/15
+          - generic [ref=f4e55]:
+            - generic [ref=f4e56]: Team composition & key personnel
+            - generic [ref=f4e59]: 7.0/15
+          - generic [ref=f4e60]:
+            - generic [ref=f4e61]: Relevant experience & past performance
+            - generic [ref=f4e64]: 15.0/15
+          - generic [ref=f4e65]:
+            - generic [ref=f4e66]: Quality assurance & testing
+            - generic [ref=f4e69]: 7.5/8
+          - generic [ref=f4e70]:
+            - generic [ref=f4e71]: Training & capacity building
+            - generic [ref=f4e74]: 4.9/6
+          - generic [ref=f4e75]:
+            - generic [ref=f4e76]: Support, SLA & O&M
+            - generic [ref=f4e79]: 6.3/7
+          - generic [ref=f4e80]:
+            - generic [ref=f4e81]: Risk management & mitigation
+            - generic [ref=f4e84]: 4.0/4
+      - generic [ref=f4e85]:
+        - heading "How to improve this score" [level=3] [ref=f4e86]
+        - paragraph [ref=f4e87]: Each figure is the marks actually recoverable on that head — computed, not estimated.
+        - list [ref=f4e88]:
+          - listitem [ref=f4e89]:
+            - generic [ref=f4e90]: "+8.00"
+            - generic [ref=f4e91]:
+              - text: Team composition & key personnel
+              - generic [ref=f4e92]: Upload CVs for key personnel — team profile carries up to 20% of the technical marks.
+              - link "Fix this →" [ref=f4e93] [cursor=pointer]:
+                - /url: /library
+          - listitem [ref=f4e94]:
+            - generic [ref=f4e95]: "+5.25"
+            - generic [ref=f4e96]:
+              - text: Proposed solution & technology
+              - generic [ref=f4e97]: Section is materially shorter than a government technical bid expects.
+              - link "Fix this →" [ref=f4e98] [cursor=pointer]:
+                - /url: /proposals/b99d1ecd-edae-4297-b661-6c9e880b6cf9
+          - listitem [ref=f4e99]:
+            - generic [ref=f4e100]: "+1.55"
+            - generic [ref=f4e101]:
+              - text: Approach, methodology & work plan
+              - generic [ref=f4e102]: Section is materially shorter than a government technical bid expects.
+              - link "Fix this →" [ref=f4e103] [cursor=pointer]:
+                - /url: /proposals/b99d1ecd-edae-4297-b661-6c9e880b6cf9
+          - listitem [ref=f4e104]:
+            - generic [ref=f4e105]: "+1.06"
+            - generic [ref=f4e106]:
+              - text: Training & capacity building
+              - generic [ref=f4e107]: Section is materially shorter than a government technical bid expects.
+              - link "Fix this →" [ref=f4e108] [cursor=pointer]:
+                - /url: /proposals/b99d1ecd-edae-4297-b661-6c9e880b6cf9
+          - listitem [ref=f4e109]:
+            - generic [ref=f4e110]: "+0.75"
+            - generic [ref=f4e111]:
+              - text: Support, SLA & O&M
+              - generic [ref=f4e112]: Section is materially shorter than a government technical bid expects.
+              - link "Fix this →" [ref=f4e113] [cursor=pointer]:
+                - /url: /proposals/b99d1ecd-edae-4297-b661-6c9e880b6cf9
+          - listitem [ref=f4e114]:
+            - generic [ref=f4e115]: "+0.29"
+            - generic [ref=f4e116]:
+              - text: Understanding of scope
+              - generic [ref=f4e117]: Section is materially shorter than a government technical bid expects.
+              - link "Fix this →" [ref=f4e118] [cursor=pointer]:
+                - /url: /proposals/b99d1ecd-edae-4297-b661-6c9e880b6cf9
+          - listitem [ref=f4e119]:
+            - generic [ref=f4e120]: "+0.27"
+            - generic [ref=f4e121]:
+              - text: Quality assurance & testing
+              - generic [ref=f4e122]: A required certification is missing or expired on the bid date.
+              - link "Fix this →" [ref=f4e123] [cursor=pointer]:
+                - /url: /library
+          - listitem [ref=f4e124]:
+            - generic [ref=f4e125]: "+0.25"
+            - generic [ref=f4e126]:
+              - text: Proposed solution & technology
+              - generic [ref=f4e127]: Claims here have no resolving citation — attach evidence or attest them.
+              - link "Fix this →" [ref=f4e128] [cursor=pointer]:
+                - /url: /proposals/b99d1ecd-edae-4297-b661-6c9e880b6cf9

@@ -1,0 +1,22 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]: TenderCraft
+      - generic [ref=e5]:
+        - paragraph [ref=e6]: From tender PDF to evaluator-ready proposal. Cited, compliant, human-approved.
+        - list [ref=e7]:
+          - listitem [ref=e8]: Every claim cited to your documents
+          - listitem [ref=e9]: Deterministic compliance gates
+          - listitem [ref=e10]: Data stays in India
+      - generic [ref=e11]: Outputs are decision support, not legal advice.
+    - generic [ref=e13]:
+      - heading "Sign in to your workspace" [level=1] [ref=e14]
+      - generic [ref=e15]:
+        - text: Email
+        - textbox "Email" [ref=e16]
+      - generic [ref=e17]:
+        - text: Password
+        - textbox "Password" [ref=e18]
+      - button "Sign in" [ref=e19] [cursor=pointer]
+      - paragraph [ref=e20]: New here? Start free — 3 analyses/month
+  - alert [ref=e21]

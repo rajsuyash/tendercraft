@@ -1,0 +1,51 @@
+- generic [active] [ref=e1]:
+  - button "Open Next.js Dev Tools" [ref=e27] [cursor=pointer]
+  - alert [ref=e21]
+  - generic [ref=e32]:
+    - navigation [ref=e33]:
+      - generic [ref=e34]:
+        - generic [ref=e35]: TC
+        - generic [ref=e36]: TenderCraft
+      - list [ref=e37]:
+        - listitem [ref=e38]:
+          - link "Dashboard" [ref=e39] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=e40]:
+          - link "Tenders" [ref=e41] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=e42]:
+          - link "Proposals" [ref=e43] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=e44]:
+          - link "Knowledge Base" [ref=e45] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=e46]:
+          - link "Vendor Profile" [ref=e47] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=e48]:
+          - link "Settings" [ref=e49] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=e51]:
+      - generic [ref=e52]:
+        - heading "Dashboard" [level=1] [ref=e53]
+        - paragraph [ref=e54]: Your active tenders and what needs attention.
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - paragraph [ref=e57]: Active tenders
+          - paragraph [ref=e58]: "4"
+        - generic [ref=e59]:
+          - paragraph [ref=e60]: Awaiting verification
+          - paragraph [ref=e61]: "0"
+        - generic [ref=e62]:
+          - paragraph [ref=e63]: Drafts in review
+          - paragraph [ref=e64]: "0"
+        - generic [ref=e65]:
+          - paragraph [ref=e66]: Analyses left
+          - paragraph [ref=e67]: Unlimited
+      - generic [ref=e68]:
+        - heading "Deadlines" [level=2] [ref=e69]
+        - list [ref=e70]:
+          - listitem [ref=e71]: e-Office Software Implementation
+          - listitem [ref=e72]: Supply of 500 Desktop Computers
+          - listitem [ref=e73]: NABARD RFP.pdf
+          - listitem [ref=e74]: NABARD RFP.pdf

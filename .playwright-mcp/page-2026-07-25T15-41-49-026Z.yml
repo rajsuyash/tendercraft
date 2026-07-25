@@ -1,0 +1,163 @@
+- generic [ref=f34e2]:
+  - navigation [ref=f34e3]:
+    - generic [ref=f34e4]:
+      - generic [ref=f34e5]: TC
+      - generic [ref=f34e6]: TenderCraft
+    - list [ref=f34e7]:
+      - listitem [ref=f34e8]:
+        - link "Dashboard" [ref=f34e9] [cursor=pointer]:
+          - /url: /dashboard
+      - listitem [ref=f34e10]:
+        - link "Tenders" [ref=f34e11] [cursor=pointer]:
+          - /url: /tenders
+      - listitem [ref=f34e12]:
+        - link "Proposals" [ref=f34e13] [cursor=pointer]:
+          - /url: /proposals
+      - listitem [ref=f34e14]:
+        - link "Knowledge Base" [ref=f34e15] [cursor=pointer]:
+          - /url: /library
+      - listitem [ref=f34e16]:
+        - link "Vendor Profile" [ref=f34e17] [cursor=pointer]:
+          - /url: /profile
+      - listitem [ref=f34e18]:
+        - link "Settings" [ref=f34e19] [cursor=pointer]:
+          - /url: /settings
+  - main [ref=f34e21]:
+    - generic [ref=f34e22]:
+      - generic [ref=f34e23]:
+        - generic [ref=f34e24]:
+          - heading "Meridian Infotech Pvt Ltd" [level=1] [ref=f34e25]
+          - generic [ref=f34e26]: Active
+        - generic [ref=f34e27]:
+          - generic [ref=f34e30]: 89% complete
+          - generic [ref=f34e31]: 1 item block accurate analysis
+      - button "Update profile" [ref=f34e32] [cursor=pointer]
+    - generic [ref=f34e33]:
+      - generic [ref=f34e34]:
+        - generic [ref=f34e35]:
+          - heading "Legal identity" [level=2] [ref=f34e36]
+          - generic [ref=f34e37]:
+            - generic [ref=f34e38]:
+              - paragraph [ref=f34e39]: Corporate Identity Number (CIN)
+              - paragraph [ref=f34e40]: U72200MH2011PTC214563
+            - generic [ref=f34e41]:
+              - paragraph [ref=f34e42]: Permanent Account Number (PAN)
+              - paragraph [ref=f34e43]: AAECM4321F
+            - generic [ref=f34e44]:
+              - paragraph [ref=f34e45]: GSTIN
+              - paragraph [ref=f34e46]: 27AAECM4321F1ZP
+            - generic [ref=f34e47]:
+              - paragraph [ref=f34e48]: MSE / Udyam
+              - generic [ref=f34e49]:
+                - generic [ref=f34e50]: MSE — exemptions active
+                - generic [ref=f34e51]: UDYAM-MH-18-0034521
+          - generic [ref=f34e52]:
+            - paragraph [ref=f34e53]: DPIIT Startup
+            - paragraph [ref=f34e54]: Not registered
+        - generic [ref=f34e55]:
+          - generic [ref=f34e56]:
+            - heading "Financials" [level=2] [ref=f34e57]
+            - generic [ref=f34e58]: "3-yr average turnover: ₹8.2 Cr"
+          - table [ref=f34e59]:
+            - rowgroup [ref=f34e60]:
+              - row [ref=f34e61]:
+                - columnheader "Year" [ref=f34e62]
+                - columnheader "Turnover" [ref=f34e63]
+            - rowgroup [ref=f34e64]:
+              - row [ref=f34e65]:
+                - cell "FY25" [ref=f34e66]
+                - cell "₹9.7 Cr" [ref=f34e67]
+              - row [ref=f34e68]:
+                - cell "FY24" [ref=f34e69]
+                - cell "₹8.1 Cr" [ref=f34e70]
+              - row [ref=f34e71]:
+                - cell "FY23" [ref=f34e72]
+                - cell "₹6.8 Cr" [ref=f34e73]
+          - generic [ref=f34e74]:
+            - generic [ref=f34e75]:
+              - paragraph [ref=f34e76]: Net worth
+              - paragraph [ref=f34e77]: ₹4.3 Cr
+            - generic [ref=f34e78]:
+              - paragraph [ref=f34e79]: Working capital
+              - paragraph [ref=f34e80]: ₹2.1 Cr
+        - generic [ref=f34e81]:
+          - heading "Experience records" [level=2] [ref=f34e82]
+          - table [ref=f34e83]:
+            - rowgroup [ref=f34e84]:
+              - row [ref=f34e85]:
+                - columnheader "Project" [ref=f34e86]
+                - columnheader "Client" [ref=f34e87]
+                - columnheader "Value" [ref=f34e88]
+                - columnheader "Tags" [ref=f34e89]
+                - columnheader "Completed" [ref=f34e90]
+            - rowgroup [ref=f34e91]:
+              - row [ref=f34e92]:
+                - cell "Hospital Management Information System (HMIS) deployment" [ref=f34e93]
+                - cell "psu" [ref=f34e94]
+                - cell "₹2.4 Cr" [ref=f34e95]
+                - cell "software-implementation" [ref=f34e96]
+                - cell "15/02/2025" [ref=f34e99]
+              - row [ref=f34e100]:
+                - cell "Ministry IT infra (turnkey)" [ref=f34e101]
+                - cell "govt" [ref=f34e102]
+                - cell "₹4.9 Cr" [ref=f34e103]
+                - cell "hardware-supply installation turnkey" [ref=f34e104]:
+                  - generic [ref=f34e105]:
+                    - generic [ref=f34e106]: hardware-supply
+                    - generic [ref=f34e107]: installation
+                    - generic [ref=f34e108]: turnkey
+                - cell "20/01/2025" [ref=f34e109]
+              - row [ref=f34e110]:
+                - cell "District e-Governance rollout" [ref=f34e111]
+                - cell "psu" [ref=f34e112]
+                - cell "₹3.4 Cr" [ref=f34e113]
+                - cell "hardware-supply installation" [ref=f34e114]:
+                  - generic [ref=f34e115]:
+                    - generic [ref=f34e116]: hardware-supply
+                    - generic [ref=f34e117]: installation
+                - cell "30/11/2024" [ref=f34e118]
+              - row [ref=f34e119]:
+                - cell "State e-Office & file-workflow software implementation" [ref=f34e120]
+                - cell "govt" [ref=f34e121]
+                - cell "₹3.8 Cr" [ref=f34e122]
+                - cell "software-implementation workflow-automation" [ref=f34e123]:
+                  - generic [ref=f34e124]:
+                    - generic [ref=f34e125]: software-implementation
+                    - generic [ref=f34e126]: workflow-automation
+                - cell "30/06/2024" [ref=f34e127]
+              - row [ref=f34e128]:
+                - cell "GST citizen-services portal development & rollout" [ref=f34e129]
+                - cell "govt" [ref=f34e130]
+                - cell "₹2.9 Cr" [ref=f34e131]
+                - cell "software-development software-implementation" [ref=f34e132]:
+                  - generic [ref=f34e133]:
+                    - generic [ref=f34e134]: software-development
+                    - generic [ref=f34e135]: software-implementation
+                - cell "10/09/2023" [ref=f34e136]
+              - row [ref=f34e137]:
+                - cell "PSU desktop refresh 800 units" [ref=f34e138]
+                - cell "psu" [ref=f34e139]
+                - cell "₹2.6 Cr" [ref=f34e140]
+                - cell "hardware-supply" [ref=f34e141]
+                - cell "15/03/2023" [ref=f34e144]
+              - row [ref=f34e145]:
+                - cell "Municipal CCTV network" [ref=f34e146]
+                - cell "govt" [ref=f34e147]
+                - cell "₹2.1 Cr" [ref=f34e148]
+                - cell "surveillance installation" [ref=f34e149]:
+                  - generic [ref=f34e150]:
+                    - generic [ref=f34e151]: surveillance
+                    - generic [ref=f34e152]: installation
+                - cell "01/08/2022" [ref=f34e153]
+      - generic [ref=f34e155]:
+        - heading "Certifications" [level=2] [ref=f34e156]
+        - list [ref=f34e157]:
+          - listitem [ref=f34e158]:
+            - paragraph [ref=f34e159]: ISO 9001:2015
+            - generic [ref=f34e160]: Expired 03/2026
+          - listitem [ref=f34e161]:
+            - paragraph [ref=f34e162]: ISO 27001
+            - generic [ref=f34e163]: Valid until 09/2027
+          - listitem [ref=f34e164]:
+            - paragraph [ref=f34e165]: CMMI L3
+            - generic [ref=f34e166]: Valid until 01/2028

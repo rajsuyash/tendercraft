@@ -1,0 +1,74 @@
+[    1186ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:25630
+[   89139ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[   89552ms] [LOG] [Fast Refresh] done in 414ms @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[   94938ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[   95262ms] [LOG] [Fast Refresh] done in 325ms @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[   95308ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/hot-reloader/app/hot-reloader-app.js:196
+[   95434ms] [ERROR] ./app/(app)/proposals/[id]/score/page.tsx
+Error:   x Expected corresponding JSX closing tag for <main>
+    ,-[/Users/suyashraj/Downloads/07 Tech Projects/TenderCraft/apps/web/app/(app)/proposals/[id]/score/page.tsx:46:1]
+ 43 |         estimate={(row?.result as Estimate) ?? null}
+ 44 |       />
+ 45 |       <RubricCard tenderId={id} rubric={rubric} />
+ 46 |     </div>
+    :       ^^^
+ 47 |   );
+ 48 | }
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./app/(app)/proposals/[id]/score/page.tsx @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[   95440ms] [LOG] {file: Object} @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/compiled/next-devtools/index.js:1630
+[   97631ms] [LOG] [Fast Refresh] done in 2324ms @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[   98104ms] [LOG] [Fast Refresh] done in 2796ms @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/report-hmr-latency.js:13
+[   98304ms] [ERROR] ./app/(app)/proposals/[id]/score/page.tsx
+Error:   x Expected corresponding JSX closing tag for <main>
+    ,-[/Users/suyashraj/Downloads/07 Tech Projects/TenderCraft/apps/web/app/(app)/proposals/[id]/score/page.tsx:46:1]
+ 43 |         estimate={(row?.result as Estimate) ?? null}
+ 44 |       />
+ 45 |       <RubricCard tenderId={id} rubric={rubric} />
+ 46 |     </div>
+    :       ^^^
+ 47 |   );
+ 48 | }
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./app/(app)/proposals/[id]/score/page.tsx @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/next-devtools/userspace/app/errors/intercept-console-error.js:56
+[   98306ms] [LOG] {file: Object} @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/compiled/next-devtools/index.js:1630
+[   98428ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/proposals/b99d1ecd-edae-4297-b661-6c9e880b6cf9?_rsc=3MIDn79-hGjnlOtA:0
+[   98515ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/proposals/b99d1ecd-edae-4297-b661-6c9e880b6cf9?_rsc=3MIDn79-hGjnlOtA:0
+[   98677ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/proposals/b99d1ecd-edae-4297-b661-6c9e880b6cf9?_rsc=3MIDn79-hGjnlOtA:0
+[   98817ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/proposals/b99d1ecd-edae-4297-b661-6c9e880b6cf9:0
+[   98998ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(pages-dir-browser)/../../node_modules/.pnpm/react-dom@19.2.8_react@19.2.8/node_modules/react-dom/cjs/react-dom-client.development.js:28004
+[   99056ms] ModuleBuildError: Module build failed (from ../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js):
+Error:   x Expected corresponding JSX closing tag for <main>
+    ,-[/Users/suyashraj/Downloads/07 Tech Projects/TenderCraft/apps/web/app/(app)/proposals/[id]/score/page.tsx:46:1]
+ 43 |         estimate={(row?.result as Estimate) ?? null}
+ 44 |       />
+ 45 |       <RubricCard tenderId={id} rubric={rubric} />
+ 46 |     </div>
+    :       ^^^
+ 47 |   );
+ 48 | }
+    `----
+
+
+Caused by:
+    Syntax Error
+    at processResult (file:///Users/suyashraj/Downloads/07 Tech Projects/TenderCraft/node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/compiled/webpack/bundle5.js:29:407086)
+    at <unknown> (file:///Users/suyashraj/Downloads/07 Tech Projects/TenderCraft/node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/compiled/webpack/bundle5.js:29:408881)
+    at <unknown> (file:///Users/suyashraj/Downloads/07 Tech Projects/TenderCraft/node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/compiled/loader-runner/LoaderRunner.js:1:8645)
+    at <unknown> (file:///Users/suyashraj/Downloads/07 Tech Projects/TenderCraft/node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/compiled/loader-runner/LoaderRunner.js:1:5019)
+    at r.callback (file:///Users/suyashraj/Downloads/07 Tech Projects/TenderCraft/node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/compiled/loader-runner/LoaderRunner.js:1:4039)
+[   99067ms] [LOG] [HMR] connected @ webpack-internal:///(pages-dir-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/hot-reloader/pages/websocket.js:45
+[   99221ms] [LOG] [Fast Refresh] rebuilding @ webpack-internal:///(pages-dir-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/hot-reloader/pages/hot-reloader-pages.js:206
+[   99398ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/_next/static/webpack/f25ecbc83f3a0442.webpack.hot-update.json:0
+[   99399ms] [WARNING] [Fast Refresh] performing full reload because your application had an unrecoverable error @ webpack-internal:///(pages-dir-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/hot-reloader/pages/hot-reloader-pages.js:347
+[  100364ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:25630
