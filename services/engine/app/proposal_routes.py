@@ -264,6 +264,10 @@ def compliance_matrix(tender_id: str, user: CurrentUser) -> dict:
 
 @router.post("/api/proposals/{proposal_id}/approve")
 def approve(proposal_id: str, user: CurrentUser, stage: str = "review") -> dict:
+    # proposal_id comes from the path, so prove ownership BEFORE any write — the write
+    # itself runs as the service role and RLS will not stop a foreign id.
+    if not db.get_proposal(proposal_id, user.tenant_id):
+        raise ApiError(404, "PROPOSAL_NOT_FOUND", "proposal not found in your workspace")
     db.add_approval(user.tenant_id, proposal_id, stage, user.user_id)
     db.write_audit(user.tenant_id, user.user_id, "approval", "proposal", proposal_id,
                    after={"stage": stage})
@@ -277,6 +281,10 @@ def approve_section(proposal_id: str, key: str, user: CurrentUser) -> dict:
     This is the control that replaces cite-or-flag for AI-authored approach prose: nothing
     exists to cite a forward commitment against, so a person signs it instead (B-FR4).
     """
+    # Not exploitable today (the PATCH filters by tenant, so a foreign id no-ops) — but a
+    # silent success on a failed authorization is still wrong. 404 instead.
+    if not db.get_proposal(proposal_id, user.tenant_id):
+        raise ApiError(404, "PROPOSAL_NOT_FOUND", "proposal not found in your workspace")
     when = datetime.now(UTC).isoformat()
     db.approve_section(user.tenant_id, proposal_id, key, user.user_id, when)
     db.write_audit(user.tenant_id, user.user_id, "section_approval", "proposal", proposal_id,

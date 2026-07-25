@@ -157,3 +157,33 @@ def test_audit_events_are_immutable(two_tenants):
                      query=f"?id=eq.{event_id}")
     assert status >= 400, "audit_events must reject deletes (append-only)"
     # the row is immutable, so leave it; the tenant teardown cascade removes it
+
+
+@requires_supabase
+def test_approval_write_cannot_reassign_another_tenants_row(two_tenants):
+    """Sev-1 regression: a foreign proposal_id must not let tenant A capture B's approval.
+
+    Calls the REAL db.add_approval so the test tracks the engine's actual on_conflict
+    target rather than a hand-copied string. That write uses the SERVICE ROLE, so RLS is
+    bypassed and the unique key is the only thing standing between tenants: if it is just
+    (proposal_id, stage), A's write resolves to DO UPDATE and rewrites tenant_id to A —
+    silently stripping B's approval and making B's proposal non-exportable.
+    """
+    from app import db
+
+    tenant_a, tenant_b = two_tenants["tenant_a"], two_tenants["tenant_b"]
+
+    _, tb = rest("POST", "tenders", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                 body={"tenant_id": tenant_b, "title": "Tender B — approval scope"})
+    _, pb = rest("POST", "proposals", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                 body={"tenant_id": tenant_b, "tender_id": tb[0]["id"], "status": "draft"})
+    proposal_b = pb[0]["id"]
+
+    db.add_approval(tenant_b, proposal_b, "review", tenant_b)   # B approves its own
+    db.add_approval(tenant_a, proposal_b, "review", tenant_a)   # A posts to B's proposal id
+
+    _, rows = rest("GET", "proposal_approvals", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                   query=f"?proposal_id=eq.{proposal_b}&select=tenant_id,stage,approver")
+    mine = [r for r in rows if r["tenant_id"] == tenant_b]
+    assert len(mine) == 1, f"tenant B lost its own approval row: {rows}"
+    assert mine[0]["approver"] == tenant_b, f"tenant B's approver was overwritten: {rows}"

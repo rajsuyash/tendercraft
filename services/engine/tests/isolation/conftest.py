@@ -52,7 +52,8 @@ requires_supabase = pytest.mark.skipif(
 )
 
 
-def _request(method: str, path: str, *, key: str, bearer: str | None = None, body: dict | None = None):
+def _request(method: str, path: str, *, key: str, bearer: str | None = None,
+             body: dict | None = None, prefer: str | None = None):
     url = f"{SUPABASE_URL}{path}"
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
@@ -60,7 +61,11 @@ def _request(method: str, path: str, *, key: str, bearer: str | None = None, bod
     req.add_header("Authorization", f"Bearer {bearer or key}")
     req.add_header("Content-Type", "application/json")
     if method in ("POST", "PATCH"):
-        req.add_header("Prefer", "return=representation")
+        # `prefer` lets a test model an engine upsert exactly (resolution=merge-duplicates),
+        # which is how the cross-tenant approval regression is reproduced.
+        req.add_header(
+            "Prefer", f"return=representation,{prefer}" if prefer else "return=representation"
+        )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read().decode()
@@ -73,9 +78,12 @@ def _request(method: str, path: str, *, key: str, bearer: str | None = None, bod
             return e.code, raw
 
 
-def rest(method: str, table: str, *, bearer: str, key: str, body=None, query: str = ""):
+def rest(method: str, table: str, *, bearer: str, key: str, body=None, query: str = "",
+         prefer: str | None = None):
     """PostgREST call. Pass a user JWT as `bearer` to exercise RLS as that user."""
-    return _request(method, f"/rest/v1/{table}{query}", key=key, bearer=bearer, body=body)
+    return _request(
+        method, f"/rest/v1/{table}{query}", key=key, bearer=bearer, body=body, prefer=prefer
+    )
 
 
 def admin_create_user(email: str, password: str) -> str:

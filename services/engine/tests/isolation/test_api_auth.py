@@ -33,7 +33,10 @@ def test_me_without_token_is_401_enveloped():
     assert body["error"]["code"] == "NO_TOKEN"
 
 
+@requires_supabase
 def test_me_with_garbage_token_is_401():
+    # Needs creds: verifying even a garbage token resolves the project JWKS URL, so
+    # get_settings() raises without config. The two tests above return before that.
     resp = _client().get("/api/me", headers={"Authorization": "Bearer not-a-jwt"})
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "INVALID_TOKEN"

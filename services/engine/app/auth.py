@@ -50,13 +50,26 @@ def verify_jwt(token: str) -> dict:
 
 
 def _lookup_profile(user_id: str) -> dict | None:
-    """Fetch the user's profile (tenant + role) via the service role (bypasses RLS)."""
+    """Fetch the user's profile (tenant + role) via the service role (bypasses RLS).
+
+    Returns None when the user has no profile. Raises AMBIGUOUS_PROFILE when they have
+    more than one — never picks a row.
+
+    Why the explicit ambiguity check: this query has no ORDER BY, so with two matching
+    rows PostgREST returns them in physical heap order, which changes after any UPDATE or
+    VACUUM. Taking rows[0] would silently resolve a request into a NON-DETERMINISTIC
+    tenant — a 200 response with every downstream query correctly scoped to the wrong
+    workspace, and no error anywhere. Today `profiles.user_id` is the PRIMARY KEY so this
+    is unreachable; the guard exists so it stays unreachable when membership becomes
+    many-to-many. Fail closed, always.
+    """
     settings = get_settings()
     if not settings.supabase_service_key:
         raise ApiError(500, "ENGINE_MISCONFIGURED", "service key not configured")
     resp = httpx.get(
         f"{settings.supabase_url}/rest/v1/profiles",
-        params={"user_id": f"eq.{user_id}", "select": "tenant_id,role"},
+        # limit=2 rather than 1: we need to be able to DETECT a second row, not hide it.
+        params={"user_id": f"eq.{user_id}", "select": "tenant_id,role", "limit": "2"},
         headers={
             "apikey": settings.supabase_service_key,
             "Authorization": f"Bearer {settings.supabase_service_key}",
@@ -65,7 +78,14 @@ def _lookup_profile(user_id: str) -> dict | None:
     )
     resp.raise_for_status()
     rows = resp.json()
-    return rows[0] if rows else None
+    if not rows:
+        return None
+    if len(rows) > 1:
+        raise ApiError(
+            403, "AMBIGUOUS_PROFILE",
+            "account resolves to more than one workspace; contact your administrator",
+        )
+    return rows[0]
 
 
 async def get_current_user(authorization: str = Header(default="")) -> AuthedUser:

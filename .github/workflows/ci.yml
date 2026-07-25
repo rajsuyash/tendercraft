@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: engine (unit + gates)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: ruff
+        run: uv run ruff check
+      - name: unit tests
+        run: uv run pytest tests --ignore=tests/isolation -q
+      - name: deterministic gates — 100% branch coverage
+        # docs/test-strategy.md: the gates are the product's safety story. --cov-fail-under
+        # makes that a build failure rather than an aspiration.
+        run: >
+          uv run pytest tests --ignore=tests/isolation -q
+          --cov=app/deterministic --cov-branch --cov-report=term-missing --cov-fail-under=100
+      - name: no model imports in app/deterministic (PRD §2.4)
+        # Verdicts, gates and coverage counts must stay pure. A pipeline/model import here
+        # means model output has crossed into the deterministic column — a defect by
+        # definition. docs/conventions.md said this was CI-enforced; now it is.
+        run: |
+          if grep -rnE '^\s*(from|import)\s+(pipeline|google|anthropic|openai)' app/deterministic/; then
+            echo "::error::model/pipeline import inside app/deterministic (PRD §2.4)"
+            exit 1
+          fi
+
+  isolation:
+    name: ET-6 tenant isolation (live, CI-blocking)
+    runs-on: ubuntu-latest
+    # Forks cannot read secrets; conftest raises under CI when creds are absent, so this
+    # would fail for the wrong reason. Skip the job rather than let it fail open.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    defaults:
+      run:
+        working-directory: services/engine
+    env:
+      CI: "true" # conftest.py fails CLOSED under CI — missing creds raise instead of skipping
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_ANON_JWT: ${{ secrets.SUPABASE_ANON_JWT }}
+      SUPABASE_SERVICE_JWT: ${{ secrets.SUPABASE_SERVICE_JWT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: assert the suite is not silently skipping
+        # A skipped isolation test is not a passing isolation test. Fail loudly here rather
+        # than let a green check mean "executed nothing".
+        run: |
+          test -n "$NEXT_PUBLIC_SUPABASE_URL" || { echo "::error::isolation secrets missing"; exit 1; }
+      - name: isolation suite
+        run: uv run pytest tests/isolation -q -rs
+
+  web:
+    name: web (typecheck, lint, test, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - name: build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+        run: pnpm build

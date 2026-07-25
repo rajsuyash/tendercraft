@@ -178,6 +178,21 @@ def upsert_response(tenant_id: str, proposal_id: str, criterion_id: str, resp: d
     )
 
 
+def get_proposal(proposal_id: str, tenant_id: str) -> dict | None:
+    """Ownership guard for a caller-supplied proposal_id.
+
+    Mirrors get_criterion_in_tender, which already guards this bug class on the readiness
+    path: every write binding an id from the request must first prove that id belongs to
+    the caller's tenant, because _rest uses the service role and RLS will not do it.
+    """
+    rows = _rest(
+        "GET", "proposals",
+        params={"id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}",
+                "select": "id,tender_id,status,approvals_required"},
+    )
+    return rows[0] if rows else None
+
+
 def get_proposal_by_tender(tender_id: str, tenant_id: str) -> dict | None:
     rows = _rest(
         "GET", "proposals",
@@ -283,7 +298,11 @@ def get_approvals(proposal_id: str, tenant_id: str) -> list[dict]:
 def add_approval(tenant_id: str, proposal_id: str, stage: str, approver: str) -> None:
     _rest(
         "POST", "proposal_approvals",
-        params={"on_conflict": "proposal_id,stage"},
+        # tenant_id MUST lead the conflict target and match the unique key in 0009. This is
+        # a service-role write, so RLS is bypassed and the key is the only tenant boundary:
+        # without tenant_id here, a caller-supplied proposal_id merges onto another tenant's
+        # row and reassigns it (see migrations/0009_approval_scope.sql).
+        params={"on_conflict": "tenant_id,proposal_id,stage"},
         json={
             "tenant_id": tenant_id, "proposal_id": proposal_id,
             "stage": stage, "approver": approver,
