@@ -129,3 +129,21 @@ Also found: `evals/eligibility-matcher/` has 5 golden cases that have never run 
 - 296 engine + 13 live-isolation + 12 web tests green, **100% branch on `app/deterministic` held**, ruff/typecheck/lint clean, extractor 9/9 + drafter 5/5 evals live, browser 15/15 ACs with zero console errors.
 
 **Known gaps (not built, deliberately)**: PDF export (needs LibreOffice in the container); `PUT /api/profile` so an eligibility P0's `action:"fix"` leads somewhere other than a dead button; GLB-D2 nav toggle; the orphaned matcher eval set + missing `pipeline/matcher.py`.
+
+## 2026-07-25 (cont.) · Enterprise tenancy, RBAC and teams
+
+**Two live bugs, fixed first.** (1) Sev-1 cross-workspace approval write: `proposal_approvals` was `unique(proposal_id, stage)` with no workspace, `add_approval` upserts on that target with the service role (RLS bypassed), and `approve` took `proposal_id` from the path with no ownership check — so workspace A posting to B's proposal reassigned B's row, silently making B's proposal non-exportable with the audit landing in A. Reproduced as a red test against the live project before fixing. (2) `auth.py` returned `rows[0]` from an unordered profiles query — a non-deterministic wrong-workspace picker the instant membership became many-to-many, failing *open* with a 200. Fixed while the PK still made it a provable no-op.
+
+**Org → Workspace → Project.** Workspace = one client engagement, which makes the workspace itself the Chinese wall. `current_workspace_id()` deliberately stays a SCALAR: `apps/web` has no tenancy code, 24 server-component queries rely entirely on RLS and nine have no WHERE clause at all, so a set-returning resolver would silently merge workspaces on 12 pages with 200s. Header-preferred, membership-validated, fails closed to NULL. The engine mirrors the SQL exactly and a test pins the agreement — that drift is the design's top residual risk.
+
+**RBAC is net-new, not a migration.** `role` was stored, echoed, rendered as a pill, and consulted by zero decisions. Three named controls were unenforced: `?override=true` (any writer could clear every override-able blocker including the whole approval chain), free-text `?stage=` (two invented names satisfied a 2-approval gate), and the chain counting rows rather than distinct approvers. All three now enforced, with segregation of duties in the deterministic gate per §2.4.
+
+**Teams.** Invitations (hash-only storage, email-matched accept), roster, role change, deprovisioning. `profiles_self_select` was `user_id = auth.uid()` where every sibling table scopes by workspace, so the roster was structurally capped at one row.
+
+**Portfolio.** Keyset pagination, search, filter, and `deadline` finally rendered. The 51st tender was previously unreachable.
+
+**CI** exists for the first time: isolation suite, 100% branch gate on the deterministic layer, and the no-model-imports rule `conventions.md` claimed was already enforced.
+
+**Evidence**: 355 engine + 43 live isolation tests, three consecutive clean full-suite runs, 100% branch on `app/deterministic`, ruff/typecheck/lint/vitest clean. Six migrations applied live (0009–0014) with row counts verified identical across the rename.
+
+**Named blockers, not built** (see the readiness ledger artifact): documents destroyed on ingest; ingestion holds the HTTP request past every proxy timeout; no rate limiting; no deploy artifact; no observability; audit not exportable; no data export/deletion/retention; no SSO. And the one that stops a security review cold — every tender document goes to the Google AI Studio endpoint, which has no region pinning or residency guarantee, while the DB sits in `eu-north-1` against a PRD requiring Indian residency.
