@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -116,16 +117,23 @@ def admin_delete_users_by_email(*emails: str) -> None:
             admin_delete_user(user["id"])
 
 
-def grant_membership(user_id: str, workspace_id: str, role: str = "admin") -> None:
+def grant_membership(user_id: str, workspace_id: str, role: str = "admin",
+                     email: str | None = None) -> None:
     """Give a user access to a workspace, the way the product does.
 
     Since migration 0011 a profiles row alone grants NOTHING: current_workspace_id()
     resolves the active workspace and then validates it against workspace_members. A
     fixture that writes only a profile silently produces a user who can see zero rows.
+
+    `email` matters because the roster renders it — a fixture that omits it produces a
+    member who displays as a truncated UUID, which is not what production does (invite
+    accept writes it, and migration 0013 backfills everyone else).
     """
-    rest("POST", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY,
-         body={"user_id": user_id, "workspace_id": workspace_id, "role": role,
-               "active_workspace_id": workspace_id})
+    profile = {"user_id": user_id, "workspace_id": workspace_id, "role": role,
+               "active_workspace_id": workspace_id}
+    if email:
+        profile["email"] = email
+    rest("POST", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY, body=profile)
     rest("POST", "workspace_members", bearer=SERVICE_KEY, key=SERVICE_KEY,
          body={"user_id": user_id, "workspace_id": workspace_id, "role": role})
 
@@ -136,6 +144,9 @@ def one_user():
     email = "api-user@tendercraft.test"
     pw = "Api-Test-Pw-24!"
     admin_delete_users_by_email(email)
+    # This fixture RECREATES the same address every test, so a cached token would carry the
+    # deleted user's sub and resolve to NO_PROFILE.
+    forget_token(email, pw)
     _, t = rest("POST", "workspaces", bearer=SERVICE_KEY, key=SERVICE_KEY, body={"name": "API Workspace"})
     workspace_id = t[0]["id"]
     uid = admin_create_user(email, pw)
@@ -147,10 +158,41 @@ def one_user():
         rest("DELETE", "workspaces", bearer=SERVICE_KEY, key=SERVICE_KEY, query=f"?id=eq.{workspace_id}")
 
 
-def sign_in(email: str, password: str) -> str:
-    status, data = _request(
-        "POST", "/auth/v1/token?grant_type=password", key=ANON_KEY,
-        body={"email": email, "password": password},
-    )
-    assert status == 200, f"sign-in failed: {status} {data}"
-    return data["access_token"]
+_TOKENS: dict[tuple[str, str], str] = {}
+
+
+def sign_in(email: str, password: str, *, fresh: bool = False) -> str:
+    """Sign in, caching the token per user for the session.
+
+    GoTrue rate-limits password grants, and the suite calls this once per assertion — an
+    uncached version 429s partway through and fails RANDOM tests, which reads as flakiness
+    in the product rather than in the harness.
+
+    Caching is safe: the JWT carries identity only. Workspace scope and role are resolved
+    server-side from workspace_members on EVERY request, so a token issued before a
+    membership change still reflects the change immediately — which is exactly what
+    test_revoking_membership_immediately_removes_all_access relies on.
+    """
+    key = (email, password)
+    if fresh or key not in _TOKENS:
+        # GoTrue rate-limits password grants per project. Caching removes most of the load;
+        # this backs off for the rest rather than failing a random test and reading as a
+        # product defect.
+        for attempt in range(4):
+            status, data = _request(
+                "POST", "/auth/v1/token?grant_type=password", key=ANON_KEY,
+                body={"email": email, "password": password},
+            )
+            if status == 200:
+                break
+            if status != 429:
+                break
+            time.sleep(2**attempt)
+        assert status == 200, f"sign-in failed: {status} {data}"
+        _TOKENS[key] = data["access_token"]
+    return _TOKENS[key]
+
+
+def forget_token(email: str, password: str) -> None:
+    """Drop a cached token — needed when a test deletes and recreates the same address."""
+    _TOKENS.pop((email, password), None)

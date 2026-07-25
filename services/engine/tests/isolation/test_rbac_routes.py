@@ -14,6 +14,7 @@ from .conftest import (
     admin_create_user,
     admin_delete_user,
     admin_delete_users_by_email,
+    forget_token,
     requires_supabase,
     rest,
     sign_in,
@@ -28,6 +29,7 @@ def writer_in_workspace():
     users, ws = [], []
     try:
         admin_delete_users_by_email(WRITER)
+        forget_token(WRITER, PW)
         _, w = rest("POST", "workspaces", bearer=SERVICE_KEY, key=SERVICE_KEY,
                     body={"name": "RBAC Workspace"})
         workspace_id = w[0]["id"]

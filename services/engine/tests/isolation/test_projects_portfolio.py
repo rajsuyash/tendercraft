@@ -14,6 +14,7 @@ from .conftest import (
     admin_create_user,
     admin_delete_user,
     admin_delete_users_by_email,
+    forget_token,
     grant_membership,
     requires_supabase,
     rest,
@@ -30,6 +31,7 @@ def workspace_with_many_tenders():
     users, ws = [], []
     try:
         admin_delete_users_by_email(EMAIL)
+        forget_token(EMAIL, PW)
         _, w = rest("POST", "workspaces", bearer=SERVICE_KEY, key=SERVICE_KEY,
                     body={"name": "Portfolio Workspace"})
         workspace_id = w[0]["id"]

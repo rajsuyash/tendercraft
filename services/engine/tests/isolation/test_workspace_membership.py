@@ -24,6 +24,7 @@ from .conftest import (
     admin_create_user,
     admin_delete_user,
     admin_delete_users_by_email,
+    forget_token,
     requires_supabase,
     rest,
     sign_in,
@@ -41,6 +42,8 @@ def user_in_two_workspaces():
     ws: list[str] = []
     try:
         admin_delete_users_by_email(EMAIL, OUTSIDER)
+        forget_token(EMAIL, PW)
+        forget_token(OUTSIDER, PW)
         ids = []
         for name in ("Membership A", "Membership B", "Membership C"):
             _, w = rest("POST", "workspaces", bearer=SERVICE_KEY, key=SERVICE_KEY,
