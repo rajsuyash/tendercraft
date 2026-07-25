@@ -1,4 +1,4 @@
-"""Engine API auth (T3) — /health public, /api/me derives tenant from the verified JWT.
+"""Engine API auth (T3) — /health public, /api/me derives workspace from the verified JWT.
 
 Live integration: exercises the real JWKS verification + profile lookup against Supabase.
 """
@@ -43,12 +43,12 @@ def test_me_with_garbage_token_is_401():
 
 
 @requires_supabase
-def test_me_returns_server_derived_tenant(one_user):
+def test_me_returns_server_derived_workspace(one_user):
     jwt = sign_in(one_user["email"], one_user["password"])
     resp = _client().get("/api/me", headers={"Authorization": f"Bearer {jwt}"})
     assert resp.status_code == 200
     data = resp.json()["data"]
-    # tenant came from the profile lookup, not from any client input
-    assert data["tenant_id"] == one_user["tenant_id"]
+    # workspace came from the profile lookup, not from any client input
+    assert data["workspace_id"] == one_user["workspace_id"]
     assert data["user_id"] == one_user["user_id"]
     assert data["role"] == "admin"

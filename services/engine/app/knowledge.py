@@ -197,7 +197,7 @@ def _valid_iso_date(value) -> str | None:
 
 
 def build_document(text: str) -> dict:
-    """Classify extracted text into a library_documents row payload (minus tenant/actor)."""
+    """Classify extracted text into a library_documents row payload (minus workspace/actor)."""
     meta = classify(text)
     return {
         "name": meta["name"],

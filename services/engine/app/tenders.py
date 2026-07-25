@@ -1,6 +1,6 @@
 """Tender + TOM endpoints (Module A). The lock endpoint runs the deterministic lock gate.
 
-Every route scopes to the authenticated user's tenant (from the JWT, never the body).
+Every route scopes to the authenticated user's workspace (from the JWT, never the body).
 """
 
 from __future__ import annotations
@@ -54,13 +54,13 @@ def _to_domain(row: dict) -> Criterion:
     )
 
 
-def _process_ingest(tenant_id: str, data: bytes, title: str) -> dict:
+def _process_ingest(workspace_id: str, data: bytes, title: str) -> dict:
     """CPU/IO-bound ingest pipeline — run off the event loop via a threadpool."""
     pages = parse_pdf_pages(data)
     result = ingest_pages(pages)
-    tender = db.create_tender(tenant_id, title)
+    tender = db.create_tender(workspace_id, title)
     if result["criteria_rows"]:
-        db.insert_criteria(tenant_id, tender["id"], result["criteria_rows"])
+        db.insert_criteria(workspace_id, tender["id"], result["criteria_rows"])
     return {
         "tender_id": tender["id"],
         "pages": len(pages),
@@ -82,21 +82,21 @@ async def ingest_tender(
         raise ApiError(413, "FILE_TOO_LARGE", "tender document exceeds 50 MB")
     name = title or file.filename or "Untitled tender"
     # Parsing + extraction + inserts are blocking; keep the event loop free.
-    return ok(await run_in_threadpool(_process_ingest, user.tenant_id, data, name))
+    return ok(await run_in_threadpool(_process_ingest, user.workspace_id, data, name))
 
 
 # Sync bodies (only blocking db calls) -> FastAPI runs them in a threadpool, off the loop.
 @router.post("/api/tenders")
 def create_tender_route(body: CreateTender, user: CurrentUser) -> dict:
-    tender = db.create_tender(user.tenant_id, body.title)
+    tender = db.create_tender(user.workspace_id, body.title)
     return ok({"id": tender["id"], "status": tender["status"]})
 
 
 @router.post("/api/tenders/{tender_id}/criteria")
 def add_criteria(tender_id: str, body: list[CriterionIn], user: CurrentUser) -> dict:
-    if not db.get_tender(tender_id, user.tenant_id):
+    if not db.get_tender(tender_id, user.workspace_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
-    rows = db.insert_criteria(user.tenant_id, tender_id, [c.model_dump() for c in body])
+    rows = db.insert_criteria(user.workspace_id, tender_id, [c.model_dump() for c in body])
     return ok(
         {
             "inserted": len(rows),
@@ -107,7 +107,7 @@ def add_criteria(tender_id: str, body: list[CriterionIn], user: CurrentUser) -> 
 
 @router.post("/api/criteria/{criterion_id}/confirm")
 def confirm(criterion_id: str, user: CurrentUser) -> dict:
-    updated = db.confirm_criterion(criterion_id, user.tenant_id)
+    updated = db.confirm_criterion(criterion_id, user.workspace_id)
     if not updated:
         raise ApiError(404, "CRITERION_NOT_FOUND", "criterion not found in your workspace")
     return ok({"id": criterion_id, "confirmed": True})
@@ -115,12 +115,12 @@ def confirm(criterion_id: str, user: CurrentUser) -> dict:
 
 @router.post("/api/tenders/{tender_id}/lock")
 def lock(tender_id: str, user: CurrentUser) -> dict:
-    if not db.get_tender(tender_id, user.tenant_id):
+    if not db.get_tender(tender_id, user.workspace_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
-    rows = db.get_criteria(tender_id, user.tenant_id)
+    rows = db.get_criteria(tender_id, user.workspace_id)
     result = evaluate_lock([_to_domain(r) for r in rows])
     if not result.ok:
         # deterministic gate refused — surface the exact blockers (A-AC5)
         raise ApiError(409, "LOCK_BLOCKED", " | ".join(result.blockers))
-    db.set_tender_locked(tender_id, user.tenant_id, datetime.now(UTC).isoformat())
+    db.set_tender_locked(tender_id, user.workspace_id, datetime.now(UTC).isoformat())
     return ok({"id": tender_id, "status": "locked", "criteria": len(rows)})

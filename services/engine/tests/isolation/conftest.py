@@ -1,4 +1,4 @@
-"""Shared Supabase REST/Auth helpers for the tenant-isolation suite (ET-6).
+"""Shared Supabase REST/Auth helpers for the workspace-isolation suite (ET-6).
 
 Dependency-free (urllib) so the isolation proof needs no extra install. Reads
 credentials from the repo-root .env; skips cleanly when they are absent so the
@@ -62,7 +62,7 @@ def _request(method: str, path: str, *, key: str, bearer: str | None = None,
     req.add_header("Content-Type", "application/json")
     if method in ("POST", "PATCH"):
         # `prefer` lets a test model an engine upsert exactly (resolution=merge-duplicates),
-        # which is how the cross-tenant approval regression is reproduced.
+        # which is how the cross-workspace approval regression is reproduced.
         req.add_header(
             "Prefer", f"return=representation,{prefer}" if prefer else "return=representation"
         )
@@ -112,20 +112,20 @@ def admin_delete_users_by_email(*emails: str) -> None:
 
 @pytest.fixture
 def one_user():
-    """Provision a single tenant + confirmed user + profile; yield sign-in details."""
+    """Provision a single workspace + confirmed user + profile; yield sign-in details."""
     email = "api-user@tendercraft.test"
     pw = "Api-Test-Pw-24!"
     admin_delete_users_by_email(email)
-    _, t = rest("POST", "tenants", bearer=SERVICE_KEY, key=SERVICE_KEY, body={"name": "API Tenant"})
-    tenant_id = t[0]["id"]
+    _, t = rest("POST", "workspaces", bearer=SERVICE_KEY, key=SERVICE_KEY, body={"name": "API Workspace"})
+    workspace_id = t[0]["id"]
     uid = admin_create_user(email, pw)
     rest("POST", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY,
-         body={"user_id": uid, "tenant_id": tenant_id, "role": "admin"})
+         body={"user_id": uid, "workspace_id": workspace_id, "role": "admin"})
     try:
-        yield {"email": email, "password": pw, "user_id": uid, "tenant_id": tenant_id}
+        yield {"email": email, "password": pw, "user_id": uid, "workspace_id": workspace_id}
     finally:
         admin_delete_user(uid)
-        rest("DELETE", "tenants", bearer=SERVICE_KEY, key=SERVICE_KEY, query=f"?id=eq.{tenant_id}")
+        rest("DELETE", "workspaces", bearer=SERVICE_KEY, key=SERVICE_KEY, query=f"?id=eq.{workspace_id}")
 
 
 def sign_in(email: str, password: str) -> str:

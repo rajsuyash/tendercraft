@@ -1,7 +1,7 @@
 """Engine data access via Supabase PostgREST (service role).
 
 The engine uses the service key, which BYPASSES RLS — so every function here MUST scope
-by tenant_id explicitly (the code enforces what RLS would). A missing tenant filter is an
+by workspace_id explicitly (the code enforces what RLS would). A missing workspace filter is an
 ET-6 defect (known-pitfalls: service-role bypasses RLS).
 """
 
@@ -42,67 +42,71 @@ def _rest(
     return r.json() if r.text else None
 
 
-def create_tender(tenant_id: str, title: str) -> dict:
-    rows = _rest("POST", "tenders", json={"tenant_id": tenant_id, "title": title})
+def create_tender(workspace_id: str, title: str) -> dict:
+    rows = _rest("POST", "tenders", json={"workspace_id": workspace_id, "title": title})
     return rows[0]
 
 
-def get_tender(tender_id: str, tenant_id: str) -> dict | None:
+def get_tender(tender_id: str, workspace_id: str) -> dict | None:
     rows = _rest(
         "GET", "tenders",
-        params={"id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
+        params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}", "select": "*"},
     )
     return rows[0] if rows else None
 
 
-def insert_criteria(tenant_id: str, tender_id: str, criteria: list[dict]) -> list[dict]:
-    payload = [{**c, "tenant_id": tenant_id, "tender_id": tender_id} for c in criteria]
+def insert_criteria(workspace_id: str, tender_id: str, criteria: list[dict]) -> list[dict]:
+    payload = [{**c, "workspace_id": workspace_id, "tender_id": tender_id} for c in criteria]
     return _rest("POST", "criteria", json=payload) or []
 
 
-def get_criteria(tender_id: str, tenant_id: str) -> list[dict]:
+def get_criteria(tender_id: str, workspace_id: str) -> list[dict]:
     return (
         _rest(
             "GET", "criteria",
-            params={"tender_id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
+            params={
+                "tender_id": f"eq.{tender_id}",
+                "workspace_id": f"eq.{workspace_id}",
+                "select": "*",
+            },
         )
         or []
     )
 
 
-def confirm_criterion(criterion_id: str, tenant_id: str) -> list[dict]:
+def confirm_criterion(criterion_id: str, workspace_id: str) -> list[dict]:
     return _rest(
         "PATCH", "criteria",
-        params={"id": f"eq.{criterion_id}", "tenant_id": f"eq.{tenant_id}"},
+        params={"id": f"eq.{criterion_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"confirmed": True},
     )
 
 
-def get_criterion_in_tender(criterion_id: str, tender_id: str, tenant_id: str) -> dict | None:
-    """Existence check that a criterion belongs to this tender AND this tenant — the guard on any
+def get_criterion_in_tender(criterion_id: str, tender_id: str, workspace_id: str) -> dict | None:
+    """Existence check that a criterion belongs to this tender AND this workspace — the guard on any
     write that binds a criterion (decisions, per-item doc links). One query covers ET-6."""
     rows = _rest(
         "GET", "criteria",
         params={
             "id": f"eq.{criterion_id}", "tender_id": f"eq.{tender_id}",
-            "tenant_id": f"eq.{tenant_id}", "select": "id",
+            "workspace_id": f"eq.{workspace_id}", "select": "id",
         },
     )
     return rows[0] if rows else None
 
 
-def set_tender_locked(tender_id: str, tenant_id: str, locked_at: str) -> None:
+def set_tender_locked(tender_id: str, workspace_id: str, locked_at: str) -> None:
     _rest(
         "PATCH", "tenders",
-        params={"id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}"},
+        params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"status": "locked", "locked_at": locked_at},
     )
 
 
 # ---------- vendor profile (Module C) ----------
-def get_profile_context(tenant_id: str) -> dict:
+def get_profile_context(workspace_id: str) -> dict:
     """Assemble the full structured profile for eligibility evaluation."""
-    scope = {"tenant_id": f"eq.{tenant_id}"}
+    scope = {"workspace_id": f"eq.{workspace_id}"}
 
     def sel(table: str, cols: str) -> list:
         return _rest("GET", table, params={**scope, "select": cols}) or []
@@ -119,57 +123,64 @@ def get_profile_context(tenant_id: str) -> dict:
 
 
 # ---------- analyses ----------
-def save_analysis(tenant_id: str, tender_id: str, result: dict) -> None:
+def save_analysis(workspace_id: str, tender_id: str, result: dict) -> None:
     _rest(
         "POST", "analyses",
         params={"on_conflict": "tender_id"},
-        json={"tenant_id": tenant_id, "tender_id": tender_id, "result": result},
+        json={"workspace_id": workspace_id, "tender_id": tender_id, "result": result},
         prefer="resolution=merge-duplicates",
     )
 
 
-def get_analysis(tender_id: str, tenant_id: str) -> dict | None:
+def get_analysis(tender_id: str, workspace_id: str) -> dict | None:
     rows = _rest(
         "GET", "analyses",
-        params={"tender_id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "result"},
+        params={
+            "tender_id": f"eq.{tender_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "result",
+        },
     )
     return rows[0]["result"] if rows else None
 
 
 # ---------- content library + proposals (Module B) ----------
-def insert_library_document(tenant_id: str, doc: dict, uploaded_by: str | None) -> dict:
+def insert_library_document(workspace_id: str, doc: dict, uploaded_by: str | None) -> dict:
     rows = _rest(
         "POST", "library_documents",
-        json={**doc, "tenant_id": tenant_id, "uploaded_by": uploaded_by},
+        json={**doc, "workspace_id": workspace_id, "uploaded_by": uploaded_by},
     )
     return rows[0]
 
 
-def get_valid_library_docs(tenant_id: str, today_iso: str) -> list[dict]:
+def get_valid_library_docs(workspace_id: str, today_iso: str) -> list[dict]:
     """Retrieval with the validity HARD-filter: expired docs are excluded (never a model choice)."""
     docs = _rest(
         "GET", "library_documents",
-        params={"tenant_id": f"eq.{tenant_id}", "select": "id,name,doc_type,text_content,valid_to"},
+        params={
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "id,name,doc_type,text_content,valid_to",
+        },
     ) or []
     return [d for d in docs if not d.get("valid_to") or d["valid_to"] >= today_iso]
 
 
-def create_proposal(tenant_id: str, tender_id: str) -> dict:
+def create_proposal(workspace_id: str, tender_id: str) -> dict:
     rows = _rest(
         "POST", "proposals",
         params={"on_conflict": "tender_id"},
-        json={"tenant_id": tenant_id, "tender_id": tender_id, "status": "draft"},
+        json={"workspace_id": workspace_id, "tender_id": tender_id, "status": "draft"},
         prefer="resolution=merge-duplicates,return=representation",
     )
     return rows[0]
 
 
-def upsert_response(tenant_id: str, proposal_id: str, criterion_id: str, resp: dict) -> None:
+def upsert_response(workspace_id: str, proposal_id: str, criterion_id: str, resp: dict) -> None:
     _rest(
         "POST", "proposal_responses",
         params={"on_conflict": "proposal_id,criterion_id"},
         json={
-            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
             "proposal_id": proposal_id,
             "criterion_id": criterion_id,
             **resp,
@@ -178,88 +189,98 @@ def upsert_response(tenant_id: str, proposal_id: str, criterion_id: str, resp: d
     )
 
 
-def get_proposal(proposal_id: str, tenant_id: str) -> dict | None:
+def get_proposal(proposal_id: str, workspace_id: str) -> dict | None:
     """Ownership guard for a caller-supplied proposal_id.
 
     Mirrors get_criterion_in_tender, which already guards this bug class on the readiness
     path: every write binding an id from the request must first prove that id belongs to
-    the caller's tenant, because _rest uses the service role and RLS will not do it.
+    the caller's workspace, because _rest uses the service role and RLS will not do it.
     """
     rows = _rest(
         "GET", "proposals",
-        params={"id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}",
+        params={"id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
                 "select": "id,tender_id,status,approvals_required"},
     )
     return rows[0] if rows else None
 
 
-def get_proposal_by_tender(tender_id: str, tenant_id: str) -> dict | None:
+def get_proposal_by_tender(tender_id: str, workspace_id: str) -> dict | None:
     rows = _rest(
         "GET", "proposals",
-        params={"tender_id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
+        params={
+            "tender_id": f"eq.{tender_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "*",
+        },
     )
     return rows[0] if rows else None
 
 
-def get_responses(proposal_id: str, tenant_id: str) -> list[dict]:
+def get_responses(proposal_id: str, workspace_id: str) -> list[dict]:
     return _rest(
         "GET", "proposal_responses",
-        params={"proposal_id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
+        params={
+            "proposal_id": f"eq.{proposal_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "*",
+        },
     ) or []
 
 
 # ---------- long-form proposal sections (the document layer) ----------
-def upsert_section(tenant_id: str, proposal_id: str, key: str, section: dict) -> None:
+def upsert_section(workspace_id: str, proposal_id: str, key: str, section: dict) -> None:
     _rest(
         "POST", "proposal_sections",
-        # tenant_id in the conflict target: a service-role merge bypasses RLS, so without it
-        # a caller-supplied proposal_id could reassign another tenant's row (see 0007).
-        params={"on_conflict": "tenant_id,proposal_id,key"},
-        json={"tenant_id": tenant_id, "proposal_id": proposal_id, "key": key, **section},
+        # workspace_id in the conflict target: a service-role merge bypasses RLS, so without it
+        # a caller-supplied proposal_id could reassign another workspace's row (see 0007).
+        params={"on_conflict": "workspace_id,proposal_id,key"},
+        json={"workspace_id": workspace_id, "proposal_id": proposal_id, "key": key, **section},
         prefer="resolution=merge-duplicates",
     )
 
 
-def get_sections(proposal_id: str, tenant_id: str) -> list[dict]:
+def get_sections(proposal_id: str, workspace_id: str) -> list[dict]:
     return _rest(
         "GET", "proposal_sections",
         params={
-            "proposal_id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}",
+            "proposal_id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
             "select": "*", "order": "order_index.asc",
         },
     ) or []
 
 
 def approve_section(
-    tenant_id: str, proposal_id: str, key: str, approver: str, when_iso: str
+    workspace_id: str, proposal_id: str, key: str, approver: str, when_iso: str
 ) -> None:
     _rest(
         "PATCH", "proposal_sections",
         params={
-            "proposal_id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}", "key": f"eq.{key}",
+            "proposal_id": f"eq.{proposal_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "key": f"eq.{key}",
         },
         json={"approved_by": approver, "approved_at": when_iso},
     )
 
 
-def set_proposal_status(proposal_id: str, tenant_id: str, status: str) -> None:
+def set_proposal_status(proposal_id: str, workspace_id: str, status: str) -> None:
     _rest(
         "PATCH", "proposals",
-        params={"id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}"},
+        params={"id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"status": status},
     )
 
 
 # ---------- per-criterion readiness decisions (bidder resolve/ignore/do-not-proceed) ----------
 def upsert_readiness_decision(
-    tenant_id: str, tender_id: str, criterion_id: str, *,
+    workspace_id: str, tender_id: str, criterion_id: str, *,
     decision: str | None = None, comment: str | None = None,
     document_id: str | None = None, actor: str | None = None,
 ) -> dict:
     """Upsert one item's decision. Partial: only provided fields change; omitted ones keep their
     prior value on conflict (PostgREST merge only writes the columns in the payload)."""
     payload: dict[str, Any] = {
-        "tenant_id": tenant_id, "tender_id": tender_id, "criterion_id": criterion_id,
+        "workspace_id": workspace_id, "tender_id": tender_id, "criterion_id": criterion_id,
     }
     if decision is not None:
         payload["decision"] = decision
@@ -271,63 +292,73 @@ def upsert_readiness_decision(
         payload["updated_by"] = actor
     rows = _rest(
         "POST", "readiness_decisions",
-        # tenant_id in the conflict target so a merge can never cross tenants (defense-in-depth
-        # behind the endpoint's ownership guard — the engine bypasses RLS).
-        params={"on_conflict": "tenant_id,tender_id,criterion_id"},
+        # workspace_id in the conflict target so a merge can never cross workspaces
+        # (defense-in-depth behind the endpoint's ownership guard — the engine bypasses RLS).
+        params={"on_conflict": "workspace_id,tender_id,criterion_id"},
         json=payload,
         prefer="resolution=merge-duplicates,return=representation",
     )
     return rows[0] if rows else {}
 
 
-def get_readiness_decisions(tender_id: str, tenant_id: str) -> list[dict]:
+def get_readiness_decisions(tender_id: str, workspace_id: str) -> list[dict]:
     return _rest(
         "GET", "readiness_decisions",
-        params={"tender_id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
+        params={
+            "tender_id": f"eq.{tender_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "*",
+        },
     ) or []
 
 
 # ---------- approvals + audit + export (Module E) ----------
-def get_approvals(proposal_id: str, tenant_id: str) -> list[dict]:
+def get_approvals(proposal_id: str, workspace_id: str) -> list[dict]:
     return _rest(
         "GET", "proposal_approvals",
-        params={"proposal_id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}", "select": "*"},
+        params={
+            "proposal_id": f"eq.{proposal_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "*",
+        },
     ) or []
 
 
-def add_approval(tenant_id: str, proposal_id: str, stage: str, approver: str) -> None:
+def add_approval(workspace_id: str, proposal_id: str, stage: str, approver: str) -> None:
     _rest(
         "POST", "proposal_approvals",
-        # tenant_id MUST lead the conflict target and match the unique key in 0009. This is
-        # a service-role write, so RLS is bypassed and the key is the only tenant boundary:
-        # without tenant_id here, a caller-supplied proposal_id merges onto another tenant's
+        # workspace_id MUST lead the conflict target and match the unique key in 0009. This is
+        # a service-role write, so RLS is bypassed and the key is the only workspace boundary:
+        # without workspace_id here, a caller-supplied proposal_id merges onto another workspace's
         # row and reassigns it (see migrations/0009_approval_scope.sql).
-        params={"on_conflict": "tenant_id,proposal_id,stage"},
+        params={"on_conflict": "workspace_id,proposal_id,stage"},
         json={
-            "tenant_id": tenant_id, "proposal_id": proposal_id,
+            "workspace_id": workspace_id, "proposal_id": proposal_id,
             "stage": stage, "approver": approver,
         },
         prefer="resolution=merge-duplicates",
     )
 
 
-def mark_exported(proposal_id: str, tenant_id: str, when_iso: str) -> None:
+def mark_exported(proposal_id: str, workspace_id: str, when_iso: str) -> None:
     _rest(
         "PATCH", "proposals",
-        params={"id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}"},
+        params={"id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"status": "exported", "exported_at": when_iso},
     )
 
 
-def write_audit(tenant_id: str, actor: str | None, action: str, entity: str, entity_id: str | None,
-                before: dict | None = None, after: dict | None = None) -> None:
+def write_audit(
+    workspace_id: str, actor: str | None, action: str, entity: str,
+    entity_id: str | None, before: dict | None = None, after: dict | None = None,
+) -> None:
     """Append an immutable audit event (E-FR4). Never fails the caller — audit is best-effort
     at the app layer, but the DB triggers guarantee it can't be altered once written."""
     try:
         _rest(
             "POST", "audit_events",
             json={
-                "tenant_id": tenant_id, "actor": actor, "action": action,
+                "workspace_id": workspace_id, "actor": actor, "action": action,
                 "entity": entity, "entity_id": entity_id, "before": before, "after": after,
             },
             prefer="return=minimal",
@@ -337,11 +368,11 @@ def write_audit(tenant_id: str, actor: str | None, action: str, entity: str, ent
 
 
 # ---------- score estimates (Module D) ----------
-def count_cluster_outcomes(tenant_id: str, authority_cluster: str, category_cluster: str) -> int:
+def count_cluster_outcomes(workspace_id: str, authority_cluster: str, category_cluster: str) -> int:
     rows = _rest(
         "GET", "outcomes",
         params={
-            "tenant_id": f"eq.{tenant_id}",
+            "workspace_id": f"eq.{workspace_id}",
             "authority_cluster": f"eq.{authority_cluster}",
             "category_cluster": f"eq.{category_cluster}",
             "select": "id",
@@ -350,18 +381,22 @@ def count_cluster_outcomes(tenant_id: str, authority_cluster: str, category_clus
     return len(rows)
 
 
-def save_estimate(tenant_id: str, tender_id: str, result: dict) -> None:
+def save_estimate(workspace_id: str, tender_id: str, result: dict) -> None:
     _rest(
         "POST", "score_estimates",
         params={"on_conflict": "tender_id"},
-        json={"tenant_id": tenant_id, "tender_id": tender_id, "result": result},
+        json={"workspace_id": workspace_id, "tender_id": tender_id, "result": result},
         prefer="resolution=merge-duplicates,return=minimal",
     )
 
 
-def get_estimate(tender_id: str, tenant_id: str) -> dict | None:
+def get_estimate(tender_id: str, workspace_id: str) -> dict | None:
     rows = _rest(
         "GET", "score_estimates",
-        params={"tender_id": f"eq.{tender_id}", "tenant_id": f"eq.{tenant_id}", "select": "result"},
+        params={
+            "tender_id": f"eq.{tender_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "result",
+        },
     )
     return rows[0]["result"] if rows else None

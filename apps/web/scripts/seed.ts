@@ -1,7 +1,7 @@
 /**
- * Idempotent seed — FIX-1 test user + tenant (docs/PRD.md §10).
+ * Idempotent seed — FIX-1 test user + workspace (docs/PRD.md §10).
  *
- * FIX-1: priya@meridian.test / role admin, tenant "Meridian Infotech Pvt Ltd".
+ * FIX-1: priya@meridian.test / role admin, workspace "Meridian Infotech Pvt Ltd".
  * Uses the legacy service JWT (accepted by every Supabase API incl. the auth admin API).
  * Run: pnpm seed  (env sourced from .env)
  */
@@ -10,7 +10,7 @@ const SERVICE = process.env.SUPABASE_SERVICE_JWT || process.env.SUPABASE_SERVICE
 
 const FIX1_EMAIL = "priya@meridian.test";
 const FIX1_PASSWORD = "TenderCraft-FIX1!";
-const TENANT_NAME = "Meridian Infotech Pvt Ltd";
+const WORKSPACE_NAME = "Meridian Infotech Pvt Ltd";
 
 if (!SB_URL || !SERVICE) {
   throw new Error("seed: NEXT_PUBLIC_SUPABASE_URL and a service key must be set in .env");
@@ -34,13 +34,13 @@ async function deleteExistingUser(email: string) {
   }
 }
 
-async function upsertTenant(name: string): Promise<string> {
+async function upsertWorkspace(name: string): Promise<string> {
   const existing = await j(
-    await fetch(`${SB_URL}/rest/v1/tenants?name=eq.${encodeURIComponent(name)}&select=id`, { headers: authHeaders }),
+    await fetch(`${SB_URL}/rest/v1/workspaces?name=eq.${encodeURIComponent(name)}&select=id`, { headers: authHeaders }),
   );
   if (existing?.length) return existing[0].id;
   const created = await j(
-    await fetch(`${SB_URL}/rest/v1/tenants`, {
+    await fetch(`${SB_URL}/rest/v1/workspaces`, {
       method: "POST",
       headers: { ...authHeaders, Prefer: "return=representation" },
       body: JSON.stringify({ name }),
@@ -49,12 +49,12 @@ async function upsertTenant(name: string): Promise<string> {
   return created[0].id;
 }
 
-async function seedSampleTender(tenantId: string) {
+async function seedSampleTender(workspaceId: string) {
   // FIX-3: a tender with criteria incl. a sub-0.80 unconfirmed item, so the verification
   // queue (S4) shows the lock-blocked state (S4-D1) without needing a live upload.
   const existing = await j(
     await fetch(
-      `${SB_URL}/rest/v1/tenders?tenant_id=eq.${tenantId}&title=eq.${encodeURIComponent("Supply of 500 Desktop Computers")}&select=id`,
+      `${SB_URL}/rest/v1/tenders?workspace_id=eq.${workspaceId}&title=eq.${encodeURIComponent("Supply of 500 Desktop Computers")}&select=id`,
       { headers: authHeaders },
     ),
   );
@@ -67,7 +67,7 @@ async function seedSampleTender(tenantId: string) {
       method: "POST",
       headers: { ...authHeaders, Prefer: "return=representation" },
       body: JSON.stringify({
-        tenant_id: tenantId,
+        workspace_id: workspaceId,
         title: "Supply of 500 Desktop Computers",
         tender_number: "GEM/2026/B/5127401",
         authority: "National Informatics Centre",
@@ -85,7 +85,7 @@ async function seedSampleTender(tenantId: string) {
     { verbatim_text: "OEM Manufacturer's Authorization Form in Annexure-VII.", category: "eligibility", requirement_level: "mandatory", confidence: 0.61, confirmed: false, anchor_page: 22, anchor_clause: "Annexure-VII", evidence_required: null, evaluation_weight: null },
     { verbatim_text: "The bidder shall submit a declaration of non-blacklisting on company letterhead, signed by the authorized signatory.", category: "terms", requirement_level: "mandatory", confidence: 0.9, confirmed: true, anchor_page: 30, anchor_clause: "5.2", evidence_required: null, evaluation_weight: null },
   ];
-  const criteria = raw.map((c) => ({ ...c, tenant_id: tenantId, tender_id: tid }));
+  const criteria = raw.map((c) => ({ ...c, workspace_id: workspaceId, tender_id: tid }));
   const critRes = await fetch(`${SB_URL}/rest/v1/criteria`, {
     method: "POST",
     headers: authHeaders,
@@ -95,30 +95,30 @@ async function seedSampleTender(tenantId: string) {
   console.log(`✓ FIX-3 tender "${tender[0].title}" (${criteria.length} criteria, 1 low-confidence) = ${tid}`);
 }
 
-async function seedProfile(tenantId: string) {
+async function seedProfile(workspaceId: string) {
   // FIX-2: vendor profile matching the design fixture (₹8.2 Cr avg turnover, MSE, expired ISO).
   const upsert = async (table: string, rows: unknown[], conflict?: string) => {
     const res = await fetch(`${SB_URL}/rest/v1/${table}${conflict ? `?on_conflict=${conflict}` : ""}`, {
       method: "POST",
       headers: { ...authHeaders, Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify(rows.map((r) => ({ ...(r as object), tenant_id: tenantId }))),
+      body: JSON.stringify(rows.map((r) => ({ ...(r as object), workspace_id: workspaceId }))),
     });
     if (!res.ok) throw new Error(`${table} seed failed: ${res.status} ${await res.text()}`);
   };
   // clear child rows so re-seed is deterministic
   for (const t of ["profile_financials", "experience_records", "certifications"]) {
-    await fetch(`${SB_URL}/rest/v1/${t}?tenant_id=eq.${tenantId}`, { method: "DELETE", headers: authHeaders });
+    await fetch(`${SB_URL}/rest/v1/${t}?workspace_id=eq.${workspaceId}`, { method: "DELETE", headers: authHeaders });
   }
   await upsert("vendor_profiles", [{
     cin: "U72200MH2011PTC214563", pan: "AAECM4321F", gst: "27AAECM4321F1ZP",
     udyam_registration: "UDYAM-MH-18-0034521", dpiit_registered: false,
     net_worth_cr: 4.3, working_capital_cr: 2.1, oem_status: "system_integrator",
-  }], "tenant_id");
+  }], "workspace_id");
   await upsert("profile_financials", [
     { fy_label: "FY23", turnover_cr: 6.8 },
     { fy_label: "FY24", turnover_cr: 8.1 },
     { fy_label: "FY25", turnover_cr: 9.7 },
-  ], "tenant_id,fy_label");
+  ], "workspace_id,fy_label");
   // uniform keys (PGRST102): every row carries evidence_ref, null where absent
   await upsert("experience_records", [
     // Hardware works — comparable for the desktop-supply tender (FIX-3).
@@ -139,9 +139,9 @@ async function seedProfile(tenantId: string) {
   console.log("✓ FIX-2 vendor profile seeded (₹8.2 Cr avg turnover, MSE, ISO 9001 expired 03/2026)");
 }
 
-async function seedLibrary(tenantId: string) {
+async function seedLibrary(workspaceId: string) {
   // FIX-4: content library docs (evidence corpus) with validity for the drafter/retrieval.
-  await fetch(`${SB_URL}/rest/v1/library_documents?tenant_id=eq.${tenantId}`, { method: "DELETE", headers: authHeaders });
+  await fetch(`${SB_URL}/rest/v1/library_documents?workspace_id=eq.${workspaceId}`, { method: "DELETE", headers: authHeaders });
   const docs = [
     { name: "turnover-certificate-FY25.pdf", doc_type: "financial", valid_to: null, text_content: "CA-certified statement: M/s Meridian Infotech recorded an average annual turnover of ₹8.2 Cr across FY23-FY25, with FY25 turnover of ₹9.7 Cr. Net worth ₹4.3 Cr.", structured_fields: { fy25_turnover_cr: 9.7, avg_turnover_cr: 8.2 } },
     { name: "iso-9001-2015-cert.pdf", doc_type: "certification", valid_to: "2026-03-31", text_content: "ISO 9001:2015 Quality Management certification, cert no. IN-9001-44821, issued to Meridian Infotech.", structured_fields: { cert_no: "IN-9001-44821" } },
@@ -151,18 +151,18 @@ async function seedLibrary(tenantId: string) {
     { name: "hmis-completion-cert.pdf", doc_type: "completion", valid_to: null, text_content: "Completion certificate: Hospital Management Information System (HMIS) software deployment, value ₹2.4 Cr, completed 02/2025 for a PSU hospital.", structured_fields: { value_cr: 2.4 } },
     { name: "standard-undertaking-annexure1.docx", doc_type: "undertaking", valid_to: null, text_content: "Standard undertaking of non-blacklisting and compliance with tender terms, on company letterhead, signed by the authorized signatory.", structured_fields: {} },
     { name: "team-lead-cv-rahul-sharma.pdf", doc_type: "cv", valid_to: null, text_content: "Rahul Sharma, Project Lead. B.E. (Computer Science), PMP certified, 14 years experience in government IT hardware rollouts.", structured_fields: { qualification: "B.E., PMP" } },
-  ].map((d) => ({ ...d, tenant_id: tenantId }));
+  ].map((d) => ({ ...d, workspace_id: workspaceId }));
   const res = await fetch(`${SB_URL}/rest/v1/library_documents`, { method: "POST", headers: authHeaders, body: JSON.stringify(docs) });
   if (!res.ok) throw new Error(`library seed failed: ${res.status} ${await res.text()}`);
   console.log(`✓ FIX-4 content library: ${docs.length} documents (1 expired for validity-filter test)`);
 }
 
-async function seedWinnableTender(tenantId: string) {
+async function seedWinnableTender(workspaceId: string) {
   // FIX-5: a tender this bidder actually qualifies for (₹5 Cr turnover threshold ≤ their ₹8.2 Cr,
   // similar works they have, an undertaking their library supports). Demonstrates the happy path.
   const title = "e-Office Software Implementation";
   const existing = await j(
-    await fetch(`${SB_URL}/rest/v1/tenders?tenant_id=eq.${tenantId}&title=eq.${encodeURIComponent(title)}&select=id`, { headers: authHeaders }),
+    await fetch(`${SB_URL}/rest/v1/tenders?workspace_id=eq.${workspaceId}&title=eq.${encodeURIComponent(title)}&select=id`, { headers: authHeaders }),
   );
   for (const t of existing ?? []) {
     await fetch(`${SB_URL}/rest/v1/criteria?tender_id=eq.${t.id}`, { method: "DELETE", headers: authHeaders });
@@ -172,7 +172,7 @@ async function seedWinnableTender(tenantId: string) {
     await fetch(`${SB_URL}/rest/v1/tenders`, {
       method: "POST",
       headers: { ...authHeaders, Prefer: "return=representation" },
-      body: JSON.stringify({ tenant_id: tenantId, title, tender_number: "MAHA/IT/2026/4415", authority: "MahaIT", status: "verification" }),
+      body: JSON.stringify({ workspace_id: workspaceId, title, tender_number: "MAHA/IT/2026/4415", authority: "MahaIT", status: "verification" }),
     }),
   );
   const tid = tender[0].id;
@@ -180,7 +180,7 @@ async function seedWinnableTender(tenantId: string) {
     { verbatim_text: "Average annual turnover of not less than ₹5 Crores over FY23–FY25.", category: "eligibility", requirement_level: "mandatory", confidence: 0.95, confirmed: true, anchor_page: 8, anchor_clause: "3.1(a)", evidence_required: null, evaluation_weight: null },
     { verbatim_text: "At least three similar works of software/IT implementation, each ≥ ₹2 Cr.", category: "eligibility", requirement_level: "mandatory", confidence: 0.9, confirmed: true, anchor_page: 8, anchor_clause: "3.1(c)", evidence_required: null, evaluation_weight: null },
     { verbatim_text: "Declaration of non-blacklisting on company letterhead.", category: "terms", requirement_level: "mandatory", confidence: 0.92, confirmed: true, anchor_page: 15, anchor_clause: "5.1", evidence_required: null, evaluation_weight: null },
-  ].map((c) => ({ ...c, tenant_id: tenantId, tender_id: tid }));
+  ].map((c) => ({ ...c, workspace_id: workspaceId, tender_id: tid }));
   const res = await fetch(`${SB_URL}/rest/v1/criteria`, { method: "POST", headers: authHeaders, body: JSON.stringify(criteria) });
   if (!res.ok) throw new Error(`winnable criteria failed: ${res.status} ${await res.text()}`);
   console.log(`✓ FIX-5 winnable tender "${title}" (${criteria.length} criteria bidder meets) = ${tid}`);
@@ -189,11 +189,11 @@ async function seedWinnableTender(tenantId: string) {
 async function main() {
   console.log("seeding FIX-1…");
   await deleteExistingUser(FIX1_EMAIL);
-  const tenantId = await upsertTenant(TENANT_NAME);
-  await seedProfile(tenantId);
-  await seedLibrary(tenantId);
-  await seedSampleTender(tenantId);
-  await seedWinnableTender(tenantId);
+  const workspaceId = await upsertWorkspace(WORKSPACE_NAME);
+  await seedProfile(workspaceId);
+  await seedLibrary(workspaceId);
+  await seedSampleTender(workspaceId);
+  await seedWinnableTender(workspaceId);
 
   const user = await j(
     await fetch(`${SB_URL}/auth/v1/admin/users`, {
@@ -207,11 +207,11 @@ async function main() {
   await fetch(`${SB_URL}/rest/v1/profiles`, {
     method: "POST",
     headers: { ...authHeaders, Prefer: "resolution=merge-duplicates" },
-    body: JSON.stringify({ user_id: user.id, tenant_id: tenantId, role: "admin" }),
+    body: JSON.stringify({ user_id: user.id, workspace_id: workspaceId, role: "admin" }),
   });
 
   console.log(`✓ FIX-1 ready: ${FIX1_EMAIL} / ${FIX1_PASSWORD}`);
-  console.log(`  tenant "${TENANT_NAME}" = ${tenantId}`);
+  console.log(`  workspace "${WORKSPACE_NAME}" = ${workspaceId}`);
 }
 
 main().catch((e) => {

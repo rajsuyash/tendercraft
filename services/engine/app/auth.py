@@ -1,7 +1,7 @@
-"""Request authentication — verify the Supabase JWT, derive tenant server-side.
+"""Request authentication — verify the Supabase JWT, derive workspace server-side.
 
-The tenant is ALWAYS looked up from the user's profile using the verified `sub`,
-NEVER read from the request body (ET-6 / known-pitfalls: client-supplied tenant IDs
+The workspace is ALWAYS looked up from the user's profile using the verified `sub`,
+NEVER read from the request body (ET-6 / known-pitfalls: client-supplied workspace IDs
 are authz bug class #1). Supabase signs with ES256 asymmetric keys, so we verify
 against the project JWKS.
 """
@@ -28,7 +28,7 @@ def _jwks_client() -> PyJWKClient:
 @dataclass(frozen=True)
 class AuthedUser:
     user_id: str
-    tenant_id: str
+    workspace_id: str
     role: str
 
 
@@ -50,7 +50,7 @@ def verify_jwt(token: str) -> dict:
 
 
 def _lookup_profile(user_id: str) -> dict | None:
-    """Fetch the user's profile (tenant + role) via the service role (bypasses RLS).
+    """Fetch the user's profile (workspace + role) via the service role (bypasses RLS).
 
     Returns None when the user has no profile. Raises AMBIGUOUS_PROFILE when they have
     more than one — never picks a row.
@@ -58,7 +58,7 @@ def _lookup_profile(user_id: str) -> dict | None:
     Why the explicit ambiguity check: this query has no ORDER BY, so with two matching
     rows PostgREST returns them in physical heap order, which changes after any UPDATE or
     VACUUM. Taking rows[0] would silently resolve a request into a NON-DETERMINISTIC
-    tenant — a 200 response with every downstream query correctly scoped to the wrong
+    workspace — a 200 response with every downstream query correctly scoped to the wrong
     workspace, and no error anywhere. Today `profiles.user_id` is the PRIMARY KEY so this
     is unreachable; the guard exists so it stays unreachable when membership becomes
     many-to-many. Fail closed, always.
@@ -69,7 +69,7 @@ def _lookup_profile(user_id: str) -> dict | None:
     resp = httpx.get(
         f"{settings.supabase_url}/rest/v1/profiles",
         # limit=2 rather than 1: we need to be able to DETECT a second row, not hide it.
-        params={"user_id": f"eq.{user_id}", "select": "tenant_id,role", "limit": "2"},
+        params={"user_id": f"eq.{user_id}", "select": "workspace_id,role", "limit": "2"},
         headers={
             "apikey": settings.supabase_service_key,
             "Authorization": f"Bearer {settings.supabase_service_key}",
@@ -89,12 +89,12 @@ def _lookup_profile(user_id: str) -> dict | None:
 
 
 async def get_current_user(authorization: str = Header(default="")) -> AuthedUser:
-    """FastAPI dependency: authenticated user with a server-derived tenant."""
+    """FastAPI dependency: authenticated user with a server-derived workspace."""
     if not authorization.startswith("Bearer "):
         raise ApiError(401, "NO_TOKEN", "missing bearer token")
     claims = verify_jwt(authorization.removeprefix("Bearer ").strip())
     user_id = claims["sub"]
     profile = _lookup_profile(user_id)
     if not profile:
-        raise ApiError(403, "NO_PROFILE", "user has no tenant profile")
-    return AuthedUser(user_id=user_id, tenant_id=profile["tenant_id"], role=profile["role"])
+        raise ApiError(403, "NO_PROFILE", "user has no workspace profile")
+    return AuthedUser(user_id=user_id, workspace_id=profile["workspace_id"], role=profile["role"])

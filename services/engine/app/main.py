@@ -1,7 +1,7 @@
 """TenderCraft engine — FastAPI app factory.
 
 Thin routers over the deterministic engine + AI pipeline. Every response uses the
-`{ok,data,error}` envelope; tenant scoping comes from the verified JWT, never the body.
+`{ok,data,error}` envelope; workspace scoping comes from the verified JWT, never the body.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/me")
     async def me(user: CurrentUser) -> dict:
-        return ok({"user_id": user.user_id, "tenant_id": user.tenant_id, "role": user.role})
+        return ok({"user_id": user.user_id, "workspace_id": user.workspace_id, "role": user.role})
 
     return app
 

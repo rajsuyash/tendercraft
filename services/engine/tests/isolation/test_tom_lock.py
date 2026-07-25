@@ -43,7 +43,7 @@ def test_lock_blocked_until_low_confidence_confirmed(one_user):
     jwt = sign_in(one_user["email"], one_user["password"])
     h = {"Authorization": f"Bearer {jwt}"}
     c = _client()
-    tenant_id = one_user["tenant_id"]
+    workspace_id = one_user["workspace_id"]
     tender_id = None
     try:
         r = c.post("/api/tenders", json={"title": "500 Desktops"}, headers=h)
@@ -70,13 +70,13 @@ def test_lock_blocked_until_low_confidence_confirmed(one_user):
         assert r.status_code == 200, r.text
         assert r.json()["data"]["status"] == "locked"
     finally:
-        # teardown via service role (bypasses RLS); tenant + user removed by one_user fixture
+        # teardown via service role (bypasses RLS); workspace + user removed by one_user fixture
         if tender_id:
             from .conftest import SERVICE_KEY
 
             rest("DELETE", "criteria", bearer=SERVICE_KEY, key=SERVICE_KEY, query=f"?tender_id=eq.{tender_id}")
             rest("DELETE", "tenders", bearer=SERVICE_KEY, key=SERVICE_KEY, query=f"?id=eq.{tender_id}")
-        _ = tenant_id
+        _ = workspace_id
 
 
 @requires_supabase

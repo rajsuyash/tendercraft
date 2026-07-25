@@ -18,7 +18,7 @@ from app.main import create_app
 def client():
     app = create_app()
     app.dependency_overrides[get_current_user] = lambda: AuthedUser(
-        user_id="u1", tenant_id="t1", role="admin",
+        user_id="u1", workspace_id="t1", role="admin",
     )
     return TestClient(app)
 

@@ -1,4 +1,4 @@
-"""Server-side tenant derivation — the profile lookup must never guess (ET-6).
+"""Server-side workspace derivation — the profile lookup must never guess (ET-6).
 
 A second profile row cannot be inserted while `profiles.user_id` is the PRIMARY KEY, so
 these stub the HTTP response directly. That is the point: the guard has to be provably in
@@ -46,8 +46,8 @@ def _stub(monkeypatch, payload):
 
 
 def test_single_profile_resolves(monkeypatch):
-    _stub(monkeypatch, [{"tenant_id": "t1", "role": "admin"}])
-    assert auth._lookup_profile("u1") == {"tenant_id": "t1", "role": "admin"}
+    _stub(monkeypatch, [{"workspace_id": "t1", "role": "admin"}])
+    assert auth._lookup_profile("u1") == {"workspace_id": "t1", "role": "admin"}
 
 
 def test_no_profile_returns_none(monkeypatch):
@@ -59,11 +59,11 @@ def test_two_profiles_fail_closed(monkeypatch):
     """The whole point: never rows[0]. Two memberships must 403, not pick one.
 
     Picking would return HTTP 200 with every downstream query correctly scoped to the
-    WRONG workspace — a silent cross-tenant read.
+    WRONG workspace — a silent cross-workspace read.
     """
     _stub(monkeypatch, [
-        {"tenant_id": "tenant-a", "role": "admin"},
-        {"tenant_id": "tenant-b", "role": "writer"},
+        {"workspace_id": "workspace-a", "role": "admin"},
+        {"workspace_id": "workspace-b", "role": "writer"},
     ])
     with pytest.raises(ApiError) as exc:
         auth._lookup_profile("u1")
@@ -73,20 +73,20 @@ def test_two_profiles_fail_closed(monkeypatch):
 
 def test_ambiguity_is_detectable_not_hidden(monkeypatch):
     """limit=2, not limit=1 — a limit of 1 would mask the second row instead of catching it."""
-    captured = _stub(monkeypatch, [{"tenant_id": "t1", "role": "admin"}])
+    captured = _stub(monkeypatch, [{"workspace_id": "t1", "role": "admin"}])
     auth._lookup_profile("u1")
     assert captured["params"]["limit"] == "2"
 
 
-def test_error_message_leaks_no_tenant_ids(monkeypatch):
+def test_error_message_leaks_no_workspace_ids(monkeypatch):
     _stub(monkeypatch, [
-        {"tenant_id": "tenant-a", "role": "admin"},
-        {"tenant_id": "tenant-b", "role": "writer"},
+        {"workspace_id": "workspace-a", "role": "admin"},
+        {"workspace_id": "workspace-b", "role": "writer"},
     ])
     with pytest.raises(ApiError) as exc:
         auth._lookup_profile("u1")
-    assert "tenant-a" not in exc.value.message
-    assert "tenant-b" not in exc.value.message
+    assert "workspace-a" not in exc.value.message
+    assert "workspace-b" not in exc.value.message
 
 
 def test_missing_service_key_is_a_misconfiguration(monkeypatch):

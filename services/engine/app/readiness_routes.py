@@ -39,65 +39,65 @@ def _to_domain(row: dict) -> Criterion:
     )
 
 
-def _readiness_payload(tenant_id: str, tender_id: str) -> dict:
-    criteria = db.get_criteria(tender_id, tenant_id)
-    analysis_result = db.get_analysis(tender_id, tenant_id)
-    proposal = db.get_proposal_by_tender(tender_id, tenant_id)
-    responses = db.get_responses(proposal["id"], tenant_id) if proposal else []
-    decisions = db.get_readiness_decisions(tender_id, tenant_id)
+def _readiness_payload(workspace_id: str, tender_id: str) -> dict:
+    criteria = db.get_criteria(tender_id, workspace_id)
+    analysis_result = db.get_analysis(tender_id, workspace_id)
+    proposal = db.get_proposal_by_tender(tender_id, workspace_id)
+    responses = db.get_responses(proposal["id"], workspace_id) if proposal else []
+    decisions = db.get_readiness_decisions(tender_id, workspace_id)
     return compute_readiness(criteria, analysis_result, responses, decisions)
 
 
 @router.get("/api/tenders/{tender_id}/readiness")
 def get_readiness(tender_id: str, user: CurrentUser) -> dict:
-    if not db.get_tender(tender_id, user.tenant_id):
+    if not db.get_tender(tender_id, user.workspace_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
-    return ok(_readiness_payload(user.tenant_id, tender_id))
+    return ok(_readiness_payload(user.workspace_id, tender_id))
 
 
 @router.put("/api/tenders/{tender_id}/criteria/{criterion_id}/decision")
 def set_decision(tender_id: str, criterion_id: str, body: DecisionIn, user: CurrentUser) -> dict:
     """Record the bidder's per-item decision (resolve/ignore/do_not_proceed) + comment. Ignoring or
     dropping a P0 softens the deterministic block, so those decisions are audited."""
-    # ET-6 + integrity: the criterion must belong to this tender AND this tenant before we write.
-    if not db.get_criterion_in_tender(criterion_id, tender_id, user.tenant_id):
+    # ET-6 + integrity: the criterion must belong to this tender AND this workspace before we write.
+    if not db.get_criterion_in_tender(criterion_id, tender_id, user.workspace_id):
         raise ApiError(404, "CRITERION_NOT_FOUND", "criterion not found in this tender")
     # Audit BEFORE softening the gate: an override must never take effect without an audit trail.
     if body.decision in OVERRIDDEN_DECISIONS:
         db.write_audit(
-            user.tenant_id, user.user_id, "readiness_decision", "criterion", criterion_id,
+            user.workspace_id, user.user_id, "readiness_decision", "criterion", criterion_id,
             after={"decision": body.decision},
         )
     db.upsert_readiness_decision(
-        user.tenant_id, tender_id, criterion_id,
+        user.workspace_id, tender_id, criterion_id,
         decision=body.decision, comment=body.comment, actor=user.user_id,
     )
-    return ok(_readiness_payload(user.tenant_id, tender_id))
+    return ok(_readiness_payload(user.workspace_id, tender_id))
 
 
-def _prepare(tenant_id: str, tender_id: str) -> dict:
+def _prepare(workspace_id: str, tender_id: str) -> dict:
     from .proposal_routes import do_generate
 
-    criteria = db.get_criteria(tender_id, tenant_id)
+    criteria = db.get_criteria(tender_id, workspace_id)
     # 1. Lock the TOM (human confirmation of low-confidence items is enforced by the gate).
     lock = evaluate_lock([_to_domain(c) for c in criteria])
     if not lock.ok:
         raise ApiError(409, "LOCK_BLOCKED", " | ".join(lock.blockers))
-    db.set_tender_locked(tender_id, tenant_id, datetime.now(UTC).isoformat())
+    db.set_tender_locked(tender_id, workspace_id, datetime.now(UTC).isoformat())
 
     # 2. Eligibility analysis (matches criteria against the structured profile).
-    profile = db.get_profile_context(tenant_id)
-    db.save_analysis(tenant_id, tender_id, analysis.analyze(criteria, profile))
+    profile = db.get_profile_context(workspace_id)
+    db.save_analysis(workspace_id, tender_id, analysis.analyze(criteria, profile))
 
     # 3. Draft-match against the content library.
-    do_generate(tenant_id, tender_id)
+    do_generate(workspace_id, tender_id)
 
-    return _readiness_payload(tenant_id, tender_id)
+    return _readiness_payload(workspace_id, tender_id)
 
 
 @router.post("/api/tenders/{tender_id}/prepare")
 async def prepare(tender_id: str, user: CurrentUser) -> dict:
-    if not db.get_tender(tender_id, user.tenant_id):
+    if not db.get_tender(tender_id, user.workspace_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
     # Lock + analyze + generate are blocking (DB + several model calls) — keep off the loop.
-    return ok(await run_in_threadpool(_prepare, user.tenant_id, tender_id))
+    return ok(await run_in_threadpool(_prepare, user.workspace_id, tender_id))
