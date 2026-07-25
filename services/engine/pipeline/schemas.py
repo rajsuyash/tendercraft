@@ -65,10 +65,13 @@ DRAFT_SCHEMA = {
                 "properties": {
                     "text": {"type": "string"},
                     "citations": {"type": "array", "items": {"type": "string"}},
-                    "requires_citation": {"type": "boolean"},
-                    "is_financial": {"type": "boolean"},
+                    # The model proposes a class; app.deterministic.drafting decides.
+                    # requires_citation / is_financial are NOT model-supplied — they were,
+                    # and that made the B-AC4 hard gate unreachable (the prompt told the
+                    # model to always report is_financial:false).
+                    "proposed_class": {"type": "string", "enum": ["claim", "narrative"]},
                 },
-                "required": ["text", "requires_citation", "is_financial"],
+                "required": ["text", "proposed_class"],
             },
         },
     },

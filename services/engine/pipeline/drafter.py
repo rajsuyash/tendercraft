@@ -10,7 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.deterministic.drafting import DraftSentence, validate_citations
+from app.deterministic.drafting import DraftSentence, validate_draft
+from app.deterministic.types import SectionKind, SentenceClass
 
 from .client import ModelError, generate_json
 from .schemas import DRAFT_SCHEMA
@@ -54,26 +55,36 @@ def draft_response(criterion_text: str, evidence_chunks: list[dict]) -> DraftedR
         DraftSentence(
             text=s.get("text", ""),
             citations=tuple(s.get("citations", []) or ()),
-            requires_citation=bool(s.get("requires_citation", False)),
-            is_financial=bool(s.get("is_financial", False)),
+            cls=_proposed_class(s),
             is_transcluded=False,  # model text is never a transclusion (B-FR3)
         )
         for s in r["sentences"]
     ]
-    flags = validate_citations(sentences, valid_ids)
-    status = "unverified" if flags else "drafted"
+    # COMPLIANCE: a per-criterion response is never narrative-eligible, so every sentence
+    # resolves to CLAIM and must cite. Long-form narrative sections opt in separately.
+    v = validate_draft(sentences, valid_ids, SectionKind.COMPLIANCE)
 
     return DraftedResponse(
-        draft_text=" ".join(s.text for s in sentences),
-        draft_status=status,
+        draft_text=" ".join(s.text for s in v.sentences),
+        draft_status=v.status,
         sentences=[
             {
                 "text": s.text,
                 "citations": list(s.citations),
+                "cls": str(s.cls),
                 "requires_citation": s.requires_citation,
                 "is_financial": s.is_financial,
             }
-            for s in sentences
+            for s in v.sentences
         ],
-        flags=[{"text": f.text, "reason": f.reason} for f in flags],
+        flags=[{"text": f.text, "reason": f.reason} for f in v.flags],
+    )
+
+
+def _proposed_class(s: dict) -> SentenceClass:
+    """Read the model's proposed class, defaulting to the strict one on anything unexpected."""
+    return (
+        SentenceClass.NARRATIVE
+        if s.get("proposed_class") == SentenceClass.NARRATIVE
+        else SentenceClass.CLAIM
     )

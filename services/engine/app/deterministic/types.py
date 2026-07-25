@@ -20,6 +20,27 @@ SUPPRESSION_MIN_OUTCOMES = 30
 MIN_DIRECTIONAL_ACCURACY = 0.70
 
 
+class SentenceClass(StrEnum):
+    """What a drafted sentence IS — decides whether it needs a citation (B-FR1).
+
+    The model may only ever *propose* CLAIM or NARRATIVE. ASSEMBLED and PLACEHOLDER are
+    emitted by Python alone, so the model can never claim to be a transclusion (B-FR3)
+    or to be an explicit sourcing placeholder (B-FR2).
+    """
+
+    CLAIM = "claim"  # asserts a verifiable fact about the bidder -> must cite
+    NARRATIVE = "narrative"  # the bidder's proposed approach; nothing exists yet to cite
+    ASSEMBLED = "assembled"  # emitted by a deterministic assembler from a structured row
+    PLACEHOLDER = "placeholder"  # explicit sourcing instruction
+
+
+class SectionKind(StrEnum):
+    """Whether a section is allowed to contain uncited narrative at all."""
+
+    COMPLIANCE = "compliance"  # per-criterion responses, experience, team — claims only
+    NARRATIVE = "narrative"  # methodology, solution, QA, training, risk — narrative allowed
+
+
 class Verdict(StrEnum):
     PASS = "pass"
     FAIL = "fail"
