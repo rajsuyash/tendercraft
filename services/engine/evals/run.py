@@ -14,7 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-COMPONENTS = ("extractor",)
+COMPONENTS = ("extractor", "drafter")
 
 
 def load_cases(component: str) -> list[dict]:
@@ -89,10 +89,70 @@ def score_extractor() -> int:
     return 0 if total_pass == total else 1
 
 
+def _check_draft(r, expected: dict) -> dict[str, bool]:
+    checks: dict[str, bool] = {}
+    if "draft_status" in expected:
+        checks["status"] = r.draft_status == expected["draft_status"]
+    if expected.get("no_uncited_financial"):
+        # B-AC4: an evidence-backed draft must not author a figure (hard flag).
+        checks["no_uncited_fin"] = all(f["reason"] != "uncited_financial" for f in r.flags)
+    if "cited" in expected:
+        has_cite = any(s.get("citations") for s in r.sentences)
+        checks["cited"] = has_cite == expected["cited"]
+    return checks
+
+
+def score_drafter() -> int:
+    from pipeline import drafter as dr
+
+    cases = load_cases("drafter")
+    normal = [c for c in cases if not c.get("inject")]
+    inject = [c for c in cases if c.get("inject")]
+
+    passed = 0
+    print("\n== Drafter golden set (live) ==")
+    for c in normal:
+        r = dr.draft_response(c["input"]["criterion"], c["input"]["chunks"])
+        checks = _check_draft(r, c["expected"])
+        ok = all(checks.values())
+        passed += ok
+        failed = [k for k, v in checks.items() if not v]
+        print(f"  {c['id']:10} {'PASS' if ok else 'FAIL'}  status={r.draft_status} "
+              f"flags={len(r.flags)}" + (f"  missed={failed}" if failed else ""))
+
+    # Fault injection: model failure must yield a placeholder, never a crash or invention.
+    print("\n== Fault injection (fallback) ==")
+    inject_passed = 0
+    orig = dr.generate_json
+    for c in inject:
+        dr.generate_json = _raise  # type: ignore[assignment]
+        ok = False
+        try:
+            r = dr.draft_response(c["input"]["criterion"], c["input"]["chunks"])
+            ok = r.draft_status == "placeholder"
+        except Exception:  # noqa: BLE001 — a crash is exactly the failure we test against
+            ok = False
+        finally:
+            dr.generate_json = orig  # type: ignore[assignment]
+        inject_passed += ok
+        print(f"  {c['id']:10} {'PASS' if ok else 'FAIL'}  ({c['inject']} -> fallback)")
+
+    total = len(normal) + len(inject)
+    total_pass = passed + inject_passed
+    print(f"\nSUMMARY: {total_pass}/{total} cases pass "
+          f"(normal {passed}/{len(normal)}, injection {inject_passed}/{len(inject)})")
+    print("NOTE: starter set proves the harness + the B-AC4/B-FR3 no-authored-figure property, "
+          "not release-grade quality (gold set is the PRD §6 corpus).")
+    return 0 if total_pass == total else 1
+
+
 def _raise(*_a, **_k):
     from pipeline.client import ModelError
 
     raise ModelError("injected failure")
+
+
+_SCORERS = {"extractor": score_extractor, "drafter": score_drafter}
 
 
 def main() -> None:
@@ -100,7 +160,7 @@ def main() -> None:
         sys.exit(f"usage: python -m evals.run <{'|'.join(COMPONENTS)}>")
     if not os.environ.get("GEMINI_API_KEY"):
         sys.exit("GEMINI_API_KEY not set — cannot run live evals")
-    sys.exit(score_extractor())
+    sys.exit(_SCORERS[sys.argv[1]]())
 
 
 if __name__ == "__main__":
