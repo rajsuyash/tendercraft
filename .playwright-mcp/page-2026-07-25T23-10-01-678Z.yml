@@ -1,0 +1,50 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e21]
+  - generic [ref=e23]:
+    - navigation [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]: TC
+        - generic [ref=e27]: TenderCraft
+      - list [ref=e28]:
+        - listitem [ref=e29]:
+          - link "Dashboard" [ref=e30] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=e31]:
+          - link "Tenders" [ref=e32] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=e33]:
+          - link "Proposals" [ref=e34] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=e35]:
+          - link "Knowledge Base" [ref=e36] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=e37]:
+          - link "Vendor Profile" [ref=e38] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=e39]:
+          - link "Settings" [ref=e40] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=e42]:
+      - generic [ref=e43]:
+        - heading "Dashboard" [level=1] [ref=e44]
+        - paragraph [ref=e45]: Your active tenders and what needs attention.
+      - generic [ref=e46]:
+        - generic [ref=e47]:
+          - paragraph [ref=e48]: Active tenders
+          - paragraph [ref=e49]: "4"
+        - generic [ref=e50]:
+          - paragraph [ref=e51]: Awaiting verification
+          - paragraph [ref=e52]: "0"
+        - generic [ref=e53]:
+          - paragraph [ref=e54]: Drafts in review
+          - paragraph [ref=e55]: "0"
+        - generic [ref=e56]:
+          - paragraph [ref=e57]: Analyses left
+          - paragraph [ref=e58]: Unlimited
+      - generic [ref=e59]:
+        - heading "Deadlines" [level=2] [ref=e60]
+        - list [ref=e61]:
+          - listitem [ref=e62]: e-Office Software Implementation
+          - listitem [ref=e63]: Supply of 500 Desktop Computers
+          - listitem [ref=e64]: NABARD RFP.pdf
+          - listitem [ref=e65]: NABARD RFP.pdf

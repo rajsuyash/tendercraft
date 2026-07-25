@@ -1,0 +1,165 @@
+- generic [active] [ref=f10e1]:
+  - generic [ref=f10e2]:
+    - navigation [ref=f10e3]:
+      - generic [ref=f10e4]:
+        - generic [ref=f10e5]: TC
+        - generic [ref=f10e6]: TenderCraft
+      - list [ref=f10e7]:
+        - listitem [ref=f10e8]:
+          - link "Dashboard" [ref=f10e9] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f10e10]:
+          - link "Tenders" [ref=f10e11] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f10e12]:
+          - link "Proposals" [ref=f10e13] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f10e14]:
+          - link "Knowledge Base" [ref=f10e15] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f10e16]:
+          - link "Vendor Profile" [ref=f10e17] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f10e18]:
+          - link "Settings" [ref=f10e19] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f10e21]:
+      - generic [ref=f10e22]:
+        - generic [ref=f10e23]:
+          - generic [ref=f10e24]:
+            - heading "Meridian Infotech Pvt Ltd" [level=1] [ref=f10e25]
+            - generic [ref=f10e26]: Active
+          - generic [ref=f10e27]:
+            - generic [ref=f10e30]: 89% complete
+            - generic [ref=f10e31]: 1 item block accurate analysis
+        - button "Update profile" [ref=f10e32] [cursor=pointer]
+      - generic [ref=f10e33]:
+        - generic [ref=f10e34]:
+          - generic [ref=f10e35]:
+            - heading "Legal identity" [level=2] [ref=f10e36]
+            - generic [ref=f10e37]:
+              - generic [ref=f10e38]:
+                - paragraph [ref=f10e39]: Corporate Identity Number (CIN)
+                - paragraph [ref=f10e40]: U72200MH2011PTC214563
+              - generic [ref=f10e41]:
+                - paragraph [ref=f10e42]: Permanent Account Number (PAN)
+                - paragraph [ref=f10e43]: AAECM4321F
+              - generic [ref=f10e44]:
+                - paragraph [ref=f10e45]: GSTIN
+                - paragraph [ref=f10e46]: 27AAECM4321F1ZP
+              - generic [ref=f10e47]:
+                - paragraph [ref=f10e48]: MSE / Udyam
+                - generic [ref=f10e49]:
+                  - generic [ref=f10e50]: MSE — exemptions active
+                  - generic [ref=f10e51]: UDYAM-MH-18-0034521
+            - generic [ref=f10e52]:
+              - paragraph [ref=f10e53]: DPIIT Startup
+              - paragraph [ref=f10e54]: Not registered
+          - generic [ref=f10e55]:
+            - generic [ref=f10e56]:
+              - heading "Financials" [level=2] [ref=f10e57]
+              - generic [ref=f10e58]: "3-yr average turnover: ₹8.2 Cr"
+            - table [ref=f10e59]:
+              - rowgroup [ref=f10e60]:
+                - row [ref=f10e61]:
+                  - columnheader "Year" [ref=f10e62]
+                  - columnheader "Turnover" [ref=f10e63]
+              - rowgroup [ref=f10e64]:
+                - row [ref=f10e65]:
+                  - cell "FY25" [ref=f10e66]
+                  - cell "₹9.7 Cr" [ref=f10e67]
+                - row [ref=f10e68]:
+                  - cell "FY24" [ref=f10e69]
+                  - cell "₹8.1 Cr" [ref=f10e70]
+                - row [ref=f10e71]:
+                  - cell "FY23" [ref=f10e72]
+                  - cell "₹6.8 Cr" [ref=f10e73]
+            - generic [ref=f10e74]:
+              - generic [ref=f10e75]:
+                - paragraph [ref=f10e76]: Net worth
+                - paragraph [ref=f10e77]: ₹4.3 Cr
+              - generic [ref=f10e78]:
+                - paragraph [ref=f10e79]: Working capital
+                - paragraph [ref=f10e80]: ₹2.1 Cr
+          - generic [ref=f10e81]:
+            - heading "Experience records" [level=2] [ref=f10e82]
+            - table [ref=f10e83]:
+              - rowgroup [ref=f10e84]:
+                - row [ref=f10e85]:
+                  - columnheader "Project" [ref=f10e86]
+                  - columnheader "Client" [ref=f10e87]
+                  - columnheader "Value" [ref=f10e88]
+                  - columnheader "Tags" [ref=f10e89]
+                  - columnheader "Completed" [ref=f10e90]
+              - rowgroup [ref=f10e91]:
+                - row [ref=f10e92]:
+                  - cell "Hospital Management Information System (HMIS) deployment" [ref=f10e93]
+                  - cell "psu" [ref=f10e94]
+                  - cell "₹2.4 Cr" [ref=f10e95]
+                  - cell "software-implementation" [ref=f10e96]
+                  - cell "15/02/2025" [ref=f10e99]
+                - row [ref=f10e100]:
+                  - cell "Ministry IT infra (turnkey)" [ref=f10e101]
+                  - cell "govt" [ref=f10e102]
+                  - cell "₹4.9 Cr" [ref=f10e103]
+                  - cell "hardware-supply installation turnkey" [ref=f10e104]:
+                    - generic [ref=f10e105]:
+                      - generic [ref=f10e106]: hardware-supply
+                      - generic [ref=f10e107]: installation
+                      - generic [ref=f10e108]: turnkey
+                  - cell "20/01/2025" [ref=f10e109]
+                - row [ref=f10e110]:
+                  - cell "District e-Governance rollout" [ref=f10e111]
+                  - cell "psu" [ref=f10e112]
+                  - cell "₹3.4 Cr" [ref=f10e113]
+                  - cell "hardware-supply installation" [ref=f10e114]:
+                    - generic [ref=f10e115]:
+                      - generic [ref=f10e116]: hardware-supply
+                      - generic [ref=f10e117]: installation
+                  - cell "30/11/2024" [ref=f10e118]
+                - row [ref=f10e119]:
+                  - cell "State e-Office & file-workflow software implementation" [ref=f10e120]
+                  - cell "govt" [ref=f10e121]
+                  - cell "₹3.8 Cr" [ref=f10e122]
+                  - cell "software-implementation workflow-automation" [ref=f10e123]:
+                    - generic [ref=f10e124]:
+                      - generic [ref=f10e125]: software-implementation
+                      - generic [ref=f10e126]: workflow-automation
+                  - cell "30/06/2024" [ref=f10e127]
+                - row [ref=f10e128]:
+                  - cell "GST citizen-services portal development & rollout" [ref=f10e129]
+                  - cell "govt" [ref=f10e130]
+                  - cell "₹2.9 Cr" [ref=f10e131]
+                  - cell "software-development software-implementation" [ref=f10e132]:
+                    - generic [ref=f10e133]:
+                      - generic [ref=f10e134]: software-development
+                      - generic [ref=f10e135]: software-implementation
+                  - cell "10/09/2023" [ref=f10e136]
+                - row [ref=f10e137]:
+                  - cell "PSU desktop refresh 800 units" [ref=f10e138]
+                  - cell "psu" [ref=f10e139]
+                  - cell "₹2.6 Cr" [ref=f10e140]
+                  - cell "hardware-supply" [ref=f10e141]
+                  - cell "15/03/2023" [ref=f10e144]
+                - row [ref=f10e145]:
+                  - cell "Municipal CCTV network" [ref=f10e146]
+                  - cell "govt" [ref=f10e147]
+                  - cell "₹2.1 Cr" [ref=f10e148]
+                  - cell "surveillance installation" [ref=f10e149]:
+                    - generic [ref=f10e150]:
+                      - generic [ref=f10e151]: surveillance
+                      - generic [ref=f10e152]: installation
+                  - cell "01/08/2022" [ref=f10e153]
+        - generic [ref=f10e155]:
+          - heading "Certifications" [level=2] [ref=f10e156]
+          - list [ref=f10e157]:
+            - listitem [ref=f10e158]:
+              - paragraph [ref=f10e159]: ISO 9001:2015
+              - generic [ref=f10e160]: Expired 03/2026
+            - listitem [ref=f10e161]:
+              - paragraph [ref=f10e162]: ISO 27001
+              - generic [ref=f10e163]: Valid until 09/2027
+            - listitem [ref=f10e164]:
+              - paragraph [ref=f10e165]: CMMI L3
+              - generic [ref=f10e166]: Valid until 01/2028
+  - alert [ref=f10e167]

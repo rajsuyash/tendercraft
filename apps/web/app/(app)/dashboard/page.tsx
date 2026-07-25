@@ -1,6 +1,21 @@
 import Link from "next/link";
 
+import { SlaChip } from "@/components/design/SlaChip";
 import { createClient } from "@/lib/supabase/server";
+
+// Rendered on the server from a stored timestamp, so no Date.now() runs during hydration
+// (known-pitfalls: countdowns are the classic hydration mismatch).
+function hoursUntil(deadline: string | null): number {
+  return deadline ? (new Date(deadline).getTime() - Date.now()) / 3_600_000 : Number.MAX_SAFE_INTEGER;
+}
+
+function deadlineLabel(deadline: string | null): string {
+  if (!deadline) return "No deadline set";
+  const h = hoursUntil(deadline);
+  if (h < 0) return "Closed";
+  if (h < 48) return `Due in ${Math.max(1, Math.round(h))}h`;
+  return `Due ${new Date(deadline).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`;
+}
 
 // S2 — Dashboard. Empty workspace renders [data-empty-state] with a CTA to upload
 // (S2-D2); a bare deadlines region never renders.
@@ -10,7 +25,7 @@ export default async function DashboardPage() {
   // never depends on how many rows we happened to render (known-pitfalls: pagination).
   const { data: tenders } = await supabase
     .from("tenders")
-    .select("id,title,status,deadline")
+    .select("id,title,status,deadline,tender_number,authority")
     .order("created_at", { ascending: false })
     .limit(20);
   const { count: activeCount } = await supabase
@@ -44,14 +59,37 @@ export default async function DashboardPage() {
         <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Deadlines</h2>
         {hasTenders ? (
           <ul className="space-y-2">
-            {tenders!.map((t) => (
-              <li
-                key={t.id}
-                className="rounded-card border border-border bg-surface p-card text-sm text-ink"
-              >
-                {t.title}
-              </li>
-            ))}
+            {tenders!
+              // Soonest deadline first — the whole point of this section. Undated last.
+              .slice()
+              .sort((a, b) =>
+                a.deadline && b.deadline
+                  ? +new Date(a.deadline) - +new Date(b.deadline)
+                  : a.deadline
+                    ? -1
+                    : b.deadline
+                      ? 1
+                      : 0,
+              )
+              .map((t) => (
+                <li key={t.id} data-deadline-card={t.id}>
+                  <Link
+                    href={`/tenders/${t.id}/readiness`}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface p-card hover:border-primary"
+                  >
+                    <span>
+                      <span className="block text-sm font-medium text-ink">{t.title}</span>
+                      <span className="text-xs text-muted">
+                        {[t.tender_number, t.authority].filter(Boolean).join(" · ") || "—"}
+                      </span>
+                    </span>
+                    <SlaChip
+                      hoursRemaining={hoursUntil(t.deadline)}
+                      label={deadlineLabel(t.deadline)}
+                    />
+                  </Link>
+                </li>
+              ))}
           </ul>
         ) : (
           <div

@@ -114,7 +114,8 @@ export default async function ProfilePage() {
                 data-blocking-count
                 className="rounded-full bg-warning-bg px-2.5 py-0.5 text-xs font-medium text-warning"
               >
-                {blockingCount} item{blockingCount === 1 ? "" : "s"} block accurate analysis
+                {blockingCount} item{blockingCount === 1 ? "" : "s"}{" "}
+                {blockingCount === 1 ? "blocks" : "block"} accurate analysis
               </span>
             )}
           </div>

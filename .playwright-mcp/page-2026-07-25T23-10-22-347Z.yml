@@ -1,0 +1,73 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - navigation [ref=f1e3]:
+      - generic [ref=f1e4]:
+        - generic [ref=f1e5]: TC
+        - generic [ref=f1e6]: TenderCraft
+      - list [ref=f1e7]:
+        - listitem [ref=f1e8]:
+          - link "Dashboard" [ref=f1e9] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f1e10]:
+          - link "Tenders" [ref=f1e11] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f1e12]:
+          - link "Proposals" [ref=f1e13] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f1e14]:
+          - link "Knowledge Base" [ref=f1e15] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f1e16]:
+          - link "Vendor Profile" [ref=f1e17] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f1e18]:
+          - link "Settings" [ref=f1e19] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f1e21]:
+      - generic [ref=f1e22]:
+        - heading "Tenders" [level=1] [ref=f1e23]
+        - link "Upload Tender" [ref=f1e24] [cursor=pointer]:
+          - /url: /tenders/upload
+      - generic [ref=f1e25]:
+        - searchbox "Search title, tender number or authority…" [ref=f1e26]
+        - combobox [ref=f1e27]:
+          - option "All pursuits" [selected]
+        - button "Filter" [ref=f1e28] [cursor=pointer]
+      - list [ref=f1e29]:
+        - listitem [ref=f1e30]:
+          - link "e-Office Software Implementation MAHA/IT/2026/4415 · MahaIT No deadline verification" [ref=f1e31] [cursor=pointer]:
+            - /url: /tenders/940f1f16-336c-4416-adbb-e9c76eef727f/readiness
+            - generic [ref=f1e32]:
+              - paragraph [ref=f1e33]: e-Office Software Implementation
+              - paragraph [ref=f1e34]: MAHA/IT/2026/4415 · MahaIT
+            - generic [ref=f1e35]:
+              - generic [ref=f1e36]: No deadline
+              - generic [ref=f1e37]: verification
+        - listitem [ref=f1e38]:
+          - link "Supply of 500 Desktop Computers GEM/2026/B/5127401 · National Informatics Centre No deadline verification" [ref=f1e39] [cursor=pointer]:
+            - /url: /tenders/cccee62d-5113-43de-989a-7ac88595017f/readiness
+            - generic [ref=f1e40]:
+              - paragraph [ref=f1e41]: Supply of 500 Desktop Computers
+              - paragraph [ref=f1e42]: GEM/2026/B/5127401 · National Informatics Centre
+            - generic [ref=f1e43]:
+              - generic [ref=f1e44]: No deadline
+              - generic [ref=f1e45]: verification
+        - listitem [ref=f1e46]:
+          - link "NABARD RFP.pdf — No deadline uploaded" [ref=f1e47] [cursor=pointer]:
+            - /url: /tenders/57712a42-648c-4b99-b562-74d1ef83363a/readiness
+            - generic [ref=f1e48]:
+              - paragraph [ref=f1e49]: NABARD RFP.pdf
+              - paragraph [ref=f1e50]: —
+            - generic [ref=f1e51]:
+              - generic [ref=f1e52]: No deadline
+              - generic [ref=f1e53]: uploaded
+        - listitem [ref=f1e54]:
+          - link "NABARD RFP.pdf — No deadline uploaded" [ref=f1e55] [cursor=pointer]:
+            - /url: /tenders/e4a16dda-457d-4970-b16f-eb294fdab9d6/readiness
+            - generic [ref=f1e56]:
+              - paragraph [ref=f1e57]: NABARD RFP.pdf
+              - paragraph [ref=f1e58]: —
+            - generic [ref=f1e59]:
+              - generic [ref=f1e60]: No deadline
+              - generic [ref=f1e61]: uploaded
+  - alert [ref=f1e62]

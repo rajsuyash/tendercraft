@@ -1,0 +1,47 @@
+# TenderCraft web — production container.
+#
+# Built from the REPO ROOT, not apps/web: this is a pnpm workspace and the lockfile lives
+# at the root, so a context rooted at the app cannot install deterministically.
+
+FROM node:22-slim AS deps
+RUN corepack enable
+WORKDIR /repo
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/
+RUN pnpm install --frozen-lockfile
+
+FROM node:22-slim AS build
+RUN corepack enable
+WORKDIR /repo
+COPY --from=deps /repo/node_modules ./node_modules
+COPY --from=deps /repo/apps/web/node_modules ./apps/web/node_modules
+COPY . .
+
+# NEXT_PUBLIC_* values are inlined into the client bundle at BUILD time, so they must be
+# present here, not only at runtime. They are the anon key and project URL — both already
+# public by design (RLS is what protects the data). The service-role key is never passed to
+# this image; only the engine holds it.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
+    NEXT_TELEMETRY_DISABLED=1
+
+RUN pnpm --filter @tendercraft/web build
+
+FROM node:22-slim AS runtime
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=8080
+WORKDIR /app
+
+# standalone carries its own minimal node_modules; public/ and .next/static are not traced
+# into it and must be copied alongside or every asset 404s.
+COPY --from=build /repo/apps/web/.next/standalone ./
+COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build /repo/apps/web/public ./apps/web/public
+
+RUN useradd --create-home --uid 10001 web && chown -R web:web /app
+USER web
+EXPOSE 8080
+
+# standalone emits server.js at the workspace-relative path.
+CMD ["node", "apps/web/server.js"]

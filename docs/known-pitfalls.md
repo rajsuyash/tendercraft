@@ -72,3 +72,11 @@ Format: **symptom → cause → fix.**
 - An endpoint that requires a workspace but is the endpoint that GRANTS one → invitation accept deadlocked: the invitee has no membership, so the dependency 403'd them out of the flow that would give them one → `get_identified_user` (authenticated, unscoped) for pre-workspace actions only.
 - Live-Supabase test suites that sign in per assertion → GoTrue rate-limits password grants and 429s fail RANDOM tests, which reads as a product defect → cache tokens per user, back off on 429, and invalidate the cache wherever a fixture recreates the same email.
 - `pydantic.EmailStr` rejects reserved TLDs (`.test`) → it would refuse this project's own seeded users and every staging address → shape-check instead; the real control is matching the invitation address against the verified JWT email.
+
+## Containerising / deploying
+
+- `Path(__file__).parents[N]` to find a repo-root file → in a container the app sits at `/app/app`, which has fewer parents, so it raises `IndexError` **at import time** and the platform reports only "container failed to listen on PORT" → guard the index and treat the dotenv load as optional. A dev convenience must never be able to take down production.
+- `new URL(..., import.meta.url).pathname` for a filesystem path → percent-encodes, so a repo path containing a space becomes `…/07%20Tech%20Projects/…`. Next.js then cannot resolve `outputFileTracingRoot` and **silently skips standalone output while still reporting a successful build** → use `fileURLToPath`, and verify `.next/standalone/**/server.js` exists rather than trusting the build's exit code.
+- `NEXT_PUBLIC_*` supplied only at runtime → they are inlined into the client bundle at BUILD time, so a runtime-only value ships as empty and client-side auth silently fails → pass them as Docker build args too.
+- Next standalone output does not include `public/` or `.next/static` → they must be copied alongside it or every asset 404s and the page renders unstyled.
+- Deleting a workspace whose audit rows exist → blocked by the append-only trigger (`audit_events is append-only (E-AC1)`), which is the guarantee working correctly even against a service-role cascade → isolation-test teardown cannot fully clean up, so orphaned test workspaces accumulate. They are invisible to real users via RLS; do not disable the trigger to tidy them.

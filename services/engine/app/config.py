@@ -6,14 +6,29 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-_ENV_PATH = Path(__file__).resolve().parents[3] / ".env"  # services/engine/app -> repo root
+
+def _repo_env_path() -> Path | None:
+    """Locate the repo-root .env, or None when there isn't one.
+
+    services/engine/app -> repo root is three levels up in a checkout. In a container the
+    app lives at /app/app, so that index does not exist — and an unguarded parents[3] raised
+    IndexError at import time, which Cloud Run reports only as "container failed to listen
+    on PORT". A dev convenience must never be able to take down production.
+    """
+    here = Path(__file__).resolve()
+    if len(here.parents) > 3:
+        candidate = here.parents[3] / ".env"
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _load_dotenv() -> None:
     """Minimal .env loader (dev). Production injects real env; existing vars win."""
-    if not _ENV_PATH.exists():
+    env_path = _repo_env_path()
+    if env_path is None:
         return
-    for line in _ENV_PATH.read_text().splitlines():
+    for line in env_path.read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue

@@ -3,3 +3,4 @@
 [    7487ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/me:0
 [    7492ms] [LOG] [Fast Refresh] done in 183ms @ webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.21_react-dom@19.2.8_react@19.2.8__react@19.2.8/node_modules/next/dist/client/dev/report-hmr-latency.js:13
 [   14694ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/workspaces/995aab08-69f7-4d02-8c0b-3a1466c9e231/members:0
+[17852750ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/login:0

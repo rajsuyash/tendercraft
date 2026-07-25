@@ -1,0 +1,98 @@
+- generic [active] [ref=f5e1]:
+  - generic [ref=f5e2]:
+    - navigation [ref=f5e3]:
+      - generic [ref=f5e4]:
+        - generic [ref=f5e5]: TC
+        - generic [ref=f5e6]: TenderCraft
+      - list [ref=f5e7]:
+        - listitem [ref=f5e8]:
+          - link "Dashboard" [ref=f5e9] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f5e10]:
+          - link "Tenders" [ref=f5e11] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f5e12]:
+          - link "Proposals" [ref=f5e13] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f5e14]:
+          - link "Knowledge Base" [ref=f5e15] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f5e16]:
+          - link "Vendor Profile" [ref=f5e17] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f5e18]:
+          - link "Settings" [ref=f5e19] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f5e21]:
+      - generic [ref=f5e22]:
+        - heading "Knowledge Base — 8 documents" [level=1] [ref=f5e23]:
+          - text: Knowledge Base
+          - generic [ref=f5e24]: — 8 documents
+        - paragraph [ref=f5e25]: Your company's evidence corpus. Proposals cite only from here, and expired documents are hard-excluded from drafting.
+      - generic [ref=f5e27]:
+        - heading "Add to knowledge base" [level=2] [ref=f5e28]
+        - generic [ref=f5e29]:
+          - generic [ref=f5e30] [cursor=pointer]: Upload file (PDF / DOCX / PPTX)
+          - generic [ref=f5e31]: or
+          - generic [ref=f5e32]:
+            - textbox "https://your-company.com/about" [ref=f5e33]
+            - button "Fetch" [disabled] [ref=f5e34]
+      - generic [ref=f5e35]: 1 document expired, 0 expiring within 90 days — expired documents are hard-excluded from retrieval.
+      - table [ref=f5e36]:
+        - rowgroup [ref=f5e37]:
+          - row [ref=f5e38]:
+            - columnheader "Document" [ref=f5e39]
+            - columnheader "Type" [ref=f5e40]
+            - columnheader "Key values" [ref=f5e41]
+            - columnheader "Validity" [ref=f5e42]
+            - columnheader "Added" [ref=f5e43]
+        - rowgroup [ref=f5e44]:
+          - row [ref=f5e45]:
+            - cell "turnover-certificate-FY25.pdf" [ref=f5e46]
+            - cell "financial" [ref=f5e47]
+            - 'cell "avg_turnover_cr: 8.2 · fy25_turnover_cr: 9.7" [ref=f5e48]'
+            - cell "Evergreen" [ref=f5e49]
+            - cell "added 25/07/2026" [ref=f5e50]
+          - row [ref=f5e52]:
+            - cell "iso-9001-2015-cert.pdf" [ref=f5e53]
+            - cell "certification" [ref=f5e54]
+            - 'cell "cert_no: IN-9001-44821" [ref=f5e55]'
+            - cell "Expired 03/2026" [ref=f5e56]
+            - cell "added 25/07/2026" [ref=f5e58]
+          - row [ref=f5e60]:
+            - cell "district-egovernance-completion-cert.pdf" [ref=f5e61]
+            - cell "completion" [ref=f5e62]
+            - 'cell "value_cr: 3.4" [ref=f5e63]'
+            - cell "Evergreen" [ref=f5e64]
+            - cell "added 25/07/2026" [ref=f5e65]
+          - row [ref=f5e67]:
+            - cell "eoffice-completion-cert.pdf" [ref=f5e68]
+            - cell "completion" [ref=f5e69]
+            - 'cell "value_cr: 3.8" [ref=f5e70]'
+            - cell "Evergreen" [ref=f5e71]
+            - cell "added 25/07/2026" [ref=f5e72]
+          - row [ref=f5e74]:
+            - cell "gst-portal-completion-cert.pdf" [ref=f5e75]
+            - cell "completion" [ref=f5e76]
+            - 'cell "value_cr: 2.9" [ref=f5e77]'
+            - cell "Evergreen" [ref=f5e78]
+            - cell "added 25/07/2026" [ref=f5e79]
+          - row [ref=f5e81]:
+            - cell "hmis-completion-cert.pdf" [ref=f5e82]
+            - cell "completion" [ref=f5e83]
+            - 'cell "value_cr: 2.4" [ref=f5e84]'
+            - cell "Evergreen" [ref=f5e85]
+            - cell "added 25/07/2026" [ref=f5e86]
+          - row [ref=f5e88]:
+            - cell "standard-undertaking-annexure1.docx" [ref=f5e89]
+            - cell "undertaking" [ref=f5e90]
+            - cell "—" [ref=f5e91]
+            - cell "Evergreen" [ref=f5e92]
+            - cell "added 25/07/2026" [ref=f5e93]
+          - row [ref=f5e95]:
+            - cell "team-lead-cv-rahul-sharma.pdf" [ref=f5e96]
+            - cell "cv" [ref=f5e97]
+            - 'cell "qualification: B.E., PMP" [ref=f5e98]'
+            - cell "Evergreen" [ref=f5e99]
+            - cell "added 25/07/2026" [ref=f5e100]
+  - alert [ref=f5e102]

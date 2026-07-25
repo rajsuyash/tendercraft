@@ -1,0 +1,48 @@
+- generic [active] [ref=f4e1]:
+  - alert [ref=f4e21]
+  - generic [ref=f4e22]:
+    - navigation [ref=f4e23]:
+      - generic [ref=f4e24]:
+        - generic [ref=f4e25]: TC
+        - generic [ref=f4e26]: TenderCraft
+      - list [ref=f4e27]:
+        - listitem [ref=f4e28]:
+          - link "Dashboard" [ref=f4e29] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f4e30]:
+          - link "Tenders" [ref=f4e31] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f4e32]:
+          - link "Proposals" [ref=f4e33] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f4e34]:
+          - link "Knowledge Base" [ref=f4e35] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f4e36]:
+          - link "Vendor Profile" [ref=f4e37] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f4e38]:
+          - link "Settings" [ref=f4e39] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f4e41]:
+      - generic [ref=f4e42]:
+        - heading "Dashboard" [level=1] [ref=f4e43]
+        - paragraph [ref=f4e44]: Your active tenders and what needs attention.
+      - generic [ref=f4e45]:
+        - generic [ref=f4e46]:
+          - paragraph [ref=f4e47]: Active tenders
+          - paragraph [ref=f4e48]: "2"
+        - generic [ref=f4e49]:
+          - paragraph [ref=f4e50]: Awaiting verification
+          - paragraph [ref=f4e51]: "0"
+        - generic [ref=f4e52]:
+          - paragraph [ref=f4e53]: Drafts in review
+          - paragraph [ref=f4e54]: "0"
+        - generic [ref=f4e55]:
+          - paragraph [ref=f4e56]: Analyses left
+          - paragraph [ref=f4e57]: Unlimited
+      - generic [ref=f4e58]:
+        - heading "Deadlines" [level=2] [ref=f4e59]
+        - list [ref=f4e60]:
+          - listitem [ref=f4e61]: e-Office Software Implementation
+          - listitem [ref=f4e62]: Supply of 500 Desktop Computers

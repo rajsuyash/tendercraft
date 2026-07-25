@@ -1,0 +1,2 @@
+[    1253ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://tendercraft-web-822379741897.asia-south1.run.app/login:0
+[    3059ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://tendercraft-web-822379741897.asia-south1.run.app/favicon.ico:0
