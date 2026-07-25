@@ -602,3 +602,96 @@ def mark_invitation_accepted(invitation_id: str, user_id: str, when_iso: str) ->
         params={"id": f"eq.{invitation_id}"},
         json={"accepted_at": when_iso, "accepted_by": user_id},
     )
+
+
+# ---------- projects + portfolio ----------
+def list_projects(workspace_id: str) -> list[dict]:
+    return _rest(
+        "GET", "projects",
+        params={
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "id,name,status,owner,created_at",
+            "order": "created_at.desc",
+        },
+    ) or []
+
+
+def create_project(workspace_id: str, name: str, owner: str | None) -> dict:
+    rows = _rest(
+        "POST", "projects",
+        json={"workspace_id": workspace_id, "name": name, "owner": owner},
+    )
+    return rows[0]
+
+
+def update_project(project_id: str, workspace_id: str, patch: dict) -> None:
+    _rest(
+        "PATCH", "projects",
+        params={"id": f"eq.{project_id}", "workspace_id": f"eq.{workspace_id}"},
+        json=patch,
+    )
+
+
+def get_project(project_id: str, workspace_id: str) -> dict | None:
+    rows = _rest(
+        "GET", "projects",
+        params={"id": f"eq.{project_id}", "workspace_id": f"eq.{workspace_id}",
+                "select": "*", "limit": "1"},
+    )
+    return rows[0] if rows else None
+
+
+def make_cursor(row: dict) -> str:
+    """Keyset cursor: "<created_at>|<id>".
+
+    The id is NOT decoration. created_at alone is not unique — a bulk insert gives every
+    row the same transaction timestamp, so `created_at < cursor` skips the entire rest of
+    the page and pagination silently stops early. The tuple is the actual sort key.
+
+    The Z suffix matters too: an unencoded '+' in a query string is read as a SPACE and
+    httpx does not escape it, so a raw "+00:00" timestamp makes PostgREST 400.
+    """
+    ts = str(row["created_at"]).replace("+00:00", "Z").replace(" ", "T")
+    return f"{ts}|{row['id']}"
+
+
+def list_tenders(workspace_id: str, *, project_id: str | None = None, q: str | None = None,
+                 status: str | None = None, cursor: str | None = None,
+                 limit: int = 25) -> list[dict]:
+    """Portfolio query: filter + search + KEYSET pagination.
+
+    Keyset, not offset: offset re-reads rows and silently skips them when a concurrent
+    insert shifts the window. Ordering is (created_at desc, id desc) so the cursor is
+    total — created_at alone ties on bulk-seeded rows.
+    """
+    params = {
+        "workspace_id": f"eq.{workspace_id}",
+        "select": "id,title,tender_number,authority,status,deadline,project_id,created_at",
+        "order": "created_at.desc,id.desc",
+        "limit": str(limit),
+    }
+    if project_id:
+        params["project_id"] = f"eq.{project_id}"
+    if status:
+        params["status"] = f"eq.{status}"
+    if q:
+        # `and=` so it composes with the keyset `or=` below instead of overwriting it.
+        params["and"] = (
+            f"(or(title.ilike.*{q}*,tender_number.ilike.*{q}*,authority.ilike.*{q}*))"
+        )
+    if cursor:
+        ts, _, last_id = cursor.partition("|")
+        # (created_at, id) < (ts, id) expressed for PostgREST: strictly earlier, OR the
+        # same instant with a lower id. Matches the compound ORDER BY exactly.
+        params["or"] = (
+            f"(created_at.lt.{ts},and(created_at.eq.{ts},id.lt.{last_id}))"
+        )
+    return _rest("GET", "tenders", params=params) or []
+
+
+def set_tender_project(tender_id: str, workspace_id: str, project_id: str | None) -> None:
+    _rest(
+        "PATCH", "tenders",
+        params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
+        json={"project_id": project_id},
+    )

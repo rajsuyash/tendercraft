@@ -6,13 +6,13 @@ Every route scopes to the authenticated user's workspace (from the JWT, never th
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from . import db
+from . import authz, db
 from .auth import AuthedUser, get_current_user
 from .deterministic.lock import evaluate_lock
 from .deterministic.types import Criterion, RequirementLevel, SourceAnchor
@@ -20,6 +20,21 @@ from .envelope import ApiError, ok
 from .ingest import ingest_pages, parse_pdf_pages
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB guard
+
+
+class ProjectIn(BaseModel):
+    name: str
+
+
+class ProjectPatch(BaseModel):
+    name: str | None = None
+    status: Literal["active", "won", "lost", "archived"] | None = None
+    owner: str | None = None
+
+
+class AssignProjectIn(BaseModel):
+    project_id: str | None = None
+
 
 router = APIRouter()
 CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
@@ -86,6 +101,64 @@ async def ingest_tender(
 
 
 # Sync bodies (only blocking db calls) -> FastAPI runs them in a threadpool, off the loop.
+@router.get("/api/projects")
+def list_projects(user: CurrentUser) -> dict:
+    return ok({"projects": db.list_projects(user.workspace_id)})
+
+
+@router.post("/api/projects")
+def create_project(body: ProjectIn, user: CurrentUser) -> dict:
+    authz.check(user, authz.DRAFT)
+    return ok(db.create_project(user.workspace_id, body.name, user.user_id))
+
+
+@router.patch("/api/projects/{project_id}")
+def update_project(project_id: str, body: ProjectPatch, user: CurrentUser) -> dict:
+    authz.check(user, authz.DRAFT)
+    if not db.get_project(project_id, user.workspace_id):
+        raise ApiError(404, "PROJECT_NOT_FOUND", "project not found in your workspace")
+    patch = {k: v for k, v in body.model_dump(exclude_none=True).items()}
+    if patch:
+        db.update_project(project_id, user.workspace_id, patch)
+    return ok({"project_id": project_id, **patch})
+
+
+@router.get("/api/tenders")
+def list_tenders(
+    user: CurrentUser,
+    project_id: str | None = None,
+    q: str | None = None,
+    status: str | None = None,
+    cursor: str | None = None,
+    limit: int = 25,
+) -> dict:
+    """Portfolio list — filter, search, keyset pagination.
+
+    Previously there was no list endpoint at all and the web page did .limit(50) with no
+    cursor, so a workspace's 51st tender was permanently unreachable.
+    """
+    limit = max(1, min(limit, 100))
+    rows = db.list_tenders(user.workspace_id, project_id=project_id, q=q, status=status,
+                           cursor=cursor, limit=limit + 1)
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    return ok({
+        "tenders": rows,
+        "next_cursor": db.make_cursor(rows[-1]) if (has_more and rows) else None,
+    })
+
+
+@router.put("/api/tenders/{tender_id}/project")
+def assign_project(tender_id: str, body: AssignProjectIn, user: CurrentUser) -> dict:
+    authz.check(user, authz.DRAFT)
+    if not db.get_tender(tender_id, user.workspace_id):
+        raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
+    if body.project_id and not db.get_project(body.project_id, user.workspace_id):
+        raise ApiError(404, "PROJECT_NOT_FOUND", "project not found in your workspace")
+    db.set_tender_project(tender_id, user.workspace_id, body.project_id)
+    return ok({"tender_id": tender_id, "project_id": body.project_id})
+
+
 @router.post("/api/tenders")
 def create_tender_route(body: CreateTender, user: CurrentUser) -> dict:
     tender = db.create_tender(user.workspace_id, body.title)
