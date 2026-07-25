@@ -1,0 +1,14 @@
+- generic [active] [ref=f14e1]:
+  - main [ref=f14e2]:
+    - generic [ref=f14e3]:
+      - heading "Join workspace" [level=1] [ref=f14e4]
+      - paragraph [ref=f14e5]: You have been invited to a TenderCraft workspace. Accepting links this invitation to the account you are signed in as — it must match the address it was sent to.
+      - paragraph [ref=f14e19]: this invitation was issued to a different email address
+      - button "Accept invitation" [ref=f14e6] [cursor=pointer]
+      - paragraph [ref=f14e7]:
+        - text: Not signed in?
+        - link "Sign in first" [ref=f14e8] [cursor=pointer]:
+          - /url: /login
+        - text: ", then reopen this link."
+  - button "Open Next.js Dev Tools" [ref=f14e15] [cursor=pointer]
+  - alert [ref=f14e9]

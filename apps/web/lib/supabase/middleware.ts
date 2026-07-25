@@ -3,7 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
-const PUBLIC_PATHS = ["/login"];
+// /invite is authenticated but pre-workspace — the (app) shell would bounce a user
+// who has no workspace yet, which is exactly who follows an invitation link.
+const PUBLIC_PATHS = ["/login", "/invite"];
 
 /** Refresh the session cookie and gate app routes behind auth. */
 export async function updateSession(request: NextRequest) {

@@ -1,0 +1,203 @@
+- generic [ref=f10e2]:
+  - navigation [ref=f10e3]:
+    - generic [ref=f10e4]:
+      - generic [ref=f10e5]: TC
+      - generic [ref=f10e6]: TenderCraft
+    - list [ref=f10e7]:
+      - listitem [ref=f10e8]:
+        - link "Dashboard" [ref=f10e9] [cursor=pointer]:
+          - /url: /dashboard
+      - listitem [ref=f10e10]:
+        - link "Tenders" [ref=f10e11] [cursor=pointer]:
+          - /url: /tenders
+      - listitem [ref=f10e12]:
+        - link "Proposals" [ref=f10e13] [cursor=pointer]:
+          - /url: /proposals
+      - listitem [ref=f10e14]:
+        - link "Knowledge Base" [ref=f10e15] [cursor=pointer]:
+          - /url: /library
+      - listitem [ref=f10e16]:
+        - link "Vendor Profile" [ref=f10e17] [cursor=pointer]:
+          - /url: /profile
+      - listitem [ref=f10e18]:
+        - link "Settings" [ref=f10e19] [cursor=pointer]:
+          - /url: /settings
+  - main [ref=f10e21]:
+    - generic [ref=f10e22]:
+      - heading "Workspace — Meridian Infotech Pvt Ltd" [level=1] [ref=f10e23]
+      - paragraph [ref=f10e24]: Manage enterprise settings, roles, and compliance workflows.
+    - navigation [ref=f10e25]:
+      - generic [ref=f10e26]: Members & Roles
+      - generic [ref=f10e27]: Approval chains
+      - generic [ref=f10e28]: Audit log
+      - generic [ref=f10e29]: Deadlines & alerts
+    - generic [ref=f10e31]:
+      - generic [ref=f10e32]:
+        - heading "Members & roles" [level=2] [ref=f10e33]
+        - generic [ref=f10e34]: 1 in this workspace
+      - table [ref=f10e36]:
+        - rowgroup [ref=f10e37]:
+          - row [ref=f10e38]:
+            - columnheader "Member" [ref=f10e39]
+            - columnheader "Role" [ref=f10e40]
+            - columnheader [ref=f10e41]
+        - rowgroup [ref=f10e42]:
+          - row [ref=f10e43]:
+            - cell "f3bbe38a…" [ref=f10e44]
+            - cell "admin" [ref=f10e46]
+            - cell [ref=f10e47]
+      - generic [ref=f10e48]:
+        - heading "Invite a member" [level=3] [ref=f10e49]
+        - generic [ref=f10e50]:
+          - textbox "name@firm.com" [ref=f10e51]
+          - combobox [ref=f10e52]:
+            - option "viewer"
+            - option "writer" [selected]
+            - option "reviewer"
+            - option "compliance checker"
+            - option "legal"
+            - option "approver"
+            - option "admin"
+          - button "Invite" [ref=f10e53] [cursor=pointer]
+    - generic [ref=f10e54]:
+      - heading "Approval chains" [level=2] [ref=f10e55]
+      - generic [ref=f10e56]:
+        - paragraph [ref=f10e57]: Defines the mandatory sequence before PDF/DOCX export is permitted.
+        - generic [ref=f10e58]:
+          - generic [ref=f10e59]:
+            - generic [ref=f10e60]: Writer
+            - generic [ref=f10e62]: →
+          - generic [ref=f10e63]:
+            - generic [ref=f10e64]: Reviewer
+            - generic [ref=f10e66]: →
+          - generic [ref=f10e67]:
+            - generic [ref=f10e68]: Compliance Checker
+            - generic [ref=f10e70]: →
+          - generic [ref=f10e71]: Approver
+        - paragraph [ref=f10e74]: Export locks until all required approvals complete (admin override is logged).
+    - generic [ref=f10e75]:
+      - heading "Audit log" [level=2] [ref=f10e76]
+      - list [ref=f10e78]:
+        - listitem [ref=f10e79]:
+          - generic [ref=f10e80]: 2026-07-25T17:33:57.34509+00:00
+          - generic [ref=f10e81]: approval
+          - generic [ref=f10e82]: proposal
+          - generic [ref=f10e83]: f3bbe38a…
+        - listitem [ref=f10e84]:
+          - generic [ref=f10e85]: 2026-07-25T17:16:36.67856+00:00
+          - generic [ref=f10e86]: approval
+          - generic [ref=f10e87]: proposal
+          - generic [ref=f10e88]: 600a60e6…
+        - listitem [ref=f10e89]:
+          - generic [ref=f10e90]: 2026-07-25T16:27:44.263748+00:00
+          - generic [ref=f10e91]: section_approval
+          - generic [ref=f10e92]: proposal
+          - generic [ref=f10e93]: 600a60e6…
+        - listitem [ref=f10e94]:
+          - generic [ref=f10e95]: 2026-07-25T16:17:35.763705+00:00
+          - generic [ref=f10e96]: readiness_decision
+          - generic [ref=f10e97]: criterion
+          - generic [ref=f10e98]: 600a60e6…
+        - listitem [ref=f10e99]:
+          - generic [ref=f10e100]: 2026-07-25T16:09:01.776279+00:00
+          - generic [ref=f10e101]: export_download
+          - generic [ref=f10e102]: proposal
+          - generic [ref=f10e103]: 600a60e6…
+        - listitem [ref=f10e104]:
+          - generic [ref=f10e105]: 2026-07-25T16:09:01.648521+00:00
+          - generic [ref=f10e106]: watermark_removed
+          - generic [ref=f10e107]: proposal
+          - generic [ref=f10e108]: 600a60e6…
+        - listitem [ref=f10e109]:
+          - generic [ref=f10e110]: 2026-07-25T16:09:00.10415+00:00
+          - generic [ref=f10e111]: section_approval
+          - generic [ref=f10e112]: proposal
+          - generic [ref=f10e113]: 600a60e6…
+        - listitem [ref=f10e114]:
+          - generic [ref=f10e115]: 2026-07-25T16:08:59.748866+00:00
+          - generic [ref=f10e116]: section_approval
+          - generic [ref=f10e117]: proposal
+          - generic [ref=f10e118]: 600a60e6…
+        - listitem [ref=f10e119]:
+          - generic [ref=f10e120]: 2026-07-25T16:08:59.381386+00:00
+          - generic [ref=f10e121]: section_approval
+          - generic [ref=f10e122]: proposal
+          - generic [ref=f10e123]: 600a60e6…
+        - listitem [ref=f10e124]:
+          - generic [ref=f10e125]: 2026-07-25T16:08:59.050382+00:00
+          - generic [ref=f10e126]: section_approval
+          - generic [ref=f10e127]: proposal
+          - generic [ref=f10e128]: 600a60e6…
+        - listitem [ref=f10e129]:
+          - generic [ref=f10e130]: 2026-07-25T16:08:58.718342+00:00
+          - generic [ref=f10e131]: section_approval
+          - generic [ref=f10e132]: proposal
+          - generic [ref=f10e133]: 600a60e6…
+        - listitem [ref=f10e134]:
+          - generic [ref=f10e135]: 2026-07-25T16:08:58.365099+00:00
+          - generic [ref=f10e136]: section_approval
+          - generic [ref=f10e137]: proposal
+          - generic [ref=f10e138]: 600a60e6…
+        - listitem [ref=f10e139]:
+          - generic [ref=f10e140]: 2026-07-25T16:08:57.935698+00:00
+          - generic [ref=f10e141]: section_approval
+          - generic [ref=f10e142]: proposal
+          - generic [ref=f10e143]: 600a60e6…
+        - listitem [ref=f10e144]:
+          - generic [ref=f10e145]: 2026-07-25T16:08:57.599026+00:00
+          - generic [ref=f10e146]: section_approval
+          - generic [ref=f10e147]: proposal
+          - generic [ref=f10e148]: 600a60e6…
+        - listitem [ref=f10e149]:
+          - generic [ref=f10e150]: 2026-07-25T16:08:57.248509+00:00
+          - generic [ref=f10e151]: section_approval
+          - generic [ref=f10e152]: proposal
+          - generic [ref=f10e153]: 600a60e6…
+        - listitem [ref=f10e154]:
+          - generic [ref=f10e155]: 2026-07-25T15:36:10.832508+00:00
+          - generic [ref=f10e156]: export
+          - generic [ref=f10e157]: proposal
+          - generic [ref=f10e158]: 600a60e6…
+        - listitem [ref=f10e159]:
+          - generic [ref=f10e160]: 2026-07-25T15:36:09.96388+00:00
+          - generic [ref=f10e161]: approval
+          - generic [ref=f10e162]: proposal
+          - generic [ref=f10e163]: 600a60e6…
+        - listitem [ref=f10e164]:
+          - generic [ref=f10e165]: 2026-07-25T15:36:09.53653+00:00
+          - generic [ref=f10e166]: approval
+          - generic [ref=f10e167]: proposal
+          - generic [ref=f10e168]: 600a60e6…
+        - listitem [ref=f10e169]:
+          - generic [ref=f10e170]: 2026-07-24T20:11:13.050362+00:00
+          - generic [ref=f10e171]: readiness_decision
+          - generic [ref=f10e172]: criterion
+          - generic [ref=f10e173]: 600a60e6…
+        - listitem [ref=f10e174]:
+          - generic [ref=f10e175]: 2026-07-24T20:11:09.576113+00:00
+          - generic [ref=f10e176]: readiness_decision
+          - generic [ref=f10e177]: criterion
+          - generic [ref=f10e178]: 600a60e6…
+    - generic [ref=f10e179]:
+      - heading "Deadlines & alerts" [level=2] [ref=f10e180]
+      - generic [ref=f10e181]:
+        - generic [ref=f10e182]:
+          - generic [ref=f10e183]:
+            - paragraph [ref=f10e184]: T-72h Warning
+            - paragraph [ref=f10e185]: Email only
+          - generic [ref=f10e186]: Bid owner
+        - generic [ref=f10e188]:
+          - generic [ref=f10e189]:
+            - paragraph [ref=f10e190]: T-48h Escalation
+            - paragraph [ref=f10e191]: Email + in-app
+          - generic [ref=f10e192]:
+            - generic [ref=f10e193]: Bid owner
+            - generic [ref=f10e194]: Approver
+        - generic [ref=f10e195]:
+          - generic [ref=f10e196]:
+            - paragraph [ref=f10e197]: T-24h Critical
+            - paragraph [ref=f10e198]: Email + in-app + SMS
+          - generic [ref=f10e199]:
+            - generic [ref=f10e200]: Bid owner
+            - generic [ref=f10e201]: Approver
+            - generic [ref=f10e202]: Admin

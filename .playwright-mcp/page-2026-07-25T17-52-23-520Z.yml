@@ -1,0 +1,129 @@
+- generic [ref=f18e2]:
+  - navigation [ref=f18e3]:
+    - generic [ref=f18e4]:
+      - generic [ref=f18e5]: TC
+      - generic [ref=f18e6]: TenderCraft
+    - list [ref=f18e7]:
+      - listitem [ref=f18e8]:
+        - link "Dashboard" [ref=f18e9] [cursor=pointer]:
+          - /url: /dashboard
+      - listitem [ref=f18e10]:
+        - link "Tenders" [ref=f18e11] [cursor=pointer]:
+          - /url: /tenders
+      - listitem [ref=f18e12]:
+        - link "Proposals" [ref=f18e13] [cursor=pointer]:
+          - /url: /proposals
+      - listitem [ref=f18e14]:
+        - link "Knowledge Base" [ref=f18e15] [cursor=pointer]:
+          - /url: /library
+      - listitem [ref=f18e16]:
+        - link "Vendor Profile" [ref=f18e17] [cursor=pointer]:
+          - /url: /profile
+      - listitem [ref=f18e18]:
+        - link "Settings" [ref=f18e19] [cursor=pointer]:
+          - /url: /settings
+  - main [ref=f18e21]:
+    - generic [ref=f18e22]:
+      - heading "Score Estimate" [level=1] [ref=f18e23]
+      - paragraph [ref=f18e24]: e-Office Software Implementation
+      - generic [ref=f18e25]:
+        - paragraph [ref=f18e26]: No estimate yet
+        - button "Estimate technical score" [ref=f18e27] [cursor=pointer]
+    - generic [ref=f18e28]:
+      - generic [ref=f18e29]:
+        - generic [ref=f18e30]:
+          - heading "Technical competence" [level=2] [ref=f18e31]
+          - button "Recompute" [ref=f18e32] [cursor=pointer]
+        - paragraph [ref=f18e33]: 69.4 / 100
+        - paragraph [ref=f18e34]: Clears both technical gates
+        - paragraph [ref=f18e35]: Measured from this document, not predicted. Indian government IT tenders require ≥45% on every evaluation head and ≥65% in aggregate (MeitY Model RFP §2.6.2, CAG OIOS §7) — below either, the commercial cover is never opened.
+      - generic [ref=f18e36]:
+        - heading "Marks by evaluation head" [level=3] [ref=f18e37]
+        - generic [ref=f18e38]:
+          - generic [ref=f18e39]:
+            - generic [ref=f18e40]: Understanding of scope
+            - generic [ref=f18e43]: 7.0/10
+          - generic [ref=f18e44]:
+            - generic [ref=f18e45]: Proposed solution & technology
+            - generic [ref=f18e48]: 10.8/20
+          - generic [ref=f18e49]:
+            - generic [ref=f18e50]: Approach, methodology & work plan
+            - generic [ref=f18e53]: 10.5/15
+          - generic [ref=f18e54]:
+            - generic [ref=f18e55]: Team composition & key personnel
+            - generic [ref=f18e58]: 7.0/15
+          - generic [ref=f18e59]:
+            - generic [ref=f18e60]: Relevant experience & past performance
+            - generic [ref=f18e63]: 15.0/15
+          - generic [ref=f18e64]:
+            - generic [ref=f18e65]: Quality assurance & testing
+            - generic [ref=f18e68]: 5.6/8
+          - generic [ref=f18e69]:
+            - generic [ref=f18e70]: Training & capacity building
+            - generic [ref=f18e73]: 4.8/6
+          - generic [ref=f18e74]:
+            - generic [ref=f18e75]: Support, SLA & O&M
+            - generic [ref=f18e78]: 5.6/7
+          - generic [ref=f18e79]:
+            - generic [ref=f18e80]: Risk management & mitigation
+            - generic [ref=f18e83]: 3.2/4
+      - generic [ref=f18e84]:
+        - heading "How to improve this score" [level=3] [ref=f18e85]
+        - paragraph [ref=f18e86]: Each figure is the marks actually recoverable on that head — computed, not estimated.
+        - list [ref=f18e87]:
+          - listitem [ref=f18e88]:
+            - generic [ref=f18e89]: "+8.00"
+            - generic [ref=f18e90]:
+              - text: Team composition & key personnel
+              - generic [ref=f18e91]: Upload CVs for key personnel — team profile carries up to 20% of the technical marks.
+              - link "Fix this →" [ref=f18e92] [cursor=pointer]:
+                - /url: /library
+          - listitem [ref=f18e93]:
+            - generic [ref=f18e94]: "+5.25"
+            - generic [ref=f18e95]:
+              - text: Proposed solution & technology
+              - generic [ref=f18e96]: Section is materially shorter than a government technical bid expects.
+              - link "Fix this →" [ref=f18e97] [cursor=pointer]:
+                - /url: /proposals/13d9ee4e-9e4c-4077-8333-7e6f05377c4a
+          - listitem [ref=f18e98]:
+            - generic [ref=f18e99]: "+4.00"
+            - generic [ref=f18e100]:
+              - text: Proposed solution & technology
+              - generic [ref=f18e101]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+              - link "Fix this →" [ref=f18e102] [cursor=pointer]:
+                - /url: /proposals/13d9ee4e-9e4c-4077-8333-7e6f05377c4a
+          - listitem [ref=f18e103]:
+            - generic [ref=f18e104]: "+3.00"
+            - generic [ref=f18e105]:
+              - text: Approach, methodology & work plan
+              - generic [ref=f18e106]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+              - link "Fix this →" [ref=f18e107] [cursor=pointer]:
+                - /url: /proposals/13d9ee4e-9e4c-4077-8333-7e6f05377c4a
+          - listitem [ref=f18e108]:
+            - generic [ref=f18e109]: "+2.00"
+            - generic [ref=f18e110]:
+              - text: Understanding of scope
+              - generic [ref=f18e111]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+              - link "Fix this →" [ref=f18e112] [cursor=pointer]:
+                - /url: /proposals/13d9ee4e-9e4c-4077-8333-7e6f05377c4a
+          - listitem [ref=f18e113]:
+            - generic [ref=f18e114]: "+1.60"
+            - generic [ref=f18e115]:
+              - text: Quality assurance & testing
+              - generic [ref=f18e116]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+              - link "Fix this →" [ref=f18e117] [cursor=pointer]:
+                - /url: /proposals/13d9ee4e-9e4c-4077-8333-7e6f05377c4a
+          - listitem [ref=f18e118]:
+            - generic [ref=f18e119]: "+1.52"
+            - generic [ref=f18e120]:
+              - text: Approach, methodology & work plan
+              - generic [ref=f18e121]: Section is materially shorter than a government technical bid expects.
+              - link "Fix this →" [ref=f18e122] [cursor=pointer]:
+                - /url: /proposals/13d9ee4e-9e4c-4077-8333-7e6f05377c4a
+          - listitem [ref=f18e123]:
+            - generic [ref=f18e124]: "+1.40"
+            - generic [ref=f18e125]:
+              - text: Support, SLA & O&M
+              - generic [ref=f18e126]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+              - link "Fix this →" [ref=f18e127] [cursor=pointer]:
+                - /url: /proposals/13d9ee4e-9e4c-4077-8333-7e6f05377c4a

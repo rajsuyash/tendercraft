@@ -1,3 +1,5 @@
+import { MembersPanel, type Invitation, type Member } from "@/components/MembersPanel";
+import { engineFetch } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 
 // S12 — Workspace Settings. Read-mostly: RBAC roster, approval chain, immutable
@@ -52,13 +54,30 @@ function RoleChip({ role }: { role: Role }) {
 export default async function SettingsPage() {
   const supabase = await createClient();
 
-  // ponytail: profiles has no name/email column — only user_id + role. Roster
-  // shows a truncated user_id in place of a display name. Add name/email once
-  // the schema carries them (schema gap, not a UI shortcut).
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("user_id,role,created_at")
-    .order("created_at", { ascending: true });
+  // Members come from the ENGINE, not a direct Supabase read: the roster needs the
+  // workspace_members join and profile identity, and the old direct query could only ever
+  // return one row (profiles_self_select).
+  const meRes = await engineFetch("/api/me");
+  const me = meRes.ok ? (await meRes.json()).data : null;
+
+  let members: Member[] = [];
+  let invitations: Invitation[] = [];
+  if (me?.workspace_id) {
+    const res = await engineFetch(`/api/workspaces/${me.workspace_id}/members`);
+    if (res.ok) {
+      const body = await res.json();
+      if (body.ok) {
+        members = body.data.members as Member[];
+        invitations = body.data.invitations as Invitation[];
+      }
+    }
+  }
+
+  const { data: workspace } = await supabase
+    .from("workspaces")
+    .select("name")
+    .eq("id", me?.workspace_id ?? "")
+    .maybeSingle();
 
   const { data: auditEvents } = await supabase
     .from("audit_events")
@@ -70,7 +89,7 @@ export default async function SettingsPage() {
     <main className="p-page">
       <header className="mb-6">
         <h1 className="font-heading text-2xl font-semibold text-ink">
-          Workspace — Meridian Infotech Pvt Ltd
+          Workspace — {workspace?.name ?? "—"}
         </h1>
         <p className="text-sm text-muted">
           Manage enterprise settings, roles, and compliance workflows.
@@ -85,36 +104,15 @@ export default async function SettingsPage() {
         ))}
       </nav>
 
-      <section className="mb-8">
-        <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Members & Roles</h2>
-        <div className="overflow-x-auto rounded-card border border-border bg-surface">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
-                <th className="p-card">User</th>
-                <th className="p-card">Role</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(profiles ?? []).map((p) => (
-                <tr key={p.user_id} className="h-11 border-b border-border last:border-0">
-                  <td className="p-card font-mono text-xs text-muted">{p.user_id.slice(0, 8)}…</td>
-                  <td className="p-card">
-                    <RoleChip role={p.role as Role} />
-                  </td>
-                </tr>
-              ))}
-              {(profiles ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={2} className="p-card text-sm text-muted">
-                    No members found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <div className="mb-8">
+        <MembersPanel
+          workspaceId={me?.workspace_id ?? ""}
+          members={members}
+          invitations={invitations}
+          canManage={me?.role === "admin"}
+          currentUserId={me?.user_id ?? ""}
+        />
+      </div>
 
       <section className="mb-8">
         <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Approval chains</h2>

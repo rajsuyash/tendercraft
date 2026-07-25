@@ -1,0 +1,51 @@
+- generic [active] [ref=f9e1]:
+  - button "Open Next.js Dev Tools" [ref=f9e26] [cursor=pointer]
+  - alert [ref=f9e30]
+  - generic [ref=f9e31]:
+    - navigation [ref=f9e32]:
+      - generic [ref=f9e33]:
+        - generic [ref=f9e34]: TC
+        - generic [ref=f9e35]: TenderCraft
+      - list [ref=f9e36]:
+        - listitem [ref=f9e37]:
+          - link "Dashboard" [ref=f9e38] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f9e39]:
+          - link "Tenders" [ref=f9e40] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f9e41]:
+          - link "Proposals" [ref=f9e42] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f9e43]:
+          - link "Knowledge Base" [ref=f9e44] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f9e45]:
+          - link "Vendor Profile" [ref=f9e46] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f9e47]:
+          - link "Settings" [ref=f9e48] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f9e50]:
+      - generic [ref=f9e51]:
+        - heading "Dashboard" [level=1] [ref=f9e52]
+        - paragraph [ref=f9e53]: Your active tenders and what needs attention.
+      - generic [ref=f9e54]:
+        - generic [ref=f9e55]:
+          - paragraph [ref=f9e56]: Active tenders
+          - paragraph [ref=f9e57]: "4"
+        - generic [ref=f9e58]:
+          - paragraph [ref=f9e59]: Awaiting verification
+          - paragraph [ref=f9e60]: "0"
+        - generic [ref=f9e61]:
+          - paragraph [ref=f9e62]: Drafts in review
+          - paragraph [ref=f9e63]: "0"
+        - generic [ref=f9e64]:
+          - paragraph [ref=f9e65]: Analyses left
+          - paragraph [ref=f9e66]: Unlimited
+      - generic [ref=f9e67]:
+        - heading "Deadlines" [level=2] [ref=f9e68]
+        - list [ref=f9e69]:
+          - listitem [ref=f9e70]: e-Office Software Implementation
+          - listitem [ref=f9e71]: Supply of 500 Desktop Computers
+          - listitem [ref=f9e72]: NABARD RFP.pdf
+          - listitem [ref=f9e73]: NABARD RFP.pdf

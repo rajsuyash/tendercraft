@@ -207,10 +207,27 @@ async function main() {
   await fetch(`${SB_URL}/rest/v1/profiles`, {
     method: "POST",
     headers: { ...authHeaders, Prefer: "resolution=merge-duplicates" },
-    body: JSON.stringify({ user_id: user.id, workspace_id: workspaceId, role: "admin" }),
+    // email/full_name are what the members roster renders — without them it falls back
+    // to a truncated UUID, which is the bug migration 0013 exists to fix.
+    body: JSON.stringify({
+      user_id: user.id,
+      workspace_id: workspaceId,
+      active_workspace_id: workspaceId,
+      role: "admin",
+      email: FIX1_EMAIL,
+      full_name: "Priya Sharma",
+    }),
   });
 
   console.log(`✓ FIX-1 ready: ${FIX1_EMAIL} / ${FIX1_PASSWORD}`);
+  // Since 0011 a profiles row alone grants NOTHING: current_workspace_id() validates the
+  // active workspace against workspace_members. Seed both or the user sees zero rows.
+  await fetch(`${SB_URL}/rest/v1/workspace_members?on_conflict=user_id,workspace_id`, {
+    method: "POST",
+    headers: { ...authHeaders, Prefer: "resolution=merge-duplicates" },
+    body: JSON.stringify({ user_id: user.id, workspace_id: workspaceId, role: "admin" }),
+  });
+
   console.log(`  workspace "${WORKSPACE_NAME}" = ${workspaceId}`);
 }
 

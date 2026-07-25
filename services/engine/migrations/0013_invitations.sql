@@ -56,3 +56,17 @@ create policy profiles_self on public.profiles for select
 drop policy if exists profiles_roster on public.profiles;
 create policy profiles_roster on public.profiles for select
   using (user_id in (select public.current_workspace_member_ids()));
+
+-- ---------- backfill identity for users who predate this migration ----------
+-- Only invite-accept writes full_name/email, so every EXISTING member would render as a
+-- truncated UUID — the exact problem this migration exists to fix. auth.users is readable
+-- here (migration runs as a superuser role) even though PostgREST cannot expose it.
+update public.profiles p
+   set email = u.email,
+       full_name = coalesce(
+         nullif(u.raw_user_meta_data ->> 'full_name', ''),
+         nullif(u.raw_user_meta_data ->> 'name', '')
+       )
+  from auth.users u
+ where u.id = p.user_id
+   and (p.email is null or p.full_name is null);
