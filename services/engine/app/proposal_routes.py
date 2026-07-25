@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Response
 
@@ -13,7 +13,7 @@ from pipeline.drafter import draft_response
 from pipeline.retrieval import chunk_docs, select_evidence
 from pipeline.section_drafter import draft_section
 
-from . import db, docx_export, sections
+from . import authz, db, docx_export, sections
 from .auth import AuthedUser, get_current_user
 from .deterministic.drafting import mandatory_coverage
 from .envelope import ApiError, ok
@@ -256,18 +256,32 @@ def compliance_matrix(tender_id: str, user: CurrentUser) -> dict:
     )
     decision, rows = export_service.evaluate(
         criteria, responses, proposal.get("approvals_required", 2), len(approvals),
-        sections=doc_sections,
+        sections=doc_sections, approvals=approvals,
     )
     return ok({**_matrix_payload(decision, rows), "approvals": approvals,
                "approvals_required": proposal.get("approvals_required", 2)})
 
 
 @router.post("/api/proposals/{proposal_id}/approve")
-def approve(proposal_id: str, user: CurrentUser, stage: str = "review") -> dict:
+def approve(
+    proposal_id: str,
+    user: CurrentUser,
+    stage: Literal["review", "compliance", "legal", "final"] = "review",
+) -> dict:
+    # `stage` was free text: two calls with invented names created two rows and cleared a
+    # gate that requires two approvals. Now it is a closed set AND the caller must hold the
+    # matching approve:<stage> permission.
+    authz.check(user, f"approve:{stage}")
     # proposal_id comes from the path, so prove ownership BEFORE any write — the write
     # itself runs as the service role and RLS will not stop a foreign id.
     if not db.get_proposal(proposal_id, user.workspace_id):
         raise ApiError(404, "PROPOSAL_NOT_FOUND", "proposal not found in your workspace")
+    # Segregation of duties: the gate decides (app/deterministic/export_gate.py), this is
+    # only the friendly rejection so a reviewer learns why before the export screen does.
+    prior = db.get_approvals(proposal_id, user.workspace_id)
+    if any(a.get("approver") == user.user_id and a.get("stage") != stage for a in prior):
+        raise ApiError(409, "SEGREGATION_OF_DUTIES",
+                       "you have already signed another stage of this proposal")
     db.add_approval(user.workspace_id, proposal_id, stage, user.user_id)
     db.write_audit(user.workspace_id, user.user_id, "approval", "proposal", proposal_id,
                    after={"stage": stage})
@@ -292,6 +306,20 @@ def approve_section(proposal_id: str, key: str, user: CurrentUser) -> dict:
     return ok({"proposal_id": proposal_id, "section": key, "approved_at": when})
 
 
+def _authorize_override(user: CurrentUser, proposal_id: str) -> None:
+    """Admin-only, and the ATTEMPT is audited before the decision.
+
+    E-AC2 calls this "a logged admin path". It was neither: `override` is a query parameter
+    and no role was ever checked, so any writer could clear every override-able blocker
+    including the entire approval chain. A non-admin trying is itself a signal worth
+    keeping, so the audit write comes first.
+    """
+    db.write_audit(user.workspace_id, user.user_id, "override_attempt", "proposal",
+                   proposal_id, after={"role": user.role, "granted": authz.can(
+                       user, authz.OVERRIDE_EXPORT)})
+    authz.check(user, authz.OVERRIDE_EXPORT)
+
+
 @router.get("/api/tenders/{tender_id}/export/docx")
 def export_docx(tender_id: str, user: CurrentUser, override: bool = False) -> Response:
     """Download the assembled proposal as .docx.
@@ -305,10 +333,12 @@ def export_docx(tender_id: str, user: CurrentUser, override: bool = False) -> Re
     )
     if not doc_sections:
         raise ApiError(409, "NO_SECTIONS", "generate the proposal document first")
+    if override:
+        _authorize_override(user, proposal["id"])
 
     decision, _rows = export_service.evaluate(
         criteria, responses, proposal.get("approvals_required", 2), len(approvals),
-        admin_override=override, sections=doc_sections,
+        admin_override=override, sections=doc_sections, approvals=approvals,
     )
     if not decision.exportable:
         blockers = list(decision.hard_blockers) + list(decision.override_blockers)
@@ -354,9 +384,11 @@ def export_proposal(tender_id: str, user: CurrentUser, override: bool = False) -
     export_service, proposal, criteria, responses, approvals, doc_sections = _load_export_context(
         tender_id, user
     )
+    if override:
+        _authorize_override(user, proposal["id"])
     decision, rows = export_service.evaluate(
         criteria, responses, proposal.get("approvals_required", 2), len(approvals),
-        admin_override=override, sections=doc_sections,
+        admin_override=override, sections=doc_sections, approvals=approvals,
     )
     if not decision.exportable:
         blockers = list(decision.hard_blockers) + list(decision.override_blockers)

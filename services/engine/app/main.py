@@ -9,9 +9,16 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
+from fastapi.exceptions import RequestValidationError
 
 from .auth import AuthedUser, get_current_user
-from .envelope import ApiError, api_error_handler, ok
+from .envelope import (
+    ApiError,
+    api_error_handler,
+    ok,
+    unhandled_error_handler,
+    validation_error_handler,
+)
 
 CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
 
@@ -25,6 +32,10 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="TenderCraft Engine", version="0.1.0")
     app.add_exception_handler(ApiError, api_error_handler)
+    # Every error path returns the envelope — including the two that previously did not:
+    # request validation (FastAPI's {"detail": ...}) and anything unhandled (plain text).
+    app.add_exception_handler(RequestValidationError, validation_error_handler)
+    app.add_exception_handler(Exception, unhandled_error_handler)
     app.include_router(tenders_router)
     app.include_router(analyze_router)
     app.include_router(proposal_router)

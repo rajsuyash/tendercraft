@@ -64,11 +64,20 @@ def build_section_rows(sections: list[dict]) -> list[SectionRow]:
 def evaluate(
     criteria: list[dict], responses: list[dict], approvals_required: int, approvals_done: int,
     admin_override: bool = False, sections: list[dict] | None = None,
+    approvals: list[dict] | None = None,
 ) -> tuple[ExportDecision, list[ComplianceRow]]:
     rows = build_matrix(criteria, responses)
+    # Distinct approvers drive segregation of duties (E-FR1). Falls back to the raw count
+    # when the caller passes no approval rows, which keeps the check inert rather than
+    # wrongly blocking an older caller.
+    distinct = (
+        len({a.get("approver") for a in approvals if a.get("approver")}) if approvals else 0
+    )
     decision = evaluate_export(
         rows,
-        ApprovalChain(required=approvals_required, completed=approvals_done),
+        ApprovalChain(
+            required=approvals_required, completed=approvals_done, distinct_approvers=distinct
+        ),
         admin_override,
         build_section_rows(sections or []),
     )

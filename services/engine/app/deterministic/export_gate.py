@@ -37,9 +37,20 @@ class SectionRow:
 class ApprovalChain:
     required: int
     completed: int
+    # Distinct human approvers. Defaulted so every existing caller and test compiles; when
+    # it is left at 0 the SoD check is inert rather than wrongly blocking.
+    distinct_approvers: int = 0
 
     def is_complete(self) -> bool:
         return self.completed >= self.required
+
+    def has_segregation_of_duties(self) -> bool:
+        """E-FR1: N stages must be signed by N different people.
+
+        Counting rows alone made the chain a counter, not a control — one person could
+        satisfy every stage. Inert until a caller supplies distinct_approvers.
+        """
+        return self.distinct_approvers == 0 or self.distinct_approvers >= self.required
 
 
 @dataclass(frozen=True)
@@ -103,6 +114,11 @@ def evaluate_export(
     if not approvals.is_complete():
         override.append(
             f"approvals incomplete: {approvals.completed}/{approvals.required} (E-AC2)"
+        )
+    elif not approvals.has_segregation_of_duties():
+        override.append(
+            f"segregation of duties: {approvals.completed} stages signed by "
+            f"{approvals.distinct_approvers} person(s) (E-FR1)"
         )
 
     resolved = addressed / len(mandatory) if mandatory else 1.0

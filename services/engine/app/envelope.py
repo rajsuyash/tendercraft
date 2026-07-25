@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import Request
@@ -33,3 +34,25 @@ class ApiError(Exception):
 
 async def api_error_handler(_: Request, exc: ApiError) -> JSONResponse:
     return JSONResponse(status_code=exc.status, content=err(exc.code, exc.message))
+
+
+async def validation_error_handler(_: Request, __: Exception) -> JSONResponse:
+    """FastAPI's default validation response is {"detail": [...]}, which breaks the LOCKED
+    envelope the web UI switches on.
+
+    The message deliberately does NOT echo the validator output: these run on authz-adjacent
+    endpoints (e.g. the approval `stage` enum), and enumerating the accepted values is free
+    reconnaissance.
+    """
+    return JSONResponse(status_code=422, content=err("VALIDATION_ERROR", "invalid request"))
+
+
+async def unhandled_error_handler(_: Request, exc: Exception) -> JSONResponse:
+    """Anything not otherwise handled. Without this, Starlette returns PLAIN TEXT
+    'Internal Server Error', which the web route handlers stamp as JSON — so JSON.parse
+    throws in the browser and the user gets a blank screen instead of an error state.
+
+    The exception is logged, never serialized: stack traces do not leave the process.
+    """
+    logging.getLogger("tendercraft.engine").exception("unhandled error", exc_info=exc)
+    return JSONResponse(status_code=500, content=err("INTERNAL", "internal error"))

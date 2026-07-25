@@ -174,3 +174,38 @@ def test_section_blockers_clear_under_admin_override():
     d = evaluate_export([_crow()], ApprovalChain(2, 2), True,
                         [_sect(approved=False, narrative_sentences=10, status="placeholder")])
     assert d.exportable and d.override_used
+
+
+# --- segregation of duties (E-FR1) ---
+
+
+def _chain(required=2, completed=2, distinct=0):
+    from app.deterministic.export_gate import ApprovalChain, evaluate_export
+    return evaluate_export([_crow()], ApprovalChain(required, completed, distinct))
+
+
+def test_two_stages_signed_by_one_person_is_blocked():
+    """The chain was a counter, not a control: one user could sign every stage."""
+    d = _chain(required=2, completed=2, distinct=1)
+    assert not d.exportable
+    assert any("segregation of duties" in b for b in d.override_blockers)
+
+
+def test_two_stages_signed_by_two_people_clears():
+    assert _chain(required=2, completed=2, distinct=2).exportable
+
+
+def test_more_approvers_than_required_clears():
+    assert _chain(required=2, completed=3, distinct=3).exportable
+
+
+def test_sod_is_inert_when_the_caller_supplies_no_approver_data():
+    # distinct=0 means "not measured" — must not wrongly block a pre-existing caller.
+    assert _chain(required=2, completed=2, distinct=0).exportable
+
+
+def test_incomplete_approvals_reported_before_sod():
+    # An incomplete chain is the more actionable message; don't emit both.
+    d = _chain(required=2, completed=1, distinct=1)
+    assert any("approvals incomplete" in b for b in d.override_blockers)
+    assert not any("segregation" in b for b in d.override_blockers)
