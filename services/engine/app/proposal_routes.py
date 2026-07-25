@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from pipeline.drafter import draft_response
 from pipeline.retrieval import chunk_docs, select_evidence
 from pipeline.section_drafter import draft_section
 
-from . import db, sections
+from . import db, docx_export, sections
 from .auth import AuthedUser, get_current_user
 from .deterministic.drafting import mandatory_coverage
 from .envelope import ApiError, ok
@@ -225,7 +226,8 @@ def _load_export_context(tender_id: str, user: CurrentUser):
     criteria = db.get_criteria(tender_id, user.tenant_id)
     responses = db.get_responses(proposal["id"], user.tenant_id)
     approvals = db.get_approvals(proposal["id"], user.tenant_id)
-    return export_service, proposal, criteria, responses, approvals
+    doc_sections = db.get_sections(proposal["id"], user.tenant_id)
+    return export_service, proposal, criteria, responses, approvals, doc_sections
 
 
 def _matrix_payload(decision, rows) -> dict:
@@ -249,9 +251,12 @@ def _matrix_payload(decision, rows) -> dict:
 
 @router.get("/api/tenders/{tender_id}/compliance-matrix")
 def compliance_matrix(tender_id: str, user: CurrentUser) -> dict:
-    export_service, proposal, criteria, responses, approvals = _load_export_context(tender_id, user)
+    export_service, proposal, criteria, responses, approvals, doc_sections = _load_export_context(
+        tender_id, user
+    )
     decision, rows = export_service.evaluate(
-        criteria, responses, proposal.get("approvals_required", 2), len(approvals)
+        criteria, responses, proposal.get("approvals_required", 2), len(approvals),
+        sections=doc_sections,
     )
     return ok({**_matrix_payload(decision, rows), "approvals": approvals,
                "approvals_required": proposal.get("approvals_required", 2)})
@@ -265,12 +270,85 @@ def approve(proposal_id: str, user: CurrentUser, stage: str = "review") -> dict:
     return ok({"proposal_id": proposal_id, "stage": stage})
 
 
+@router.post("/api/proposals/{proposal_id}/sections/{key}/approve")
+def approve_section(proposal_id: str, key: str, user: CurrentUser) -> dict:
+    """Human sign-off on one narrative section.
+
+    This is the control that replaces cite-or-flag for AI-authored approach prose: nothing
+    exists to cite a forward commitment against, so a person signs it instead (B-FR4).
+    """
+    when = datetime.now(UTC).isoformat()
+    db.approve_section(user.tenant_id, proposal_id, key, user.user_id, when)
+    db.write_audit(user.tenant_id, user.user_id, "section_approval", "proposal", proposal_id,
+                   after={"section": key})
+    return ok({"proposal_id": proposal_id, "section": key, "approved_at": when})
+
+
+@router.get("/api/tenders/{tender_id}/export/docx")
+def export_docx(tender_id: str, user: CurrentUser, override: bool = False) -> Response:
+    """Download the assembled proposal as .docx.
+
+    The gate runs FIRST — not one byte of python-docx executes for a proposal that may not
+    export. This is the only endpoint returning bytes on success; every error path still
+    returns the {ok,data,error} envelope (documented in docs/conventions.md).
+    """
+    export_service, proposal, criteria, responses, approvals, doc_sections = _load_export_context(
+        tender_id, user
+    )
+    if not doc_sections:
+        raise ApiError(409, "NO_SECTIONS", "generate the proposal document first")
+
+    decision, _rows = export_service.evaluate(
+        criteria, responses, proposal.get("approvals_required", 2), len(approvals),
+        admin_override=override, sections=doc_sections,
+    )
+    if not decision.exportable:
+        blockers = list(decision.hard_blockers) + list(decision.override_blockers)
+        raise ApiError(409, "EXPORT_BLOCKED", " | ".join(blockers))
+
+    tender = db.get_tender(tender_id, user.tenant_id) or {}
+    legal = (db.get_profile_context(user.tenant_id).get("legal_identity")) or {}
+    fully_approved = all(
+        s.get("approved_at") for s in doc_sections if s.get("kind") == "narrative"
+    )
+
+    blob = docx_export.render({
+        "tender": tender,
+        "bidder": {"name": tender.get("bidder_name") or "Bidder",
+                   "cin": legal.get("cin"), "gst": legal.get("gst")},
+        "generated_on": datetime.now(UTC).date().isoformat(),
+        "approved": fully_approved,
+        "sections": [
+            {"key": s.get("key"), "heading": s.get("heading"), "body_md": s.get("body_md"),
+             "kind": s.get("kind"), "status": s.get("status"),
+             "approved": bool(s.get("approved_at"))}
+            for s in doc_sections
+        ],
+    })
+
+    if fully_approved:
+        # B-FR4/G-3: the watermark coming OFF is itself an audited event.
+        db.write_audit(user.tenant_id, user.user_id, "watermark_removed", "proposal",
+                       proposal["id"], after={"sections": len(doc_sections)})
+    db.write_audit(user.tenant_id, user.user_id, "export_download", "proposal", proposal["id"],
+                   after={"bytes": len(blob), "override_used": decision.override_used})
+
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "-", str(tender.get("tender_number") or tender_id)).strip("-")
+    return Response(
+        content=blob,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"content-disposition": f'attachment; filename="{safe}-technical-proposal.docx"'},
+    )
+
+
 @router.post("/api/tenders/{tender_id}/export")
 def export_proposal(tender_id: str, user: CurrentUser, override: bool = False) -> dict:
-    export_service, proposal, criteria, responses, approvals = _load_export_context(tender_id, user)
+    export_service, proposal, criteria, responses, approvals, doc_sections = _load_export_context(
+        tender_id, user
+    )
     decision, rows = export_service.evaluate(
         criteria, responses, proposal.get("approvals_required", 2), len(approvals),
-        admin_override=override,
+        admin_override=override, sections=doc_sections,
     )
     if not decision.exportable:
         blockers = list(decision.hard_blockers) + list(decision.override_blockers)

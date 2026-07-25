@@ -16,9 +16,21 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from .types import ComplianceRow, CoverageStatus, RequirementLevel
+from .types import ComplianceRow, CoverageStatus, RequirementLevel, SectionKind
 
 _BLOCKING_STATUSES = {CoverageStatus.PLACEHOLDER, CoverageStatus.UNVERIFIED, CoverageStatus.MISSING}
+
+
+@dataclass(frozen=True)
+class SectionRow:
+    """One long-form document section, as the gate sees it."""
+
+    key: str
+    kind: SectionKind
+    status: str  # 'drafted' | 'placeholder' | 'unverified'
+    approved: bool = False
+    narrative_sentences: int = 0
+    has_uncited_financial_claim: bool = False
 
 
 @dataclass(frozen=True)
@@ -46,8 +58,12 @@ def evaluate_export(
     rows: Sequence[ComplianceRow],
     approvals: ApprovalChain,
     admin_override: bool = False,
+    sections: Sequence[SectionRow] = (),
 ) -> ExportDecision:
-    """Decide whether a proposal may export, separating hard from override-able blockers."""
+    """Decide whether a proposal may export, separating hard from override-able blockers.
+
+    `sections` defaults to empty so callers that predate the document layer are unaffected.
+    """
     hard: list[str] = []
     override: list[str] = []
 
@@ -55,6 +71,23 @@ def evaluate_export(
         if row.has_uncited_financial_claim:
             hard.append(
                 f"{row.criterion_id}: uncited financial/numeric claim (B-AC4, non-overridable)"
+            )
+
+    for s in sections:
+        # Without this the document layer would be a hole straight around B-AC4 — a figure
+        # smuggled into the methodology section would never reach the compliance matrix.
+        if s.has_uncited_financial_claim:
+            hard.append(
+                f"section {s.key}: uncited financial/numeric claim (B-AC4, non-overridable)"
+            )
+        if s.status == "placeholder":
+            override.append(f"section {s.key}: placeholder not resolved (B-FR2)")
+        # AI-authored narrative can't be policed by cite-or-flag — nothing exists to cite —
+        # so human sign-off is the control that replaces it (B-FR4).
+        if s.kind is SectionKind.NARRATIVE and s.narrative_sentences > 0 and not s.approved:
+            override.append(
+                f"section {s.key}: {s.narrative_sentences} AI-authored sentences "
+                "not human-approved (B-FR4)"
             )
 
     mandatory = [r for r in rows if r.requirement_level is RequirementLevel.MANDATORY]

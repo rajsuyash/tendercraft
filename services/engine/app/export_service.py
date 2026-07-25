@@ -7,8 +7,8 @@ here; the decision is the deterministic gate's.
 
 from __future__ import annotations
 
-from .deterministic.export_gate import ApprovalChain, ExportDecision, evaluate_export
-from .deterministic.types import ComplianceRow, CoverageStatus, RequirementLevel
+from .deterministic.export_gate import ApprovalChain, ExportDecision, SectionRow, evaluate_export
+from .deterministic.types import ComplianceRow, CoverageStatus, RequirementLevel, SectionKind
 
 _STATUS_MAP = {
     "drafted": CoverageStatus.COVERED,
@@ -42,12 +42,34 @@ def build_matrix(criteria: list[dict], responses: list[dict]) -> list[Compliance
     return rows
 
 
+def build_section_rows(sections: list[dict]) -> list[SectionRow]:
+    """Map persisted document sections to what the gate needs to see."""
+    return [
+        SectionRow(
+            key=s.get("key", ""),
+            kind=SectionKind.NARRATIVE if s.get("kind") == "narrative" else SectionKind.COMPLIANCE,
+            status=s.get("status", "drafted"),
+            approved=bool(s.get("approved_at")),
+            narrative_sentences=sum(
+                1 for x in (s.get("sentences") or []) if x.get("cls") == "narrative"
+            ),
+            has_uncited_financial_claim=any(
+                f.get("reason") == "uncited_financial" for f in (s.get("flags") or [])
+            ),
+        )
+        for s in sections
+    ]
+
+
 def evaluate(
     criteria: list[dict], responses: list[dict], approvals_required: int, approvals_done: int,
-    admin_override: bool = False,
+    admin_override: bool = False, sections: list[dict] | None = None,
 ) -> tuple[ExportDecision, list[ComplianceRow]]:
     rows = build_matrix(criteria, responses)
     decision = evaluate_export(
-        rows, ApprovalChain(required=approvals_required, completed=approvals_done), admin_override
+        rows,
+        ApprovalChain(required=approvals_required, completed=approvals_done),
+        admin_override,
+        build_section_rows(sections or []),
     )
     return decision, rows

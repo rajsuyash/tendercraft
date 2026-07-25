@@ -37,3 +37,11 @@
 - Tests colocated: `*.test.ts` beside source (web), `tests/` mirror (engine). Fixture data under `fixtures/`, referenced by FIX-ids from docs/PRD.md §10.
 - Imports: std/lib → third-party → internal, alphabetized within groups.
 - Currency in UI: Indian format (₹10 Cr, ₹2,40,000); dates DD/MM/YYYY; FYs as FY23–FY25 — format helpers in `apps/web/lib/format.ts`, never ad-hoc.
+
+### Binary download endpoints (documented deviation)
+
+`GET /api/tenders/{id}/export/docx` returns **bytes** on 2xx — the one exception to the
+envelope rule. Every error path still returns `{ok,data,error}`, and the state-changing
+`POST .../export` keeps the envelope, so the rule holds for everything that mutates.
+The export gate is evaluated BEFORE any rendering: a blocked proposal produces a 409
+envelope and zero document bytes.
