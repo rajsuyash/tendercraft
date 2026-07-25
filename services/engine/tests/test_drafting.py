@@ -103,16 +103,69 @@ def test_narrative_survives_in_a_narrative_section():
     assert classify_sentence(NARR, "We follow an agile delivery cadence.", NARRATIVE_SEC) is NARR
 
 
-def test_digits_coerce_narrative_to_claim():
-    assert classify_sentence(NARR, "Deployment spans 3 phases.", NARRATIVE_SEC) is CLAIM
+def test_digits_in_a_present_tense_assertion_coerce_to_claim():
+    assert classify_sentence(NARR, "We employ 200 certified engineers.", NARRATIVE_SEC) is CLAIM
+
+
+def test_digits_inside_a_forward_commitment_stay_narrative():
+    """Regression from the first live run: 'Level 1 (L1) helpdesk' and 'the L3 team will...'
+    were flagged as unsourced claims. A number inside a promise is design detail."""
+    for t in [
+        "We propose a Level 1 (L1) helpdesk as the single point of contact.",
+        "The L3 team will handle complex system-level problems.",
+        "Deployment will span 3 phases with departmental sign-off.",
+    ]:
+        assert classify_sentence(NARR, t, NARRATIVE_SEC) is NARR, t
 
 
 def test_credential_words_coerce_narrative_to_claim():
     assert classify_sentence(NARR, "Our ISO aligned process applies.", NARRATIVE_SEC) is CLAIM
 
 
+def test_deliverable_named_certificate_is_not_a_credential_claim():
+    """Regression: a bare 'certif' stem matched 'Project Closure Certificate' — a work-plan
+    milestone — and demanded a source document for it."""
+    t = "The phase concludes with issuance of the Project Closure Certificate."
+    assert classify_sentence(NARR, t, NARRATIVE_SEC) is NARR
+
+
 def test_evidentiary_phrasing_coerces_narrative_to_claim():
-    assert classify_sentence(NARR, "We have delivered similar systems.", NARRATIVE_SEC) is CLAIM
+    for t in [
+        "We have delivered similar systems.",
+        "We have successfully implemented a statewide automation system.",
+        "Our track record includes migration of legacy databases.",
+        "Our experience includes training administrative staff.",
+        "We operate a dedicated disaster recovery site.",
+    ]:
+        assert classify_sentence(NARR, t, NARRATIVE_SEC) is CLAIM, t
+
+
+def test_enumeration_labels_are_not_quantities():
+    """Regression from live run 2: nine support-model sentences were flagged as unsourced
+    claims because 'Tier 1' / 'Severity 3' contain digits. A label identifies, it doesn't
+    quantify."""
+    for t in [
+        "Tier 1 support serves as the initial point of contact for all user inquiries.",
+        "Incidents are systematically escalated to Tier 2 support.",
+        "Critical outages are classified as Severity 1.",
+        "Minor issues fall under Severity 4.",
+        "Phase 2 covers requirements sign-off.",
+        "We, Merdian Technology, submit our proposal in response to Tender No. MAHA/IT/2026/4415.",
+    ]:
+        assert classify_sentence(NARR, t, NARRATIVE_SEC) is NARR, t
+
+
+def test_a_real_quantity_still_coerces_even_beside_a_label():
+    t = "Tier 1 support is staffed by 40 engineers."
+    assert classify_sentence(NARR, t, NARRATIVE_SEC) is CLAIM
+
+
+def test_money_is_caught_regardless_of_forward_phrasing():
+    """The forward-commitment exemption must never reach the hard financial gate."""
+    v = validate_draft(
+        [_s("We will deliver the programme for ₹8.2 Cr.", cls=NARR)], VALID, NARRATIVE_SEC
+    )
+    assert [f.reason for f in v.flags] == ["uncited_financial"]
 
 
 def test_claim_is_never_softened_to_narrative():

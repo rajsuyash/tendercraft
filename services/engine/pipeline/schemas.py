@@ -78,6 +78,45 @@ DRAFT_SCHEMA = {
     "required": ["has_sufficient_evidence", "sentences"],
 }
 
+# Long-form section output. Carries STRUCTURE (heading, order, subsections) — which
+# DRAFT_SCHEMA cannot, which is why a proposal was one flat paragraph per criterion.
+# Note what is absent from the class enum: "assembled" and "placeholder" are Python-only,
+# so a model can never claim to be a transclusion (B-FR3) or a sourcing placeholder (B-FR2).
+SECTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "has_sufficient_context": {"type": "boolean"},
+        "confidence": {"type": "number"},
+        "subsections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "heading": {"type": "string"},
+                    "order": {"type": "number"},
+                    "sentences": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "citations": {"type": "array", "items": {"type": "string"}},
+                                "proposed_class": {
+                                    "type": "string",
+                                    "enum": ["claim", "narrative"],
+                                },
+                            },
+                            "required": ["text", "proposed_class"],
+                        },
+                    },
+                },
+                "required": ["heading", "sentences"],
+            },
+        },
+    },
+    "required": ["has_sufficient_context", "confidence", "subsections"],
+}
+
 # Gemini responseSchema (OpenAPI subset) for criteria extraction.
 CRITERIA_SCHEMA = {
     "type": "object",

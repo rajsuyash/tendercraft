@@ -55,14 +55,29 @@ class DraftValidation:
 # Evidence-shaped: enough to force NARRATIVE -> CLAIM. Deliberately broad — the cost of a
 # false positive is only "this sentence must cite", which is never wrong for a bid.
 _ANY_DIGIT = re.compile(r"\d")
+# Named credentials only. NOT a bare "certif" stem — that matched deliverable names like
+# "Project Closure Certificate", flagging a work-plan milestone as an unsourced credential.
 _CREDENTIAL = re.compile(
-    r"\b(iso|cmmi|nabl|bis|msme|udyam|dpiit|gstin?|cin|pan|empanel|certif)", re.I
+    r"\b(iso|cmmi|nabl|bis|msme|udyam|dpiit|gstin?|cin|pan|empanel"
+    r"|certified\s+(?:to|under|against)|accredited)\b",
+    re.I,
 )
+# Asserting something the bidder HAS or DID — the shape that genuinely needs a document.
 _EVIDENTIARY = re.compile(
-    r"\b(we\s+(?:have|had)\s+(?:completed|executed|delivered|supplied|implemented|"
-    r"commissioned|deployed)"
+    r"\b(we\s+(?:have|had)\s+(?:successfully\s+)?(?:completed|executed|delivered|supplied|"
+    r"implemented|commissioned|deployed|migrated|trained|built|managed)"
+    r"|we\s+(?:hold|own|operate|maintain|employ)"
+    r"|our\s+(?:experience|track\s+record|prior\s+work|past|portfolio|credentials)"
     r"|has\s+been\s+(?:certified|awarded|empanelled|empaneled)"
-    r"|certified\s+by|awarded\s+by|our\s+past|previously\s+delivered)\b",
+    r"|certified\s+by|awarded\s+by|previously\s+delivered)\b",
+    re.I,
+)
+# A forward commitment about THIS engagement — "the L1 team will serve as...", "we propose
+# a phased rollout". Digits inside a promise are design detail, not an evidence claim, so a
+# bare digit alone must not force a citation onto prose that describes future work.
+_FORWARD = re.compile(
+    r"\b(will|shall|propose[sd]?|proposing|would|intend|plan\s+to|is\s+to\s+be|"
+    r"plans?\s+to|plans?\s+for|are\s+to\s+be)\b",
     re.I,
 )
 
@@ -76,11 +91,32 @@ _MONEY = re.compile(
 )
 
 
+# Enumeration labels and document references — "Tier 1", "Severity 2", "L3", "Phase II",
+# "Tender No. MAHA/IT/2026/4415". The digit identifies a thing, it does not quantify a
+# bidder's capability, so it must not by itself demand a source document.
+_LABEL = re.compile(
+    r"\b(?:tier|level|severity|priority|phase|stage|form|format|annexure|clause|category|"
+    r"class|milestone|sprint|iso|l|p|s)\s*[-#]?\s*\d+\b"
+    r"|\b(?:tender|rfp|ref(?:erence)?|bid|doc(?:ument)?|no)\.?\s*(?:no\.?|number)?\s*"
+    r"[\w/\-]*\d[\w/\-]*",
+    re.I,
+)
+
+
 def is_evidence_shaped(text: str) -> bool:
-    """Does this sentence look like it asserts something checkable against a document?"""
-    return bool(
-        _ANY_DIGIT.search(text) or _CREDENTIAL.search(text) or _EVIDENTIARY.search(text)
-    )
+    """Does this sentence assert something checkable against a document?
+
+    Credentials and past-performance phrasing always qualify. A bare digit qualifies only
+    when it is a real quantity (not an enumeration label) AND the sentence is not a forward
+    commitment — "we employ 200 engineers" needs a source; "Tier 1 support handles initial
+    contact" and "the L3 team will escalate" do not. Money is handled separately and
+    unconditionally by the hard gate, so nothing money-shaped can slip through here.
+    """
+    if _CREDENTIAL.search(text) or _EVIDENTIARY.search(text):
+        return True
+    if _FORWARD.search(text):
+        return False
+    return bool(_ANY_DIGIT.search(_LABEL.sub(" ", text)))
 
 
 def is_money_shaped(text: str) -> bool:

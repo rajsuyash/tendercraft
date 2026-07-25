@@ -30,6 +30,11 @@ class SectionSpec:
     kind: SectionKind
     target_words: int  # 0 for assembled sections — depth is not a word-count question
     evidence_query: str = ""  # what to retrieve for this section (narrative only)
+    # Can this section only be written from bidder evidence? Methodology, QA, risk etc. are
+    # written from the tender requirements plus professional practice, so a thin library is
+    # NOT grounds to skip them — an empty section scores zero. Whether a section may bail is
+    # a deterministic decision; left to the model it self-vetoes on noisy retrieval.
+    needs_bidder_evidence: bool = False
 
 
 # Ordered as a bid is actually submitted: covering letter, PQ compliance, then the
@@ -38,7 +43,8 @@ class SectionSpec:
 SECTION_SPECS: tuple[SectionSpec, ...] = (
     SectionSpec("letter_of_proposal", "Form 5: Letter of Proposal", 10,
                 SectionKind.NARRATIVE, 400,
-                "company profile capability undertaking authorised signatory"),
+                "company profile capability undertaking authorised signatory",
+                needs_bidder_evidence=True),
     SectionSpec("compliance_pq", "Form 1: Compliance Sheet for Pre-Qualification", 20,
                 SectionKind.COMPLIANCE, 0),
     SectionSpec("understanding", "Form 7(b): Understanding of the Project", 30,

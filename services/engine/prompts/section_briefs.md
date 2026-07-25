@@ -1,0 +1,28 @@
+Per-section briefs for the section drafter. Selected by key; split on lines beginning "### ".
+
+### letter_of_proposal
+The covering letter (MeitY Form 5). Address the tendering authority, reference the tender by number and title, confirm the bidder submits its technical proposal, confirm the proposal is valid for the required period, confirm the bidder has examined the tender document including all corrigenda, and confirm acceptance of the terms. State the bidder's standing and relevant capability qualitatively — every capability claim needs a citation. Close with the authorised signatory block. Formal, brief, one or two subsections.
+
+### understanding
+Demonstrate understanding of the department's requirement (MeitY Form 7(b)). This is explicitly scored — evaluators look for evidence you grasp the problem, not a restatement of the tender. Cover: the department's current situation and the pain the procurement addresses; the scope as you read it, broken into workstreams; the key functional and non-functional requirements and why each matters operationally; stakeholders and who is affected; the constraints and challenges you anticipate (integration with existing systems, data migration, change resistance, connectivity, statutory compliance) and what each implies for delivery. Interpret, do not summarise.
+
+### solution
+The proposed solution and technical architecture (MeitY Form 7(a)). Cover: the solution overview and how it maps to the required functionality; the application architecture in layers (presentation, application, integration, data); the technology stack and why each choice suits a government deployment; hosting and infrastructure, sizing rationale, and how it scales; security architecture — authentication, authorisation, audit logging, data protection, and alignment with government security requirements; integration approach for existing departmental systems and any statutory portals; data migration approach; accessibility, multilingual support, and mobile access where relevant; standards compliance. This is the heaviest section. Be specific about design decisions and the reasoning behind them, without quoting sizing numbers.
+
+### approach_methodology
+The technical approach and implementation methodology (MeitY Form 7(c)). Cover: the overall delivery methodology and why it suits this engagement; the phases from inception through requirements, design, build, testing, deployment and stabilisation, with what happens and what is produced in each; requirements elicitation and sign-off; the design and development process including code standards and reviews; deployment strategy and rollback; project governance — steering structure, review cadence, escalation, reporting; stakeholder and change management; how quality and timeline are protected. Describe phases and cadence qualitatively, never with specific counts or durations — those belong in the work plan table.
+
+### workplan
+The proposed work plan (MeitY Form 8). Cover: the sequencing logic behind the schedule; the major activities in each phase and their dependencies; the deliverables and the approval benchmarks that gate each phase; the critical path and what protects it; resource loading across phases; how progress is tracked and reported. Describe structure and sequence, not durations.
+
+### qa
+Quality assurance and testing. Cover: the quality management framework and standards applied; test strategy across unit, integration, system, performance, security and user acceptance testing; test planning, case design and traceability back to requirements; defect management — severity classification, triage, resolution and retest; entry and exit criteria for each test stage; UAT support and how departmental users are enabled to test; performance and security testing approach; the independence of the QA function from development.
+
+### training
+Training and capacity building. Cover: the training needs assessment and how audiences are segmented (administrators, departmental end users, field staff, help-desk); the curriculum and delivery mode for each audience; train-the-trainer and how the department sustains capability after handover; training material and documentation to be produced, including user manuals and quick-reference guides; assessment of training effectiveness; refresher and onboarding support for new staff during the contract.
+
+### support_sla
+Support, SLA and operations & maintenance. Cover: the support model and its tiers; the help-desk and how issues are logged, tracked and escalated; incident severity definitions and the response and resolution commitments attached to each; preventive and corrective maintenance; patching, upgrades and release management during O&M; monitoring, backup and disaster recovery; SLA measurement, reporting and review governance; the exit and transition plan at contract end including knowledge transfer and handover of artefacts. Describe commitments qualitatively — specific SLA percentages and durations are transcluded from the agreed schedule.
+
+### risk
+Risk management and mitigation. Cover: the risk management approach and how risks are identified, assessed, owned and reviewed; the principal risks for an engagement of this type — requirement volatility, data quality and migration, integration dependencies on third parties, stakeholder availability, change resistance, infrastructure readiness, security and statutory compliance, key-person dependency — and for each, the impact and the concrete mitigation and contingency; how risks are escalated and reported to the department; assumptions and dependencies on the department that, if unmet, become risks.

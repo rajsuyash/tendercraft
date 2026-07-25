@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends
 
 from pipeline.drafter import draft_response
 from pipeline.retrieval import chunk_docs, select_evidence
+from pipeline.section_drafter import draft_section
 
-from . import db
+from . import db, sections
 from .auth import AuthedUser, get_current_user
 from .deterministic.drafting import mandatory_coverage
 from .envelope import ApiError, ok
@@ -78,6 +79,122 @@ def do_generate(tenant_id: str, tender_id: str) -> dict:
         "mandatory_coverage": mandatory_coverage(coverage_rows),
         "open_flags": total_flags,
     }
+
+
+def do_generate_sections(tenant_id: str, tender_id: str) -> dict:
+    """Build the full long-form document: assemble the tabular sections, draft the narrative
+    ones concurrently. Separate from do_generate because /prepare is the readiness hot path
+    and must not grow nine model calls."""
+    proposal = db.get_proposal_by_tender(tender_id, tenant_id)
+    if not proposal:
+        raise ApiError(404, "NO_PROPOSAL", "generate the per-criterion responses first")
+
+    tender = db.get_tender(tender_id, tenant_id) or {}
+    criteria = db.get_criteria(tender_id, tenant_id)
+    responses = db.get_responses(proposal["id"], tenant_id)
+    today = datetime.now(UTC).date().isoformat()
+    docs = db.get_valid_library_docs(tenant_id, today)
+    profile = db.get_profile_context(tenant_id)
+    chunks = chunk_docs(
+        [{"id": d["id"], "name": d["name"], "text": d.get("text_content", "")} for d in docs]
+    )
+    cv_docs = [d for d in docs if (d.get("doc_type") or "") == "cv"]
+
+    # Tender context every narrative section is written against — the criteria ARE the brief.
+    context = "\n".join(
+        [
+            f"Tender: {tender.get('title', '')} ({tender.get('tender_number') or 'no number'})",
+            f"Authority: {tender.get('authority') or 'not stated'}",
+            "Requirements extracted from the tender document:",
+            *(f"- [{c.get('requirement_level')}] {c.get('verbatim_text', '')}" for c in criteria),
+        ]
+    )
+
+    assembled = {
+        "compliance_pq": sections.assemble_compliance_pq(
+            profile, profile.get("certifications") or [], today
+        ),
+        "project_citations": sections.assemble_project_citations(
+            profile.get("experience_records") or []
+        ),
+        "team_composition": sections.assemble_team(cv_docs),
+        "cvs": sections.assemble_cvs(cv_docs),
+        "deployment": sections.assemble_deployment(cv_docs),
+        "deviations": sections.assemble_deviations(),
+        "compliance_matrix": sections.assemble_compliance_matrix(criteria, responses),
+        "annexures": sections.assemble_annexures(docs, today),
+    }
+
+    def _narrative(spec: sections.SectionSpec):
+        ev = select_evidence(f"{spec.evidence_query} {spec.heading}", chunks, top_k=12)
+        return draft_section(
+            spec.key, spec.heading, spec.target_words, context, ev, spec.needs_bidder_evidence
+        )
+
+    narrative_specs = [sections.SPEC_BY_KEY[k] for k in sections.NARRATIVE_KEYS]
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        drafted = list(pool.map(_narrative, narrative_specs))
+    drafted_by_key = {d.key: d for d in drafted}
+
+    total_words = 0
+    written: list[dict] = []
+    for spec in sections.SECTION_SPECS:
+        if spec.key in assembled:
+            a = assembled[spec.key]
+            row = {
+                "heading": spec.heading, "order_index": spec.order, "kind": "assembled",
+                "body_md": a.body_md,
+                "sentences": [
+                    {"text": s.text, "citations": list(s.citations), "cls": str(s.cls),
+                     "source_ref": s.source_ref, "is_transcluded": s.is_transcluded}
+                    for s in a.sentences
+                ],
+                "status": "drafted", "confidence": 1.0, "flags": [],
+                "word_count": len(a.body_md.split()),
+            }
+        else:
+            d = drafted_by_key[spec.key]
+            row = {
+                "heading": spec.heading, "order_index": spec.order, "kind": "narrative",
+                "body_md": d.body_md, "sentences": d.sentences, "status": d.status,
+                "confidence": d.confidence, "flags": d.flags, "word_count": d.word_count,
+            }
+        db.upsert_section(tenant_id, proposal["id"], spec.key, row)
+        total_words += row["word_count"]
+        written.append({"key": spec.key, "heading": spec.heading, "kind": row["kind"],
+                        "status": row["status"], "words": row["word_count"],
+                        "flags": len(row["flags"])})
+
+    return {
+        "proposal_id": proposal["id"],
+        "sections": written,
+        "total_words": total_words,
+        "placeholders": sum(1 for s in written if s["status"] == "placeholder"),
+        "open_flags": sum(s["flags"] for s in written),
+    }
+
+
+@router.post("/api/tenders/{tender_id}/sections/generate")
+def generate_sections(tender_id: str, user: CurrentUser) -> dict:
+    tender = db.get_tender(tender_id, user.tenant_id)
+    if not tender:
+        raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
+    if tender.get("status") not in ("locked", "exported"):
+        raise ApiError(409, "TOM_NOT_LOCKED", "lock the TOM before generating the document")
+    return ok(do_generate_sections(user.tenant_id, tender_id))
+
+
+@router.get("/api/tenders/{tender_id}/sections")
+def get_sections(tender_id: str, user: CurrentUser) -> dict:
+    proposal = db.get_proposal_by_tender(tender_id, user.tenant_id)
+    if not proposal:
+        raise ApiError(404, "NO_PROPOSAL", "generate a proposal first")
+    rows = db.get_sections(proposal["id"], user.tenant_id)
+    return ok({
+        "proposal_id": proposal["id"],
+        "sections": rows,
+        "total_words": sum(r.get("word_count") or 0 for r in rows),
+    })
 
 
 @router.post("/api/tenders/{tender_id}/generate")
