@@ -193,6 +193,48 @@ def get_responses(proposal_id: str, tenant_id: str) -> list[dict]:
     ) or []
 
 
+# ---------- long-form proposal sections (the document layer) ----------
+def upsert_section(tenant_id: str, proposal_id: str, key: str, section: dict) -> None:
+    _rest(
+        "POST", "proposal_sections",
+        # tenant_id in the conflict target: a service-role merge bypasses RLS, so without it
+        # a caller-supplied proposal_id could reassign another tenant's row (see 0007).
+        params={"on_conflict": "tenant_id,proposal_id,key"},
+        json={"tenant_id": tenant_id, "proposal_id": proposal_id, "key": key, **section},
+        prefer="resolution=merge-duplicates",
+    )
+
+
+def get_sections(proposal_id: str, tenant_id: str) -> list[dict]:
+    return _rest(
+        "GET", "proposal_sections",
+        params={
+            "proposal_id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}",
+            "select": "*", "order": "order_index.asc",
+        },
+    ) or []
+
+
+def approve_section(
+    tenant_id: str, proposal_id: str, key: str, approver: str, when_iso: str
+) -> None:
+    _rest(
+        "PATCH", "proposal_sections",
+        params={
+            "proposal_id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}", "key": f"eq.{key}",
+        },
+        json={"approved_by": approver, "approved_at": when_iso},
+    )
+
+
+def set_proposal_status(proposal_id: str, tenant_id: str, status: str) -> None:
+    _rest(
+        "PATCH", "proposals",
+        params={"id": f"eq.{proposal_id}", "tenant_id": f"eq.{tenant_id}"},
+        json={"status": status},
+    )
+
+
 # ---------- per-criterion readiness decisions (bidder resolve/ignore/do-not-proceed) ----------
 def upsert_readiness_decision(
     tenant_id: str, tender_id: str, criterion_id: str, *,

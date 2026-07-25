@@ -121,6 +121,29 @@ def test_readiness_decision_is_tenant_scoped(two_tenants):
 
 
 @requires_supabase
+def test_proposal_section_is_tenant_scoped(two_tenants):
+    # ET-6 for the document layer: a drafted section for tenant A must never surface in
+    # tenant B's authed session. Long-form sections carry the bidder's actual strategy,
+    # so a leak here is worse than a leaked criterion.
+    tenant_a = two_tenants["tenant_a"]
+    _, td = rest("POST", "tenders", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                 body={"tenant_id": tenant_a, "title": "Tender A — section scope"})
+    tender_id = td[0]["id"]
+    _, pr = rest("POST", "proposals", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                 body={"tenant_id": tenant_a, "tender_id": tender_id, "status": "draft"})
+    rest("POST", "proposal_sections", bearer=SERVICE_KEY, key=SERVICE_KEY,
+         body={"tenant_id": tenant_a, "proposal_id": pr[0]["id"], "key": "methodology",
+               "heading": "Methodology", "order_index": 50, "kind": "narrative",
+               "body_md": "A-only confidential approach"})
+
+    jwt_b = sign_in(EMAIL_B, PW)
+    status, rows = rest("GET", "proposal_sections", bearer=jwt_b, key=ANON_KEY,
+                        query="?select=body_md")
+    assert status == 200
+    assert rows == [], f"cross-tenant proposal-section leak: {rows}"
+
+
+@requires_supabase
 def test_audit_events_are_immutable(two_tenants):
     # E-AC1: append-only enforced at the DB, even for the service role
     _, rows = rest("POST", "audit_events", bearer=SERVICE_KEY, key=SERVICE_KEY,
