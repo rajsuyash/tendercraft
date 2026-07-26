@@ -1,0 +1,88 @@
+- generic [active] [ref=f16e1]:
+  - generic [ref=f16e2]:
+    - navigation [ref=f16e3]:
+      - generic [ref=f16e4]:
+        - generic [ref=f16e5]: TC
+        - generic [ref=f16e6]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f16e8] [cursor=pointer]:
+        - generic [ref=f16e9]:
+          - generic [ref=f16e10]: Workspace
+          - generic [ref=f16e11]: Meridian Infotech Pvt Ltd
+        - generic [ref=f16e12]: ▼
+      - list [ref=f16e13]:
+        - listitem [ref=f16e14]:
+          - link "Dashboard" [ref=f16e15] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f16e16]:
+          - link "Tenders" [ref=f16e17] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f16e18]:
+          - link "Proposals" [ref=f16e19] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f16e20]:
+          - link "Knowledge Base" [ref=f16e21] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f16e22]:
+          - link "Vendor Profile" [ref=f16e23] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f16e24]:
+          - link "Settings" [ref=f16e25] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f16e27]:
+      - generic [ref=f16e28]:
+        - generic [ref=f16e29]:
+          - heading "Export & Compliance Gate" [level=1] [ref=f16e30]
+          - paragraph [ref=f16e31]:
+            - text: Mandatory coverage 25% ·
+            - generic [ref=f16e32]: 6 blockers open
+        - generic [ref=f16e33]:
+          - button "Export final documents" [disabled] [ref=f16e34]
+          - button "⚠ Admin override (logged)" [ref=f16e36] [cursor=pointer]
+          - paragraph [ref=f16e86]: Exported (override logged).
+      - generic [ref=f16e37]:
+        - generic [ref=f16e38]:
+          - heading "Compliance matrix" [level=2] [ref=f16e39]
+          - table [ref=f16e41]:
+            - rowgroup [ref=f16e42]:
+              - row [ref=f16e43]:
+                - columnheader "Criterion" [ref=f16e44]
+                - columnheader "Level" [ref=f16e45]
+                - columnheader "Status" [ref=f16e46]
+            - rowgroup [ref=f16e47]:
+              - row [ref=f16e48]:
+                - cell "The bidder shall have an average annual turnover of not less than Rs. 5 Crores in the last three financial years FY23, FY24 and FY25, certified by a practising Chartered Accountant." [ref=f16e49]
+                - cell "mandatory" [ref=f16e50]
+                - cell "covered" [ref=f16e51]
+              - row [ref=f16e52]:
+                - cell "The bidder shall have successfully completed at least three similar works of software design and implementation for Government or PSU clients, each of value not less than Rs. 1.5 Crore, during the last five years. Completion certificates from the client are mandatory." [ref=f16e53]
+                - cell "mandatory" [ref=f16e54]
+                - cell "placeholder" [ref=f16e55]
+              - row [ref=f16e56]:
+                - cell "The bidder shall hold a valid ISO 9001:2015 certification on the date of bid submission. A copy of the certificate shall be enclosed." [ref=f16e57]
+                - cell "mandatory" [ref=f16e58]
+                - cell "placeholder" [ref=f16e59]
+              - row [ref=f16e60]:
+                - cell "The bidder shall hold a valid ISO/IEC 27001 Information Security Management certification. This is desirable and carries additional marks." [ref=f16e61]
+                - cell "desirable" [ref=f16e62]
+                - cell "placeholder" [ref=f16e63]
+              - row [ref=f16e64]:
+                - cell "The bidder shall submit a declaration on company letterhead, signed by the authorised signatory, confirming that the firm has not been blacklisted or debarred by any Central or State Government department or PSU." [ref=f16e65]
+                - cell "self_attestation" [ref=f16e66]
+                - cell "covered" [ref=f16e67]
+              - row [ref=f16e68]:
+                - cell "The bidder shall deploy a Project Manager with a minimum of eight years of experience in e-Governance implementations, supported by a curriculum vitae." [ref=f16e69]
+                - cell "mandatory" [ref=f16e70]
+                - cell "placeholder" [ref=f16e71]
+        - complementary [ref=f16e72]:
+          - heading "Approval chain" [level=2] [ref=f16e73]
+          - list [ref=f16e74]:
+            - listitem [ref=f16e75]:
+              - generic [ref=f16e76]: ✓ review
+            - listitem [ref=f16e77]:
+              - generic [ref=f16e78]: compliance
+              - button "Approve" [ref=f16e79] [cursor=pointer]
+            - listitem [ref=f16e80]:
+              - generic [ref=f16e81]: approver
+              - button "Approve" [ref=f16e82] [cursor=pointer]
+          - paragraph [ref=f16e83]: 1/2 required approvals complete. Export locks until they are.
+  - alert [ref=f16e84]

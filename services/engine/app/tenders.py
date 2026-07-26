@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from . import authz, db
 from .auth import AuthedUser, get_current_user
 from .deterministic.lock import evaluate_lock
+from .deterministic.tender_meta import display_title
 from .deterministic.types import Criterion, RequirementLevel, SourceAnchor
 from .envelope import ApiError, ok
 from .ingest import ingest_pages, parse_pdf_pages
@@ -73,11 +74,19 @@ def _process_ingest(workspace_id: str, data: bytes, title: str) -> dict:
     """CPU/IO-bound ingest pipeline — run off the event loop via a threadpool."""
     pages = parse_pdf_pages(data)
     result = ingest_pages(pages)
-    tender = db.create_tender(workspace_id, title)
+    meta = result["meta"]
+    # Name the bid after the TENDER, not the file. The filename survives only when the
+    # document states no title of its own.
+    tender = db.create_tender(workspace_id, display_title(meta, title))
+    if meta.tender_number or meta.authority:
+        db.set_tender_meta(tender["id"], workspace_id, meta.tender_number, meta.authority)
     if result["criteria_rows"]:
         db.insert_criteria(workspace_id, tender["id"], result["criteria_rows"])
     return {
         "tender_id": tender["id"],
+        "title": display_title(meta, title),
+        "tender_number": meta.tender_number,
+        "authority": meta.authority,
         "pages": len(pages),
         "extracted": result["extracted"],
         "low_confidence": result["low_confidence"],

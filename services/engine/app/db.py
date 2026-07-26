@@ -722,3 +722,17 @@ def get_profile(user_id: str) -> dict | None:
         params={"user_id": f"eq.{user_id}", "select": "org_id,is_org_admin", "limit": "1"},
     )
     return rows[0] if rows else None
+
+
+def set_tender_meta(tender_id: str, workspace_id: str, tender_number: str | None,
+                    authority: str | None) -> None:
+    """Record identity read from the document itself. Only writes fields we actually found."""
+    patch = {k: v for k, v in
+             {"tender_number": tender_number, "authority": authority}.items() if v}
+    if not patch:
+        return
+    _rest(
+        "PATCH", "tenders",
+        params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
+        json=patch,
+    )

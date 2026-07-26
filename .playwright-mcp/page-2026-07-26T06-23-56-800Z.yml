@@ -1,0 +1,187 @@
+- generic [active] [ref=f18e1]:
+  - generic [ref=f18e2]:
+    - navigation [ref=f18e3]:
+      - generic [ref=f18e4]:
+        - generic [ref=f18e5]: TC
+        - generic [ref=f18e6]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f18e8] [cursor=pointer]:
+        - generic [ref=f18e9]:
+          - generic [ref=f18e10]: Workspace
+          - generic [ref=f18e11]: Meridian Infotech Pvt Ltd
+        - generic [ref=f18e12]: ▼
+      - list [ref=f18e13]:
+        - listitem [ref=f18e14]:
+          - link "Dashboard" [ref=f18e15] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f18e16]:
+          - link "Tenders" [ref=f18e17] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f18e18]:
+          - link "Proposals" [ref=f18e19] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f18e20]:
+          - link "Knowledge Base" [ref=f18e21] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f18e22]:
+          - link "Vendor Profile" [ref=f18e23] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f18e24]:
+          - link "Settings" [ref=f18e25] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f18e27]:
+      - generic [ref=f18e28]:
+        - heading "rfp.pdf" [level=1] [ref=f18e29]
+        - paragraph [ref=f18e30]: Bid readiness — what your company already covers, and what's still needed.
+      - generic [ref=f18e31]:
+        - generic [ref=f18e32]:
+          - generic [ref=f18e33]: 1 P0 blocking
+          - generic [ref=f18e34]: 2 P1
+          - generic [ref=f18e35]: 2 P2
+          - generic [ref=f18e36]: 1 covered
+        - generic [ref=f18e37]:
+          - button "Re-match" [ref=f18e38] [cursor=pointer]
+          - link "Resolve P0 items first" [disabled]:
+            - /url: /proposals/8ea0e61d-3109-4b20-81f7-6686311f134b
+      - generic [ref=f18e40]:
+        - heading "Add to knowledge base" [level=2] [ref=f18e41]
+        - generic [ref=f18e42]:
+          - generic [ref=f18e43] [cursor=pointer]: Upload file (PDF / DOCX / PPTX)
+          - generic [ref=f18e44]: or
+          - generic [ref=f18e45]:
+            - textbox "https://your-company.com/about" [ref=f18e46]
+            - button "Fetch" [disabled] [ref=f18e47]
+      - list [ref=f18e48]:
+        - listitem [ref=f18e49]:
+          - generic [ref=f18e50]:
+            - generic [ref=f18e51]: mandatoryp.1 · Cl. Cl. 3.2(a)
+            - generic [ref=f18e52]: P0
+          - paragraph [ref=f18e54]: The bidder shall hold a valid ISO 9001:2015 certification on the date of bid submission. A copy of the certificate shall be enclosed.
+          - paragraph [ref=f18e55]: Eligibility gap — you don't currently meet this — ISO 9001:2015 certification expired on 2026-03-31.
+          - paragraph [ref=f18e56]:
+            - text: This is decided from your structured
+            - link "Vendor Profile" [ref=f18e57] [cursor=pointer]:
+              - /url: /profile
+            - text: (turnover, experience, certifications) — not from an uploaded document. Update it there and Re-match, or Ignore & proceed below.
+          - generic [ref=f18e58]:
+            - generic [ref=f18e59]:
+              - generic [ref=f18e60]: "Your call:"
+              - button "I’ll resolve" [ref=f18e61] [cursor=pointer]
+              - button "Ignore & proceed" [ref=f18e62] [cursor=pointer]
+              - button "Do not proceed" [ref=f18e63] [cursor=pointer]
+            - generic [ref=f18e64]:
+              - paragraph [ref=f18e65]: "Attach a supporting document:"
+              - generic [ref=f18e67]:
+                - generic [ref=f18e68] [cursor=pointer]: Upload file (PDF / DOCX / PPTX)
+                - generic [ref=f18e69]: or
+                - generic [ref=f18e70]:
+                  - textbox "https://your-company.com/about" [ref=f18e71]
+                  - button "Fetch" [disabled] [ref=f18e72]
+              - paragraph [ref=f18e73]: Document attached ✓
+            - generic [ref=f18e74]:
+              - textbox "Add a note (optional)" [ref=f18e75]
+              - button "Save note" [disabled] [ref=f18e76]
+        - listitem [ref=f18e77]:
+          - generic [ref=f18e78]:
+            - generic [ref=f18e79]: mandatoryp.1 · Cl. Cl. 3.1(b)
+            - generic [ref=f18e80]: P1
+          - paragraph [ref=f18e82]: The bidder shall have successfully completed at least three similar works of software design and implementation for Government or PSU clients, each of value not less than Rs. 1.5 Crore, during the last five years. Completion certificates from the client are mandatory.
+          - paragraph [ref=f18e83]: Eligible — add a document to complete the response
+          - paragraph [ref=f18e84]: Attach the supporting document below, then Re-match.
+          - generic [ref=f18e85]:
+            - generic [ref=f18e86]:
+              - generic [ref=f18e87]: "Your call:"
+              - button "I’ll resolve" [ref=f18e88] [cursor=pointer]
+              - button "Ignore & proceed" [ref=f18e89] [cursor=pointer]
+              - button "Do not proceed" [ref=f18e90] [cursor=pointer]
+            - generic [ref=f18e91]:
+              - paragraph [ref=f18e92]: "Attach a supporting document:"
+              - generic [ref=f18e94]:
+                - generic [ref=f18e95] [cursor=pointer]: Upload file (PDF / DOCX / PPTX)
+                - generic [ref=f18e96]: or
+                - generic [ref=f18e97]:
+                  - textbox "https://your-company.com/about" [ref=f18e98]
+                  - button "Fetch" [disabled] [ref=f18e99]
+            - generic [ref=f18e100]:
+              - textbox "Add a note (optional)" [ref=f18e101]
+              - button "Save note" [disabled] [ref=f18e102]
+        - listitem [ref=f18e103]:
+          - generic [ref=f18e104]:
+            - generic [ref=f18e105]: mandatoryp.1 · Cl. Cl. 3.4
+            - generic [ref=f18e106]: P1
+          - paragraph [ref=f18e108]: The bidder shall deploy a Project Manager with a minimum of eight years of experience in e-Governance implementations, supported by a curriculum vitae.
+          - paragraph [ref=f18e109]: Borderline — needs your review
+          - paragraph [ref=f18e110]:
+            - text: Open the
+            - link "proposal draft" [ref=f18e111] [cursor=pointer]:
+              - /url: /proposals/8ea0e61d-3109-4b20-81f7-6686311f134b
+            - text: to attest or cite a source for this claim.
+          - generic [ref=f18e112]:
+            - generic [ref=f18e113]:
+              - generic [ref=f18e114]: "Your call:"
+              - button "I’ll resolve" [ref=f18e115] [cursor=pointer]
+              - button "Ignore & proceed" [ref=f18e116] [cursor=pointer]
+              - button "Do not proceed" [ref=f18e117] [cursor=pointer]
+            - generic [ref=f18e118]:
+              - paragraph [ref=f18e119]: "Attach a supporting document:"
+              - generic [ref=f18e121]:
+                - generic [ref=f18e122] [cursor=pointer]: Upload file (PDF / DOCX / PPTX)
+                - generic [ref=f18e123]: or
+                - generic [ref=f18e124]:
+                  - textbox "https://your-company.com/about" [ref=f18e125]
+                  - button "Fetch" [disabled] [ref=f18e126]
+            - generic [ref=f18e127]:
+              - textbox "Add a note (optional)" [ref=f18e128]
+              - button "Save note" [disabled] [ref=f18e129]
+        - listitem [ref=f18e130]:
+          - generic [ref=f18e131]:
+            - generic [ref=f18e132]: desirablep.1 · Cl. Cl. 3.2(b)
+            - generic [ref=f18e133]: P2
+          - paragraph [ref=f18e135]: The bidder shall hold a valid ISO/IEC 27001 Information Security Management certification. This is desirable and carries additional marks.
+          - paragraph [ref=f18e136]: Good to have — improves your technical score
+          - generic [ref=f18e137]:
+            - generic [ref=f18e138]:
+              - generic [ref=f18e139]: "Your call:"
+              - button "I’ll resolve" [ref=f18e140] [cursor=pointer]
+              - button "Ignore & proceed" [ref=f18e141] [cursor=pointer]
+              - button "Do not proceed" [ref=f18e142] [cursor=pointer]
+            - generic [ref=f18e143]:
+              - paragraph [ref=f18e144]: "Attach a supporting document:"
+              - generic [ref=f18e146]:
+                - generic [ref=f18e147] [cursor=pointer]: Upload file (PDF / DOCX / PPTX)
+                - generic [ref=f18e148]: or
+                - generic [ref=f18e149]:
+                  - textbox "https://your-company.com/about" [ref=f18e150]
+                  - button "Fetch" [disabled] [ref=f18e151]
+            - generic [ref=f18e152]:
+              - textbox "Add a note (optional)" [ref=f18e153]
+              - button "Save note" [disabled] [ref=f18e154]
+        - listitem [ref=f18e155]:
+          - generic [ref=f18e156]:
+            - generic [ref=f18e157]: self_attestationp.1 · Cl. Cl. 3.3
+            - generic [ref=f18e158]: P2
+          - paragraph [ref=f18e160]: The bidder shall submit a declaration on company letterhead, signed by the authorised signatory, confirming that the firm has not been blacklisted or debarred by any Central or State Government department or PSU.
+          - paragraph [ref=f18e161]: Good to have — improves your technical score
+          - generic [ref=f18e162]:
+            - generic [ref=f18e163]:
+              - generic [ref=f18e164]: "Your call:"
+              - button "I’ll resolve" [ref=f18e165] [cursor=pointer]
+              - button "Ignore & proceed" [ref=f18e166] [cursor=pointer]
+              - button "Do not proceed" [ref=f18e167] [cursor=pointer]
+            - generic [ref=f18e168]:
+              - paragraph [ref=f18e169]: "Attach a supporting document:"
+              - generic [ref=f18e171]:
+                - generic [ref=f18e172] [cursor=pointer]: Upload file (PDF / DOCX / PPTX)
+                - generic [ref=f18e173]: or
+                - generic [ref=f18e174]:
+                  - textbox "https://your-company.com/about" [ref=f18e175]
+                  - button "Fetch" [disabled] [ref=f18e176]
+            - generic [ref=f18e177]:
+              - textbox "Add a note (optional)" [ref=f18e178]
+              - button "Save note" [disabled] [ref=f18e179]
+        - listitem [ref=f18e180]:
+          - generic [ref=f18e181]:
+            - generic [ref=f18e182]: mandatoryp.1 · Cl. Cl. 3.1(a)
+            - generic [ref=f18e183]: COVERED
+          - paragraph [ref=f18e185]: The bidder shall have an average annual turnover of not less than Rs. 5 Crores in the last three financial years FY23, FY24 and FY25, certified by a practising Chartered Accountant.
+          - paragraph [ref=f18e186]: Covered by your knowledge base
+  - alert [ref=f18e187]

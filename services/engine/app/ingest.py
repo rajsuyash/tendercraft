@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from pypdf import PdfReader
 
+from .deterministic.tender_meta import extract_tender_meta
 from .deterministic.types import EXTRACTION_CONFIRM_THRESHOLD
 from .envelope import ApiError
 
@@ -75,7 +76,12 @@ def ingest_pages(pages: list[tuple[int, str]]) -> dict:
                 }
             )
 
+    # The document states its own identity on page one. Reading it is why a bid stops
+    # being called "rfp.pdf" on every screen.
+    meta = extract_tender_meta([text for _page, text in pages])
+
     return {
+        "meta": meta,
         "criteria_rows": rows,
         "extracted": len(rows),
         "low_confidence": low_conf,

@@ -1,0 +1,136 @@
+- generic [active] [ref=f19e1]:
+  - generic [ref=f19e2]:
+    - navigation [ref=f19e3]:
+      - generic [ref=f19e4]:
+        - generic [ref=f19e5]: TC
+        - generic [ref=f19e6]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f19e8] [cursor=pointer]:
+        - generic [ref=f19e9]:
+          - generic [ref=f19e10]: Workspace
+          - generic [ref=f19e11]: Meridian Infotech Pvt Ltd
+        - generic [ref=f19e12]: ▼
+      - list [ref=f19e13]:
+        - listitem [ref=f19e14]:
+          - link "Dashboard" [ref=f19e15] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f19e16]:
+          - link "Tenders" [ref=f19e17] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f19e18]:
+          - link "Proposals" [ref=f19e19] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f19e20]:
+          - link "Knowledge Base" [ref=f19e21] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f19e22]:
+          - link "Vendor Profile" [ref=f19e23] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f19e24]:
+          - link "Settings" [ref=f19e25] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f19e27]:
+      - generic [ref=f19e28]:
+        - heading "Score Estimate" [level=1] [ref=f19e29]
+        - paragraph [ref=f19e30]: rfp.pdf
+        - generic [ref=f19e31]:
+          - paragraph [ref=f19e32]: No estimate yet
+          - button "Estimate technical score" [ref=f19e33] [cursor=pointer]
+      - generic [ref=f19e34]:
+        - generic [ref=f19e35]:
+          - generic [ref=f19e36]:
+            - heading "Technical competence" [level=2] [ref=f19e37]
+            - button "Recompute" [ref=f19e38] [cursor=pointer]
+          - paragraph [ref=f19e39]: 73.9 / 100
+          - paragraph [ref=f19e40]: "Technically disqualified — below 45% on: qa, risk"
+          - paragraph [ref=f19e41]: Measured from this document, not predicted. Indian government IT tenders require ≥45% on every evaluation head and ≥65% in aggregate (MeitY Model RFP §2.6.2, CAG OIOS §7) — below either, the commercial cover is never opened.
+        - generic [ref=f19e42]:
+          - heading "Marks by evaluation head" [level=3] [ref=f19e43]
+          - generic [ref=f19e44]:
+            - generic [ref=f19e45]:
+              - generic [ref=f19e46]: Understanding of scope
+              - generic [ref=f19e49]: 9.0/10
+            - generic [ref=f19e50]:
+              - generic [ref=f19e51]: Proposed solution & technology
+              - generic [ref=f19e54]: 14.2/20
+            - generic [ref=f19e55]:
+              - generic [ref=f19e56]: Approach, methodology & work plan
+              - generic [ref=f19e59]: 13.5/15
+            - generic [ref=f19e60]:
+              - generic [ref=f19e61]: Team composition & key personnel
+              - generic [ref=f19e64]: 7.0/15
+            - generic [ref=f19e65]:
+              - generic [ref=f19e66]: Relevant experience & past performance
+              - generic [ref=f19e69]: 15.0/15
+            - generic [ref=f19e70]:
+              - generic [ref=f19e71]: Quality assurance & testing
+              - generic [ref=f19e74]: 2.1/8
+            - generic [ref=f19e75]:
+              - generic [ref=f19e76]: Training & capacity building
+              - generic [ref=f19e79]: 5.4/6
+            - generic [ref=f19e80]:
+              - generic [ref=f19e81]: Support, SLA & O&M
+              - generic [ref=f19e84]: 6.9/7
+            - generic [ref=f19e85]:
+              - generic [ref=f19e86]: Risk management & mitigation
+              - generic [ref=f19e89]: 0.8/4
+        - generic [ref=f19e90]:
+          - heading "How to improve this score" [level=3] [ref=f19e91]
+          - paragraph [ref=f19e92]: Each figure is the marks actually recoverable on that head — computed, not estimated.
+          - list [ref=f19e93]:
+            - listitem [ref=f19e94]:
+              - generic [ref=f19e95]: "+8.00"
+              - generic [ref=f19e96]:
+                - text: Team composition & key personnel
+                - generic [ref=f19e97]: Upload CVs for key personnel — team profile carries up to 20% of the technical marks.
+                - link "Fix this →" [ref=f19e98] [cursor=pointer]:
+                  - /url: /library
+            - listitem [ref=f19e99]:
+              - generic [ref=f19e100]: "+5.79"
+              - generic [ref=f19e101]:
+                - text: Proposed solution & technology
+                - generic [ref=f19e102]: Section is materially shorter than a government technical bid expects.
+                - link "Fix this →" [ref=f19e103] [cursor=pointer]:
+                  - /url: /proposals/8ea0e61d-3109-4b20-81f7-6686311f134b
+            - listitem [ref=f19e104]:
+              - generic [ref=f19e105]: "+3.20"
+              - generic [ref=f19e106]:
+                - text: Quality assurance & testing
+                - generic [ref=f19e107]: Section is materially shorter than a government technical bid expects.
+                - link "Fix this →" [ref=f19e108] [cursor=pointer]:
+                  - /url: /proposals/8ea0e61d-3109-4b20-81f7-6686311f134b
+            - listitem [ref=f19e109]:
+              - generic [ref=f19e110]: "+2.40"
+              - generic [ref=f19e111]:
+                - text: Quality assurance & testing
+                - generic [ref=f19e112]: Section is missing or unresolved — an absent section scores zero.
+                - link "Fix this →" [ref=f19e113] [cursor=pointer]:
+                  - /url: /proposals/8ea0e61d-3109-4b20-81f7-6686311f134b
+            - listitem [ref=f19e114]:
+              - generic [ref=f19e115]: "+1.80"
+              - generic [ref=f19e116]:
+                - text: Risk management & mitigation
+                - generic [ref=f19e117]: Section is materially shorter than a government technical bid expects.
+                - link "Fix this →" [ref=f19e118] [cursor=pointer]:
+                  - /url: /proposals/8ea0e61d-3109-4b20-81f7-6686311f134b
+            - listitem [ref=f19e119]:
+              - generic [ref=f19e120]: "+1.40"
+              - generic [ref=f19e121]:
+                - text: Risk management & mitigation
+                - generic [ref=f19e122]: Section is missing or unresolved — an absent section scores zero.
+                - link "Fix this →" [ref=f19e123] [cursor=pointer]:
+                  - /url: /proposals/8ea0e61d-3109-4b20-81f7-6686311f134b
+            - listitem [ref=f19e124]:
+              - generic [ref=f19e125]: "+1.16"
+              - generic [ref=f19e126]:
+                - text: Approach, methodology & work plan
+                - generic [ref=f19e127]: Section is materially shorter than a government technical bid expects.
+                - link "Fix this →" [ref=f19e128] [cursor=pointer]:
+                  - /url: /proposals/8ea0e61d-3109-4b20-81f7-6686311f134b
+            - listitem [ref=f19e129]:
+              - generic [ref=f19e130]: "+0.96"
+              - generic [ref=f19e131]:
+                - text: Understanding of scope
+                - generic [ref=f19e132]: Section is materially shorter than a government technical bid expects.
+                - link "Fix this →" [ref=f19e133] [cursor=pointer]:
+                  - /url: /proposals/8ea0e61d-3109-4b20-81f7-6686311f134b
+  - alert [ref=f19e134]

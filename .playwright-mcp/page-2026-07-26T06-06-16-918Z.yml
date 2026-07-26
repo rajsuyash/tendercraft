@@ -1,0 +1,39 @@
+- generic [active] [ref=f10e1]:
+  - generic [ref=f10e2]:
+    - navigation [ref=f10e3]:
+      - generic [ref=f10e4]:
+        - generic [ref=f10e5]: TC
+        - generic [ref=f10e6]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f10e8] [cursor=pointer]:
+        - generic [ref=f10e9]:
+          - generic [ref=f10e10]: Workspace
+          - generic [ref=f10e11]: Meridian Infotech Pvt Ltd
+        - generic [ref=f10e12]: ▼
+      - list [ref=f10e13]:
+        - listitem [ref=f10e14]:
+          - link "Dashboard" [ref=f10e15] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f10e16]:
+          - link "Tenders" [ref=f10e17] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f10e18]:
+          - link "Proposals" [ref=f10e19] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f10e20]:
+          - link "Knowledge Base" [ref=f10e21] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f10e22]:
+          - link "Vendor Profile" [ref=f10e23] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f10e24]:
+          - link "Settings" [ref=f10e25] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f10e90]:
+      - generic [ref=f10e91]:
+        - heading "rfp.pdf" [level=1] [ref=f10e92]
+        - paragraph [ref=f10e93]: Bid readiness — what your company already covers, and what's still needed.
+      - generic [ref=f10e94]:
+        - paragraph [ref=f10e95]: Match this tender to your knowledge base
+        - paragraph [ref=f10e96]: The AI checks your eligibility and drafts what it can from your existing documents, then lists exactly what's missing.
+        - button "Analyze & match my knowledge base" [ref=f10e97] [cursor=pointer]
+  - alert [ref=f10e57]

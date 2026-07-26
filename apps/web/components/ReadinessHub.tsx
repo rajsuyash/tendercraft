@@ -50,9 +50,9 @@ const OVERRIDDEN_BADGE: Partial<Record<Decision, string>> = {
 
 const PRIORITY: Record<Item["priority"], { label: string; cls: string }> = {
   confirm: { label: "CONFIRM", cls: "bg-primary-tint text-primary" },
-  p0: { label: "P0", cls: "bg-danger-bg text-danger" },
-  p1: { label: "P1", cls: "bg-warning-bg text-warning" },
-  p2: { label: "P2", cls: "bg-info-bg text-info" },
+  p0: { label: "Blocks bid", cls: "bg-danger-bg text-danger" },
+  p1: { label: "Needs work", cls: "bg-warning-bg text-warning" },
+  p2: { label: "Optional", cls: "bg-info-bg text-info" },
   covered: { label: "COVERED", cls: "bg-success-bg text-success" },
 };
 
@@ -178,7 +178,7 @@ export function ReadinessHub({
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface p-card">
             <div className="flex flex-wrap gap-4 text-sm">
               <span data-p0-progress className={summary.p0_blocking > 0 ? "text-danger" : "text-success"}>
-                {summary.p0_blocking} P0 blocking
+                {summary.p0_blocking} blocking submission
               </span>
               {summary.p0_overridden > 0 && (
                 <span className="text-muted">{summary.p0_overridden} overridden</span>
@@ -205,7 +205,9 @@ export function ReadinessHub({
                     : "pointer-events-none bg-surface-alt text-muted"
                 }`}
               >
-                {summary.ready_to_generate ? "Generate proposal" : "Resolve P0 items first"}
+                {summary.ready_to_generate
+                  ? "Generate proposal"
+                  : "Clear the blocking items first"}
               </Link>
             </div>
           </div>

@@ -192,13 +192,27 @@ export function ProposalDocument({
           >
             Compliance &amp; export
           </Link>
-          <a
-            href={`/api/tenders/${tenderId}/export/docx`}
-            data-download-docx
-            className="rounded bg-primary px-3 py-2 text-sm font-medium text-white"
-          >
-            Download .docx
-          </a>
+          {unapproved.length === 0 ? (
+            <a
+              href={`/api/tenders/${tenderId}/export/docx`}
+              data-download-docx
+              className="rounded bg-primary px-3 py-2 text-sm font-medium text-white"
+            >
+              Download .docx
+            </a>
+          ) : (
+            // Never a live primary link while the gate is shut. It used to navigate the
+            // user out of the app onto a raw JSON envelope full of UUIDs and AC codes.
+            <span
+              data-download-blocked
+              title={`${unapproved.length} section${
+                unapproved.length === 1 ? "" : "s"
+              } still need approval before this can be downloaded`}
+              className="cursor-not-allowed rounded bg-surface-alt px-3 py-2 text-sm font-medium text-muted"
+            >
+              Download .docx — {unapproved.length} to approve
+            </span>
+          )}
         </div>
       </div>
 
