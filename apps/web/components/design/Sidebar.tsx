@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { WorkspaceSwitcher, type WorkspaceOption } from "./WorkspaceSwitcher";
+
 /** C1 — fixed 280px primary navigation; active item primary-tinted. */
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
@@ -13,7 +15,13 @@ const NAV = [
   { href: "/settings", label: "Settings" },
 ];
 
-export function Sidebar() {
+export function Sidebar({
+  workspaces = [],
+  activeWorkspaceId = null,
+}: {
+  workspaces?: WorkspaceOption[];
+  activeWorkspaceId?: string | null;
+}) {
   const pathname = usePathname();
   return (
     <nav
@@ -26,6 +34,7 @@ export function Sidebar() {
         </span>
         <span className="font-heading text-lg font-semibold text-ink">TenderCraft</span>
       </div>
+      <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspaceId} />
       <ul className="flex flex-col gap-1">
         {NAV.map((item) => {
           const active = pathname.startsWith(item.href);

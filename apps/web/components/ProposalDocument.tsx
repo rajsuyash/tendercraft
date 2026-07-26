@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -177,6 +178,20 @@ export function ProposalDocument({
           >
             {busy === "gen" ? "Drafting…" : "Regenerate"}
           </button>
+          <Link
+            href={`/proposals/${tenderId}/score`}
+            data-open-score
+            className="rounded border border-border px-3 py-2 text-sm text-ink hover:border-primary"
+          >
+            Technical score
+          </Link>
+          <Link
+            href={`/proposals/${tenderId}/export`}
+            data-open-export
+            className="rounded border border-border px-3 py-2 text-sm text-ink hover:border-primary"
+          >
+            Compliance &amp; export
+          </Link>
           <a
             href={`/api/tenders/${tenderId}/export/docx`}
             data-download-docx

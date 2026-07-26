@@ -1,0 +1,50 @@
+- generic [ref=f8e1]:
+  - generic [ref=f8e2]:
+    - navigation [ref=f8e3]:
+      - generic [ref=f8e4]:
+        - generic [ref=f8e5]: TC
+        - generic [ref=f8e6]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f8e379] [cursor=pointer]:
+        - generic [ref=f8e9]:
+          - generic [ref=f8e10]: Workspace
+          - generic [ref=f8e11]: Meridian Infotech Pvt Ltd
+        - generic [ref=f8e12]: ▼
+      - list [ref=f8e13]:
+        - listitem [ref=f8e14]:
+          - link "Dashboard" [ref=f8e15] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f8e16]:
+          - link "Tenders" [ref=f8e17] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f8e18]:
+          - link "Proposals" [active] [ref=f8e19] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f8e20]:
+          - link "Knowledge Base" [ref=f8e21] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f8e22]:
+          - link "Vendor Profile" [ref=f8e23] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f8e24]:
+          - link "Settings" [ref=f8e25] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f8e562]:
+      - generic [ref=f8e563]:
+        - heading "Proposals" [level=1] [ref=f8e564]
+        - paragraph [ref=f8e565]: Generate a cited draft for any locked tender, then review, approve, and export.
+      - list [ref=f8e566]:
+        - listitem [ref=f8e567]:
+          - link "e-Office Software Implementation MAHA/IT/2026/4415 draft" [ref=f8e568] [cursor=pointer]:
+            - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+            - generic [ref=f8e569]:
+              - paragraph [ref=f8e570]: e-Office Software Implementation
+              - paragraph [ref=f8e571]: MAHA/IT/2026/4415
+            - generic [ref=f8e572]: draft
+        - listitem [ref=f8e573]:
+          - link "Supply of 500 Desktop Computers GEM/2026/B/5127401 lock TOM first" [ref=f8e574] [cursor=pointer]:
+            - /url: /proposals/cccee62d-5113-43de-989a-7ac88595017f
+            - generic [ref=f8e575]:
+              - paragraph [ref=f8e576]: Supply of 500 Desktop Computers
+              - paragraph [ref=f8e577]: GEM/2026/B/5127401
+            - generic [ref=f8e578]: lock TOM first
+  - alert [ref=f8e57]

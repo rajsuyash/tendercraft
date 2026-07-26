@@ -1,9 +1,12 @@
+import { engineFetch } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 import { formatCrore, formatDate } from "@/lib/format";
 
-// ponytail: no org-name column on vendor_profiles yet (migrations/0002); hardcode until
-// the schema grows one. Swap for profile.org_name the day that column lands.
-const ORG_NAME = "Meridian Infotech Pvt Ltd";
+// The vendor profile belongs to the ACTIVE workspace, so its name is the workspace's.
+// This was hardcoded while only one workspace existed; the switcher invalidated that
+// premise, and the page then showed one client's name above another client's financials —
+// a misattribution, not a cosmetic bug, in a product whose whole point is the wall between
+// engagements. RLS already returns exactly one workspace row: the active one.
 
 interface FieldProps {
   label: string;
@@ -36,6 +39,16 @@ function monthYear(dateStr: string): string {
 // render danger-token chips with [data-expired-cert] (S6-D1).
 export default async function ProfilePage() {
   const supabase = await createClient();
+
+  // The active workspace comes from the ENGINE, which is the single authority on it.
+  // NOT a bare .maybeSingle() on `workspaces`: that table's RLS deliberately returns EVERY
+  // workspace you belong to (it backs the switcher), so a member of two would hit PGRST116.
+  const meRes = await engineFetch("/api/me");
+  const activeId = meRes.ok ? ((await meRes.json()).data?.workspace_id ?? null) : null;
+  const { data: workspace } = activeId
+    ? await supabase.from("workspaces").select("name").eq("id", activeId).maybeSingle()
+    : { data: null };
+  const orgName = workspace?.name ?? "Vendor profile";
 
   const { data: profile } = await supabase
     .from("vendor_profiles")
@@ -96,7 +109,7 @@ export default async function ProfilePage() {
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="font-heading text-2xl font-semibold text-ink">{ORG_NAME}</h1>
+            <h1 className="font-heading text-2xl font-semibold text-ink">{orgName}</h1>
             <span className="rounded-full border border-border bg-surface-alt px-2.5 py-0.5 text-xs font-medium text-muted">
               Active
             </span>

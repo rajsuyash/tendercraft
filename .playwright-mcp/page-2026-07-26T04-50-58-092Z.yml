@@ -1,0 +1,60 @@
+- generic [ref=f6e1]:
+  - generic [ref=f6e2]:
+    - navigation [ref=f6e3]:
+      - generic [ref=f6e4]:
+        - generic [ref=f6e5]: TC
+        - generic [ref=f6e6]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f6e374] [cursor=pointer]:
+        - generic [ref=f6e9]:
+          - generic [ref=f6e10]: Workspace
+          - generic [ref=f6e11]: Meridian Infotech Pvt Ltd
+        - generic [ref=f6e12]: ▼
+      - list [ref=f6e13]:
+        - listitem [ref=f6e14]:
+          - link "Dashboard" [ref=f6e15] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f6e16]:
+          - link "Tenders" [ref=f6e17] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f6e18]:
+          - link "Proposals" [active] [ref=f6e19] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f6e20]:
+          - link "Knowledge Base" [ref=f6e21] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f6e22]:
+          - link "Vendor Profile" [ref=f6e23] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f6e24]:
+          - link "Settings" [ref=f6e25] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f6e450]:
+      - generic [ref=f6e451]:
+        - heading "Tenders" [level=1] [ref=f6e452]
+        - link "Upload Tender" [ref=f6e453] [cursor=pointer]:
+          - /url: /tenders/upload
+      - generic [ref=f6e454]:
+        - searchbox "Search title, tender number or authority…" [ref=f6e455]
+        - combobox [ref=f6e456]:
+          - option "All pursuits" [selected]
+        - button "Filter" [ref=f6e457] [cursor=pointer]
+      - list [ref=f6e458]:
+        - listitem [ref=f6e459]:
+          - link "e-Office Software Implementation MAHA/IT/2026/4415 · MahaIT 27/7/2026 locked" [ref=f6e460] [cursor=pointer]:
+            - /url: /tenders/940f1f16-336c-4416-adbb-e9c76eef727f/readiness
+            - generic [ref=f6e461]:
+              - paragraph [ref=f6e462]: e-Office Software Implementation
+              - paragraph [ref=f6e463]: MAHA/IT/2026/4415 · MahaIT
+            - generic [ref=f6e464]:
+              - generic [ref=f6e465]: 27/7/2026
+              - generic [ref=f6e466]: locked
+        - listitem [ref=f6e467]:
+          - link "Supply of 500 Desktop Computers GEM/2026/B/5127401 · National Informatics Centre 3/8/2026 verification" [ref=f6e468] [cursor=pointer]:
+            - /url: /tenders/cccee62d-5113-43de-989a-7ac88595017f/readiness
+            - generic [ref=f6e469]:
+              - paragraph [ref=f6e470]: Supply of 500 Desktop Computers
+              - paragraph [ref=f6e471]: GEM/2026/B/5127401 · National Informatics Centre
+            - generic [ref=f6e472]:
+              - generic [ref=f6e473]: 3/8/2026
+              - generic [ref=f6e474]: verification
+  - alert [ref=f6e57]
