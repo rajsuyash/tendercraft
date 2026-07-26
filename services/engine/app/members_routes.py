@@ -31,6 +31,18 @@ AnyUser = Annotated[IdentifiedUser, Depends(get_identified_user)]
 Role = Literal["viewer", "writer", "reviewer", "compliance_checker", "legal", "approver", "admin"]
 
 
+class WorkspaceIn(BaseModel):
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _clean(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not 2 <= len(v) <= 120:
+            raise ValueError("workspace name must be 2-120 characters")
+        return v
+
+
 class InviteIn(BaseModel):
     email: str
     role: Role = "writer"
@@ -74,7 +86,42 @@ def list_workspaces(user: CurrentUser) -> dict:
     return ok({
         "workspaces": db.get_user_workspaces(user.user_id),
         "active_workspace_id": user.workspace_id,
+        # Drives whether the UI offers "New workspace" — org authority, not a workspace role.
+        "is_org_admin": user.is_org_admin,
     })
+
+
+@router.post("/api/workspaces")
+def create_workspace(body: WorkspaceIn, user: AnyUser) -> dict:
+    """Create a workspace — one client engagement — and make the creator its admin.
+
+    Gated on profiles.is_org_admin, NOT a workspace role: you may be creating your first
+    workspace, or one you are not yet a member of, so there is no workspace role to check.
+    This is what that flag is for.
+
+    Uses AnyUser (authenticated, unscoped) for the same reason invitation-accept does: a
+    user with no workspace yet must still be able to make one, and get_current_user would
+    403 them out of the endpoint that fixes that.
+    """
+    profile = db.get_profile(user.user_id)
+    if not profile:
+        raise ApiError(403, "NO_PROFILE", "user has no profile")
+    if not profile.get("is_org_admin"):
+        raise ApiError(403, "FORBIDDEN", "only an organization admin may create a workspace")
+
+    org_id = profile.get("org_id")
+    if db.get_workspace_by_name(org_id, body.name):
+        raise ApiError(409, "WORKSPACE_EXISTS",
+                       "a workspace with this name already exists in your organization")
+
+    ws = db.create_workspace(body.name, org_id)
+    # The creator must be a member, or current_workspace_id() resolves to NULL for them and
+    # they would create a workspace they instantly cannot see.
+    db.add_workspace_member(user.user_id, ws["id"], "admin", user.user_id)
+    db.set_active_workspace(user.user_id, ws["id"])
+    db.write_audit(ws["id"], user.user_id, "workspace_created", "workspace", ws["id"],
+                   after={"name": body.name})
+    return ok({"id": ws["id"], "name": ws["name"], "role": "admin", "active": True})
 
 
 @router.put("/api/me/workspace/{workspace_id}")

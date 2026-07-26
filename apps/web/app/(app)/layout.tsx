@@ -18,18 +18,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // A SET is correct here — this is the switcher; every data query stays on the active one.
   let workspaces: WorkspaceOption[] = [];
   let activeWorkspaceId: string | null = null;
+  let isOrgAdmin = false;
   const res = await engineFetch("/api/workspaces");
   if (res.ok) {
     const body = await res.json();
     if (body.ok) {
       workspaces = body.data.workspaces as WorkspaceOption[];
       activeWorkspaceId = body.data.active_workspace_id as string | null;
+      isOrgAdmin = Boolean(body.data.is_org_admin);
     }
   }
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />
+      <Sidebar
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        canCreateWorkspace={isOrgAdmin}
+      />
       <div className="flex-1">{children}</div>
     </div>
   );

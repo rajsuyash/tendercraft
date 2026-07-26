@@ -43,7 +43,7 @@ def workspace_with_admin():
 
         admin_uid = admin_create_user(ADMIN, PW)
         users.append(admin_uid)
-        grant_membership(admin_uid, workspace_id, "admin", email=ADMIN)
+        grant_membership(admin_uid, workspace_id, "admin", email=ADMIN, org_admin=True)
 
         # The invitee and intruder exist but belong to nothing yet.
         invitee_uid = admin_create_user(INVITEE, PW)
@@ -198,3 +198,71 @@ def test_deprovisioning_removes_all_access_immediately(workspace_with_admin):
     _, rows = rest("GET", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY,
                    query=f"?user_id=eq.{f['invitee_uid']}&select=user_id,email")
     assert rows, "deprovisioning must not delete the user"
+
+
+# --- workspace creation (the gap: previously only a service-role script could do it) ---
+
+
+def _cleanup_created(new_id: str, home_id: str, user_id: str) -> None:
+    """Delete a workspace created by a test AND put the creator back in the fixture one.
+
+    create_workspace switches the caller into the new workspace, so deleting it without
+    restoring leaves active_workspace_id dangling — the caller then resolves to NULL scope
+    and every later test in this module 403s. (Not reachable in the product: there is no
+    delete-workspace endpoint. Worth knowing before one is added.)
+    """
+    rest("PATCH", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY,
+         query=f"?user_id=eq.{user_id}", body={"active_workspace_id": home_id})
+    rest("DELETE", "workspaces", bearer=SERVICE_KEY, key=SERVICE_KEY, query=f"?id=eq.{new_id}")
+
+
+@requires_supabase
+def test_org_admin_can_create_a_workspace_and_lands_in_it(workspace_with_admin):
+    """End of the "onboarding is a script" gap. Creating must also grant membership, or the
+    creator makes a workspace that current_workspace_id() cannot resolve for them."""
+    import uuid
+
+    f = workspace_with_admin
+    name = f"Create Test {uuid.uuid4().hex[:8]}"
+    r = _client().post("/api/workspaces", json={"name": name}, headers=_hdr(ADMIN))
+    assert r.status_code == 200, r.text
+    data = r.json()["data"]
+    assert data["name"] == name
+    assert data["role"] == "admin"
+
+    # Membership was granted and the caller was switched into it.
+    me = _client().get("/api/me", headers=_hdr(ADMIN))
+    assert me.status_code == 200
+    assert me.json()["data"]["workspace_id"] == data["id"]
+
+    ws = _client().get("/api/workspaces", headers=_hdr(ADMIN)).json()["data"]
+    assert data["id"] in {w["id"] for w in ws["workspaces"]}
+
+    _cleanup_created(data["id"], f["workspace_id"], f["admin_uid"])
+
+
+@requires_supabase
+def test_duplicate_workspace_name_is_rejected(workspace_with_admin):
+    """No DB constraint (see migrations/0015), so this check is the only thing preventing a
+    firm from ending up with two workspaces called "Airtel"."""
+    import uuid
+
+    f = workspace_with_admin
+    name = f"Dup Test {uuid.uuid4().hex[:8]}"
+    first = _client().post("/api/workspaces", json={"name": name}, headers=_hdr(ADMIN))
+    assert first.status_code == 200, first.text
+    again = _client().post("/api/workspaces", json={"name": name}, headers=_hdr(ADMIN))
+    assert again.status_code == 409
+    assert again.json()["error"]["code"] == "WORKSPACE_EXISTS"
+    _cleanup_created(first.json()["data"]["id"], f["workspace_id"], f["admin_uid"])
+
+
+@requires_supabase
+def test_a_non_org_admin_cannot_create_a_workspace(workspace_with_admin):
+    f = workspace_with_admin
+    token = _invite(f).json()["data"]["token"]
+    _client().post("/api/invitations/accept", json={"token": token}, headers=_hdr(INVITEE))
+    r = _client().post("/api/workspaces", json={"name": "Should Not Exist"},
+                       headers=_hdr(INVITEE))
+    assert r.status_code == 403, r.text
+    assert r.json()["error"]["code"] == "FORBIDDEN"

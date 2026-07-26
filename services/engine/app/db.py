@@ -695,3 +695,30 @@ def set_tender_project(tender_id: str, workspace_id: str, project_id: str | None
         params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"project_id": project_id},
     )
+
+
+def get_workspace_by_name(org_id: str | None, name: str) -> dict | None:
+    """Name collision check within an organization.
+
+    Enforced here rather than by a DB constraint — see migrations/0015 for why. A firm
+    running one workspace per client must not end up with two "Airtel" workspaces, because
+    the name is the only thing distinguishing one client's data from another's in every
+    switcher and page heading.
+    """
+    params = {"name": f"eq.{name}", "select": "id", "limit": "1"}
+    params["org_id"] = f"eq.{org_id}" if org_id else "is.null"
+    rows = _rest("GET", "workspaces", params=params)
+    return rows[0] if rows else None
+
+
+def create_workspace(name: str, org_id: str | None) -> dict:
+    rows = _rest("POST", "workspaces", json={"name": name, "org_id": org_id})
+    return rows[0]
+
+
+def get_profile(user_id: str) -> dict | None:
+    rows = _rest(
+        "GET", "profiles",
+        params={"user_id": f"eq.{user_id}", "select": "org_id,is_org_admin", "limit": "1"},
+    )
+    return rows[0] if rows else None

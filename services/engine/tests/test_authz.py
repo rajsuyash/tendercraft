@@ -113,3 +113,20 @@ def test_requires_dependency_enforces_and_returns_the_user():
     assert dep(_u("writer")).role == "writer"
     with pytest.raises(ApiError):
         dep(_u("viewer"))
+
+
+# --- workspace creation is ORG authority, not a workspace role ---
+
+
+def test_org_admin_is_independent_of_workspace_role():
+    """You may create your FIRST workspace, or one you are not yet in, so there is no
+    workspace role to check. That is what profiles.is_org_admin exists for."""
+    viewer_who_runs_the_firm = _u("viewer", is_org_admin=True)
+    assert viewer_who_runs_the_firm.is_org_admin
+    # ...and it grants nothing INSIDE a workspace.
+    assert not authz.can(viewer_who_runs_the_firm, authz.MANAGE_MEMBERS)
+    assert not authz.can(viewer_who_runs_the_firm, authz.OVERRIDE_EXPORT)
+
+
+def test_workspace_admin_is_not_automatically_an_org_admin():
+    assert _u("admin").is_org_admin is False

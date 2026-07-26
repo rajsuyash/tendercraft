@@ -1,0 +1,27 @@
+-- Workspace creation.
+--
+-- Until now a workspace could only be created by a service-role script — the same
+-- "onboarding is a script" gap the members work closed for USERS but never for WORKSPACES.
+-- POST /api/workspaces closes it.
+--
+-- NO unique(org_id, name) constraint, deliberately. It was attempted and rejected:
+--
+--   ERROR 23505: could not create unique index "workspaces_org_name_key"
+--   DETAIL: Key (org_id, name)=(…, Tenant A) is duplicated.
+--
+-- The duplicates are 135 workspaces left by isolation-test runs. They cannot be deleted:
+-- every one has audit_events rows, and the append-only trigger (E-AC1) refuses the cascade
+-- — the guarantee working exactly as designed, even against the service role. Adding the
+-- constraint would mean dropping an immutability guarantee on a live database to buy a
+-- convenience check. Not a trade worth making.
+--
+-- Uniqueness is enforced instead in app/members_routes.py::create_workspace, scoped to the
+-- caller's organization. That is sufficient because it is now the ONLY way to create one.
+-- Add the DB constraint when this schema is next rebuilt on a clean project — which is also
+-- the moment the eu-north-1 -> ap-south-1 residency move happens.
+--
+-- Operational note: the isolation suite should run against a DEDICATED project. On a shared
+-- one its debris is permanent by construction and will keep blocking schema changes.
+
+-- Intentionally no DDL. This file records the decision.
+select 1;

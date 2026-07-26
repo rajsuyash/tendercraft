@@ -18,9 +18,11 @@ const NAV = [
 export function Sidebar({
   workspaces = [],
   activeWorkspaceId = null,
+  canCreateWorkspace = false,
 }: {
   workspaces?: WorkspaceOption[];
   activeWorkspaceId?: string | null;
+  canCreateWorkspace?: boolean;
 }) {
   const pathname = usePathname();
   return (
@@ -34,7 +36,11 @@ export function Sidebar({
         </span>
         <span className="font-heading text-lg font-semibold text-ink">TenderCraft</span>
       </div>
-      <WorkspaceSwitcher workspaces={workspaces} activeId={activeWorkspaceId} />
+      <WorkspaceSwitcher
+        workspaces={workspaces}
+        activeId={activeWorkspaceId}
+        canCreate={canCreateWorkspace}
+      />
       <ul className="flex flex-col gap-1">
         {NAV.map((item) => {
           const active = pathname.startsWith(item.href);

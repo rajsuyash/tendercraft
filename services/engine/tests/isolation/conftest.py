@@ -118,19 +118,23 @@ def admin_delete_users_by_email(*emails: str) -> None:
 
 
 def grant_membership(user_id: str, workspace_id: str, role: str = "admin",
-                     email: str | None = None) -> None:
+                     email: str | None = None, org_admin: bool = False) -> None:
     """Give a user access to a workspace, the way the product does.
 
     Since migration 0011 a profiles row alone grants NOTHING: current_workspace_id()
     resolves the active workspace and then validates it against workspace_members. A
     fixture that writes only a profile silently produces a user who can see zero rows.
 
+    `org_admin` is deliberately SEPARATE from `role`: workspace roles govern what you can do
+    inside a workspace, while org authority governs creating workspaces — which you may do
+    before belonging to any. Do not infer one from the other.
+
     `email` matters because the roster renders it — a fixture that omits it produces a
     member who displays as a truncated UUID, which is not what production does (invite
     accept writes it, and migration 0013 backfills everyone else).
     """
     profile = {"user_id": user_id, "workspace_id": workspace_id, "role": role,
-               "active_workspace_id": workspace_id}
+               "active_workspace_id": workspace_id, "is_org_admin": org_admin}
     if email:
         profile["email"] = email
     rest("POST", "profiles", bearer=SERVICE_KEY, key=SERVICE_KEY, body=profile)

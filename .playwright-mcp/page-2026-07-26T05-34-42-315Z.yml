@@ -1,0 +1,137 @@
+- generic [active] [ref=f9e1]:
+  - generic [ref=f9e2]:
+    - navigation [ref=f9e3]:
+      - generic [ref=f9e4]:
+        - generic [ref=f9e5]: TC
+        - generic [ref=f9e6]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f9e282] [cursor=pointer]:
+        - generic [ref=f9e9]:
+          - generic [ref=f9e10]: Workspace
+          - generic [ref=f9e11]: Meridian Infotech Pvt Ltd
+        - generic [ref=f9e12]: ▼
+      - list [ref=f9e13]:
+        - listitem [ref=f9e14]:
+          - link "Dashboard" [ref=f9e15] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f9e16]:
+          - link "Tenders" [ref=f9e17] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f9e18]:
+          - link "Proposals" [ref=f9e19] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f9e20]:
+          - link "Knowledge Base" [ref=f9e21] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f9e22]:
+          - link "Vendor Profile" [ref=f9e23] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f9e24]:
+          - link "Settings" [ref=f9e25] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f9e860]:
+      - generic [ref=f9e861]:
+        - heading "Score Estimate" [level=1] [ref=f9e862]
+        - paragraph [ref=f9e863]: e-Office Software Implementation
+        - generic [ref=f9e864]:
+          - paragraph [ref=f9e865]: Insufficient historical data
+          - paragraph [ref=f9e866]: "insufficient historical data: 0 < 30 comparable outcomes (D-FR2)"
+          - paragraph [ref=f9e867]: The estimator suppresses itself rather than guess on thin data. It activates once this authority/category cluster accumulates enough comparable outcomes.
+      - generic [ref=f9e868]:
+        - generic [ref=f9e869]:
+          - generic [ref=f9e870]:
+            - heading "Technical competence" [level=2] [ref=f9e871]
+            - button "Recompute" [ref=f9e872] [cursor=pointer]
+          - paragraph [ref=f9e873]: 71.4 / 100
+          - paragraph [ref=f9e874]: Clears both technical gates
+          - paragraph [ref=f9e875]: Measured from this document, not predicted. Indian government IT tenders require ≥45% on every evaluation head and ≥65% in aggregate (MeitY Model RFP §2.6.2, CAG OIOS §7) — below either, the commercial cover is never opened.
+        - generic [ref=f9e876]:
+          - heading "Marks by evaluation head" [level=3] [ref=f9e877]
+          - generic [ref=f9e878]:
+            - generic [ref=f9e879]:
+              - generic [ref=f9e880]: Understanding of scope
+              - generic [ref=f9e883]: 8.0/10
+            - generic [ref=f9e884]:
+              - generic [ref=f9e885]: Proposed solution & technology
+              - generic [ref=f9e888]: 11.1/20
+            - generic [ref=f9e889]:
+              - generic [ref=f9e890]: Approach, methodology & work plan
+              - generic [ref=f9e893]: 10.8/15
+            - generic [ref=f9e894]:
+              - generic [ref=f9e895]: Team composition & key personnel
+              - generic [ref=f9e898]: 7.0/15
+            - generic [ref=f9e899]:
+              - generic [ref=f9e900]: Relevant experience & past performance
+              - generic [ref=f9e903]: 15.0/15
+            - generic [ref=f9e904]:
+              - generic [ref=f9e905]: Quality assurance & testing
+              - generic [ref=f9e908]: 6.1/8
+            - generic [ref=f9e909]:
+              - generic [ref=f9e910]: Training & capacity building
+              - generic [ref=f9e913]: 4.8/6
+            - generic [ref=f9e914]:
+              - generic [ref=f9e915]: Support, SLA & O&M
+              - generic [ref=f9e918]: 5.4/7
+            - generic [ref=f9e919]:
+              - generic [ref=f9e920]: Risk management & mitigation
+              - generic [ref=f9e923]: 3.2/4
+        - generic [ref=f9e924]:
+          - heading "How to improve this score" [level=3] [ref=f9e925]
+          - paragraph [ref=f9e926]: Each figure is the marks actually recoverable on that head — computed, not estimated.
+          - list [ref=f9e927]:
+            - listitem [ref=f9e928]:
+              - generic [ref=f9e929]: "+8.00"
+              - generic [ref=f9e930]:
+                - text: Team composition & key personnel
+                - generic [ref=f9e931]: Upload CVs for key personnel — team profile carries up to 20% of the technical marks.
+                - link "Fix this →" [ref=f9e932] [cursor=pointer]:
+                  - /url: /library
+            - listitem [ref=f9e933]:
+              - generic [ref=f9e934]: "+4.94"
+              - generic [ref=f9e935]:
+                - text: Proposed solution & technology
+                - generic [ref=f9e936]: Section is materially shorter than a government technical bid expects.
+                - link "Fix this →" [ref=f9e937] [cursor=pointer]:
+                  - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+            - listitem [ref=f9e938]:
+              - generic [ref=f9e939]: "+4.00"
+              - generic [ref=f9e940]:
+                - text: Proposed solution & technology
+                - generic [ref=f9e941]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+                - link "Fix this →" [ref=f9e942] [cursor=pointer]:
+                  - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+            - listitem [ref=f9e943]:
+              - generic [ref=f9e944]: "+3.00"
+              - generic [ref=f9e945]:
+                - text: Approach, methodology & work plan
+                - generic [ref=f9e946]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+                - link "Fix this →" [ref=f9e947] [cursor=pointer]:
+                  - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+            - listitem [ref=f9e948]:
+              - generic [ref=f9e949]: "+2.00"
+              - generic [ref=f9e950]:
+                - text: Understanding of scope
+                - generic [ref=f9e951]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+                - link "Fix this →" [ref=f9e952] [cursor=pointer]:
+                  - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+            - listitem [ref=f9e953]:
+              - generic [ref=f9e954]: "+1.60"
+              - generic [ref=f9e955]:
+                - text: Quality assurance & testing
+                - generic [ref=f9e956]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+                - link "Fix this →" [ref=f9e957] [cursor=pointer]:
+                  - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+            - listitem [ref=f9e958]:
+              - generic [ref=f9e959]: "+1.40"
+              - generic [ref=f9e960]:
+                - text: Support, SLA & O&M
+                - generic [ref=f9e961]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+                - link "Fix this →" [ref=f9e962] [cursor=pointer]:
+                  - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+            - listitem [ref=f9e963]:
+              - generic [ref=f9e964]: "+1.20"
+              - generic [ref=f9e965]:
+                - text: Training & capacity building
+                - generic [ref=f9e966]: AI-drafted narrative is not yet human-approved, so it cannot be exported.
+                - link "Fix this →" [ref=f9e967] [cursor=pointer]:
+                  - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+  - alert [ref=f9e57]
