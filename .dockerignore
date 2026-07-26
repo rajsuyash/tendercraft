@@ -1,0 +1,45 @@
+# Build context exclusions.
+#
+# The first line is the one that matters. Both Dockerfiles do `COPY . .` in their build stage,
+# so without this every `gcloud builds submit` uploaded .env — real Supabase service keys — to
+# the Cloud Build source bucket and into an intermediate image layer. The RUNTIME images were
+# never affected (they only copy .next/standalone and .next/static, which never contain .env),
+# but the tarball and build cache were, and that is avoidable for one line.
+.env
+.env.*
+!.env.example
+
+# Never rebuild from a host install — the Dockerfiles run their own pnpm install / uv sync.
+node_modules
+**/node_modules
+.venv
+**/.venv
+__pycache__
+**/__pycache__
+.next
+**/.next
+.turbo
+
+# Local state and artifacts that have no business in an image or an upload.
+.git
+.github
+.claude
+.playwright-mcp
+*.log
+.DS_Store
+coverage
+**/coverage
+.pytest_cache
+**/.pytest_cache
+**/*.tsbuildinfo
+
+# Docs and design references — not needed to build, and a large share of the context.
+# design/tokens.json is NOT excluded: tailwind.config.cjs requires it at build time.
+docs
+design/reference
+*.md
+!README.md
+# Prompt artifacts are runtime inputs, not documentation — the proposer reads
+# prompts/score_proposal.md from disk. Excluding them by the *.md rule would ship an engine
+# that silently returns "prompt unavailable" for every score.
+!**/prompts/*.md
