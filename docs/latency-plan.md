@@ -1,7 +1,40 @@
 # Latency plan — closing the geography gap
 
-Status: **planned, not executed** (2026-07-26). Written after the production audit and the
-round-trip-reduction work in `cbe1c4e` / `2230b99`.
+Status: **Option A EXECUTED 2026-07-26.** Both services now run in `europe-north1` (Finland),
+next to the Supabase project in Stockholm. Option B remains the plan for the move to India.
+
+Live demo URLs (the region change means new hostnames — the `asia-south1` ones are the old,
+slow deployment):
+
+```
+web    https://tendercraft-web-eu-822379741897.europe-north1.run.app
+engine https://tendercraft-engine-eu-822379741897.europe-north1.run.app
+```
+
+### Measured result
+
+Same image, same code, same database — only the region changed. Server-side, warm:
+
+| Endpoint | `asia-south1` | `europe-north1` | |
+|---|---|---|---|
+| `/api/me` | 2.421s | 0.156s | 15.5x |
+| `/api/tenders/:id/readiness` | 2.405s | 0.212s | 11.3x |
+| `/api/tenders/:id/submission` | 2.797s | 0.247s | 11.3x |
+| `/api/workspaces` | 0.858s | 0.090s | 9.5x |
+
+Whole-page, server-side, against the original audit baseline:
+
+| Route | Audit baseline | After code work (Mumbai) | After region move |
+|---|---|---|---|
+| `/tenders/:id/readiness` | 6.3–6.9s | 2.31s | **0.303s** |
+| `/proposals/:id/export` | 3.8–4.0s | 2.17s | **0.294s** |
+| `/proposals/:id/score` | 3.7s | 3.05s | **0.312s** |
+| `/settings` | ≤3.4s | 1.91s | **0.271s** |
+| `/dashboard` | 3.2s cold | 1.43s | **0.275s** |
+
+Click-to-content in the browser: **316–687ms**, with the skeleton painting at **7–13ms**.
+
+The original context, retained because it is the reasoning that led here:
 
 ## The one fact everything else follows from
 

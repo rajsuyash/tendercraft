@@ -96,9 +96,14 @@ Format: **symptom → cause → fix.**
 
 ## Latency (from the production audit, 2026-07-26)
 
-The app runs in Cloud Run `asia-south1` (Mumbai); the Supabase project is in `eu-north-1`
-(Stockholm). **Every DB round trip costs ~130ms and nothing in the code can make it cheaper —
-only rarer.** That single fact turns each pitfall below from a style note into the difference
+The app and the database must sit in the same region. When they did not — Cloud Run
+`asia-south1` (Mumbai) against Supabase `eu-north-1` (Stockholm) — **every DB round trip cost
+~130ms and nothing in the code could make it cheaper, only rarer.** Fixed 2026-07-26 by moving
+the COMPUTE to the data (`europe-north1`), not the data to the compute: same image, two
+deploys, zero data movement, and endpoints got 9-15x faster. Check this FIRST when something
+is slow — a week of round-trip micro-optimisation is worth less than one correct region.
+The pitfalls below still apply (they are what makes a co-located app fast rather than
+merely tolerable), but none of them can beat geography.** That single fact turns each pitfall below from a style note into the difference
 between a 0.5s page and a 7s one. Co-locating the two is the structural fix (and PRD §9 wants
 Mumbai anyway); until then, count round trips like they cost money.
 

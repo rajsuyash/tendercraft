@@ -1,0 +1,71 @@
+- generic [active] [ref=f25e1]:
+  - alert [ref=f25e21]
+  - generic [ref=f25e22]:
+    - navigation [ref=f25e23]:
+      - generic [ref=f25e24]:
+        - generic [ref=f25e25]: TC
+        - generic [ref=f25e26]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f25e28] [cursor=pointer]:
+        - generic [ref=f25e29]:
+          - generic [ref=f25e30]: Workspace
+          - generic [ref=f25e31]: Meridian Infotech Pvt Ltd
+        - generic [ref=f25e32]: ▼
+      - list [ref=f25e33]:
+        - listitem [ref=f25e34]:
+          - link "Dashboard" [ref=f25e35] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f25e36]:
+          - link "Tenders" [ref=f25e37] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f25e38]:
+          - link "Proposals" [ref=f25e39] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f25e40]:
+          - link "Knowledge Base" [ref=f25e41] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f25e42]:
+          - link "Vendor Profile" [ref=f25e43] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f25e44]:
+          - link "Settings" [ref=f25e45] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f25e47]:
+      - generic [ref=f25e48]:
+        - heading "Dashboard" [level=1] [ref=f25e49]
+        - paragraph [ref=f25e50]: Your active tenders and what needs attention.
+      - generic [ref=f25e51]:
+        - generic [ref=f25e52]:
+          - paragraph [ref=f25e53]: Active tenders
+          - paragraph [ref=f25e54]: "2"
+        - generic [ref=f25e55]:
+          - paragraph [ref=f25e56]: Awaiting verification
+          - paragraph [ref=f25e57]: "0"
+        - generic [ref=f25e58]:
+          - paragraph [ref=f25e59]: Drafts in review
+          - paragraph [ref=f25e60]: "0"
+        - generic [ref=f25e61]:
+          - paragraph [ref=f25e62]: Analyses left
+          - paragraph [ref=f25e63]: Unlimited
+      - link "Start a new bid Upload the tender document and we’ll extract the requirements" [ref=f25e65] [cursor=pointer]:
+        - /url: /tenders/upload
+        - generic [ref=f25e66]:
+          - generic [ref=f25e67]: Start a new bid
+          - text: Upload the tender document and we’ll extract the requirements
+        - generic [ref=f25e68]: →
+      - generic [ref=f25e69]:
+        - heading "Deadlines" [level=2] [ref=f25e70]
+        - list [ref=f25e71]:
+          - listitem [ref=f25e72]:
+            - link "e-Office Software Implementation MAHA/IT/2026/4415 · MahaIT Due in 21h" [ref=f25e73] [cursor=pointer]:
+              - /url: /tenders/940f1f16-336c-4416-adbb-e9c76eef727f/readiness
+              - generic [ref=f25e74]:
+                - generic [ref=f25e75]: e-Office Software Implementation
+                - text: MAHA/IT/2026/4415 · MahaIT
+              - generic [ref=f25e76]: Due in 21h
+          - listitem [ref=f25e77]:
+            - link "Supply of 500 Desktop Computers GEM/2026/B/5127401 · National Informatics Centre Due 3 Aug" [ref=f25e78] [cursor=pointer]:
+              - /url: /tenders/cccee62d-5113-43de-989a-7ac88595017f/readiness
+              - generic [ref=f25e79]:
+                - generic [ref=f25e80]: Supply of 500 Desktop Computers
+                - text: GEM/2026/B/5127401 · National Informatics Centre
+              - generic [ref=f25e81]: Due 3 Aug
