@@ -37,6 +37,46 @@ def me(user: CurrentUser) -> dict:
                "authority_name": a["name"] if a else None, "role": user.role})
 
 
+# ── the member's queue ─────────────────────────────────────────────────────────
+@router.get("/api/my-scoring")
+def my_scoring(user: CurrentUser) -> dict:
+    """What this evaluator personally still has to score.
+
+    A TEC member is not an officer: they should land on their own work, not on a portfolio
+    view. Composed from existing reads rather than a new table — assignment in this product is
+    "every responsive bid in an evaluation you sit on", so there is nothing extra to store.
+    """
+    out = []
+    for ev in db.evaluations(user.authority_id):
+        crits = [c for c in db.criteria(ev["id"], user.authority_id) if c["kind"] == "technical"]
+        responsive = [b for b in db.bids(ev["id"], user.authority_id) if b.get("responsive")]
+        if not crits or not responsive:
+            continue
+        mine = [s for s in db.scores(ev["id"], user.authority_id)
+                if s["evaluator_id"] == user.user_id]
+        filed = any(c["user_id"] == user.user_id for c in db.coi(ev["id"], user.authority_id))
+        total = len(crits) * len(responsive)
+        out.append({
+            "evaluation_id": ev["id"],
+            "title": ev["title"],
+            "tender_number": ev.get("tender_number"),
+            "coi_filed": filed,
+            "locked": ev.get("technical_locked_at") is not None,
+            "bids": [{"bid_id": b["id"], "bidder_name": b["bidder_name"],
+                      "scored": sum(1 for s in mine if s["bid_id"] == b["id"]),
+                      "criteria": len(crits)} for b in responsive],
+            "scored": len(mine),
+            "total": total,
+        })
+    return ok({"evaluations": out})
+
+
+@router.get("/api/members")
+def members(user: CurrentUser) -> dict:
+    a = db.authority(user.authority_id)
+    return ok({"authority": a, "members": db.members(user.authority_id)})
+
+
 # ── evaluations ────────────────────────────────────────────────────────────────
 @router.get("/api/evaluations")
 def list_evaluations(user: CurrentUser) -> dict:

@@ -1,32 +1,14 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StageRail } from "@/components/StageRail";
-import { engineJson } from "@/lib/engine";
+import { getEvaluation, getTechnical } from "@/lib/engine";
 import { formatDate } from "@/lib/format";
-
-type Detail = {
-  evaluation: {
-    id: string; title: string; tender_number: string | null;
-    technical_weight: number; financial_weight: number; qualifying_marks: number; quorum: number;
-    tie_break_rule: string | null;
-    framework_locked_at: string | null; technical_locked_at: string | null;
-  };
-  criteria: { id: string; kind: string; text: string; max_marks: number; anchor_page: number | null; anchor_clause: string | null }[];
-  unconfirmed: number;
-  bids: { id: string; bidder_name: string; responsive: boolean | null }[];
-  members: { user_id: string; full_name: string | null; email: string; role: string }[];
-  coi: { user_id: string }[];
-};
-
-type Technical = { blockers: { code: string; detail: string }[]; submitted_evaluators: number; quorum: number };
 
 export default async function EvaluationHub({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [det, tech] = await Promise.all([
-    engineJson<Detail>(`/api/evaluations/${id}`),
-    engineJson<Technical>(`/api/evaluations/${id}/technical`),
-  ]);
+  // Same cache()-deduped readers the nested layout used — this render pass reuses those
+  // responses rather than asking the engine twice for what it already answered.
+  const [det, tech] = await Promise.all([getEvaluation(id), getTechnical(id)]);
   if (!det.ok || !det.data) notFound();
 
   const { evaluation: ev, criteria, bids, members, coi } = det.data;
@@ -49,28 +31,9 @@ export default async function EvaluationHub({ params }: { params: Promise<{ id: 
     { key: "result", label: "Result", done: !!ev.technical_locked_at, href: `/evaluations/${id}/result` },
   ];
 
-  const tech_total = criteria.filter((c) => c.kind === "technical").reduce((n, c) => n + c.max_marks, 0);
-
   return (
-    <main className="mx-auto max-w-6xl px-page py-page">
-      <p className="text-xs text-muted">{ev.tender_number}</p>
-      <h1 className="mt-1 font-heading text-2xl font-semibold text-ink">{ev.title}</h1>
-
-      <div className="mt-6"><StageRail stages={stages} blockers={blockers} /></div>
-
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-        {[
-          ["Method", "Two-bid QCBS"],
-          ["Weighting", `${ev.technical_weight} technical : ${ev.financial_weight} financial`],
-          ["Qualifying marks", `${ev.qualifying_marks} of ${tech_total}`],
-          ["Committee quorum", `${tech.data?.submitted_evaluators ?? 0} of ${ev.quorum} submitted`],
-        ].map(([k, v]) => (
-          <div key={k} className="rounded-card border border-border bg-surface p-card">
-            <p className="text-xs uppercase tracking-wide text-muted">{k}</p>
-            <p className="mt-1.5 text-sm font-medium text-ink">{v}</p>
-          </div>
-        ))}
-      </div>
+    <main className="mx-auto max-w-6xl px-page py-6">
+      <StageRail stages={stages} blockers={blockers} />
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="rounded-card border border-border bg-surface p-card">
@@ -115,23 +78,6 @@ export default async function EvaluationHub({ params }: { params: Promise<{ id: 
         </section>
       </div>
 
-      <nav className="mt-6 flex flex-wrap gap-2">
-        {([
-          ["Screening matrix", `/evaluations/${id}/screening`],
-          ["Technical evaluation", `/evaluations/${id}/technical`],
-          ["Financial", `/evaluations/${id}/financial`],
-          ["Result", `/evaluations/${id}/result`],
-          ["Audit trail", `/evaluations/${id}/audit`],
-          ["Evaluation report", `/evaluations/${id}/report`],
-        ] as const).map(([label, href]) => (
-          <Link
-            key={href} href={href}
-            className="rounded border border-border bg-surface px-3.5 py-2 text-sm text-ink hover:border-primary"
-          >
-            {label}
-          </Link>
-        ))}
-      </nav>
     </main>
   );
 }
