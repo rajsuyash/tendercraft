@@ -736,3 +736,25 @@ def set_tender_meta(tender_id: str, workspace_id: str, tender_number: str | None
         params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
         json=patch,
     )
+
+
+# ---------- vendor profile writes (Module C) ----------
+def upsert_vendor_profile(workspace_id: str, patch: dict) -> None:
+    _rest(
+        "POST", "vendor_profiles",
+        params={"on_conflict": "workspace_id"},
+        json={"workspace_id": workspace_id, **patch},
+        prefer="resolution=merge-duplicates",
+    )
+
+
+def replace_profile_collection(workspace_id: str, table: str, rows: list[dict]) -> None:
+    """Replace a whole profile sub-collection (financials / experience / certifications).
+
+    Replace rather than per-row CRUD: these lists are short, the UI edits them as a set, and
+    a diff-based API would need stable client-side ids for rows the user just typed. The
+    delete is workspace-scoped, so it can never reach another workspace's rows.
+    """
+    _rest("DELETE", table, params={"workspace_id": f"eq.{workspace_id}"})
+    if rows:
+        _rest("POST", table, json=[{**r, "workspace_id": workspace_id} for r in rows])

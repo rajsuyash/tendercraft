@@ -199,6 +199,31 @@ def claim_verifiability(sentences: Sequence[DraftSentence], valid_chunk_ids: set
     return ok / len(facts)
 
 
+# Unfilled template markers: "[Insert Designation]", "<<Company Name>>", "____".
+# A document still carrying these is a blank form, not evidence — but it reads as prose to
+# a retriever, so the drafter will quote it and attach a citation, which is precisely what
+# makes the wrong text look credible. Detect at upload, not after it reaches a submission.
+_TEMPLATE_MARKER = re.compile(
+    r"\[\s*(?:insert|enter|your|name of|company|designation|date)\b[^\]]{0,60}\]"
+    r"|<<[^>]{1,60}>>"
+    r"|\{\{[^}]{1,60}\}\}"
+    r"|_{4,}",
+    re.I,
+)
+
+
+def template_placeholders(text: str, limit: int = 5) -> list[str]:
+    """Unfilled markers found in an uploaded document, de-duplicated, in order."""
+    seen: list[str] = []
+    for m in _TEMPLATE_MARKER.finditer(text or ""):
+        v = " ".join(m.group(0).split())
+        if v not in seen:
+            seen.append(v)
+        if len(seen) >= limit:
+            break
+    return seen
+
+
 # --- coverage (B-AC2) ---
 ADDRESSED_STATUSES = {"drafted", "placeholder"}  # placeholder counts as addressed per B-AC2
 

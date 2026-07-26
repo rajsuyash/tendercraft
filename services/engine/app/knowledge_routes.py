@@ -9,6 +9,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from . import db, knowledge
 from .auth import AuthedUser, get_current_user
+from .deterministic.drafting import template_placeholders
 from .envelope import ApiError, ok
 
 router = APIRouter()
@@ -72,4 +73,7 @@ async def ingest_knowledge(
     result = await run_in_threadpool(
         _ingest_text, user.workspace_id, user.user_id, text, criterion_id, tender_id,
     )
-    return ok(result)
+    # A document still carrying "[Insert Designation]" is a blank form, not evidence — and
+    # the retriever will hand it to the drafter as prose, which then quotes it WITH a
+    # citation. That is exactly how "Merdian Technology" reached a government submission.
+    return ok({**result, "template_placeholders": template_placeholders(text)})

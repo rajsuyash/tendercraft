@@ -89,6 +89,25 @@ export function ReadinessHub({
   }
 
   async function saveDecision(cid: string, patch: { decision?: Decision; comment?: string }, tag: string) {
+    // Waiving is the most consequential click in the product: it drops a MANDATORY
+    // criterion out of the blocking count and the bid proceeds without it. It used to be a
+    // single unconfirmed click whose only trace was 11px grey text and a counter.
+    if (patch.decision === "ignore" || patch.decision === "do_not_proceed") {
+      const verb =
+        patch.decision === "ignore"
+          ? "proceed WITHOUT meeting this mandatory requirement"
+          : "mark this bid as not proceeding";
+      const reason = window.prompt(
+        `You are about to ${verb}.\n\nThis is recorded in the audit trail against your ` +
+          `name. Briefly, why?`,
+      );
+      if (reason === null) return;
+      if (!reason.trim()) {
+        setError("A reason is required to override a mandatory requirement.");
+        return;
+      }
+      patch = { ...patch, comment: reason.trim() };
+    }
     setBusy(tag);
     setError(null);
     const res = await fetch(`/api/tenders/${tenderId}/criteria/${cid}/decision`, {

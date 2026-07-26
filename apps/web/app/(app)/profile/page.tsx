@@ -1,3 +1,4 @@
+import { ProfileEditor } from "@/components/ProfileEditor";
 import { engineFetch } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 import { formatCrore, formatDate } from "@/lib/format";
@@ -53,7 +54,7 @@ export default async function ProfilePage() {
   const { data: profile } = await supabase
     .from("vendor_profiles")
     .select(
-      "cin,pan,gst,udyam_registration,dpiit_registered,net_worth_cr,working_capital_cr,oem_status",
+      "legal_name,cin,pan,gst,udyam_registration,dpiit_registered,net_worth_cr,working_capital_cr,oem_status",
     )
     .maybeSingle();
 
@@ -133,12 +134,31 @@ export default async function ProfilePage() {
             )}
           </div>
         </div>
-        <button
-          type="button"
-          className="shrink-0 rounded border border-border bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-surface-alt"
-        >
-          Update profile
-        </button>
+        <ProfileEditor
+          initial={{
+            legal_name: profile?.legal_name ?? orgName,
+            cin: profile?.cin,
+            pan: profile?.pan,
+            gst: profile?.gst,
+            udyam_registration: profile?.udyam_registration,
+            net_worth_cr: profile?.net_worth_cr,
+            financials: financials.map((f) => ({
+              fy_label: f.fy_label,
+              turnover_cr: f.turnover_cr,
+            })),
+            certifications: certifications.map((c) => ({
+              name: c.name,
+              cert_no: c.cert_no,
+              valid_to: c.valid_to,
+            })),
+            experience_records: experience.map((x) => ({
+              project_name: x.project_name,
+              client_type: x.client_type,
+              value_cr: x.value_cr,
+              completion_date: x.completion_date,
+            })),
+          }}
+        />
       </header>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

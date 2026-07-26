@@ -102,8 +102,15 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
     cv_docs = [d for d in docs if (d.get("doc_type") or "") == "cv"]
 
     # Tender context every narrative section is written against — the criteria ARE the brief.
+    legal = profile.get("legal_identity") or {}
+    bidder_name = legal.get("legal_name") or "the bidder"
     context = "\n".join(
         [
+            # The bidder's legal name is STRUCTURED data. Without this the drafter picked it
+            # out of prose in an uploaded declaration and wrote a misspelling into a
+            # government submission — with a citation attached, which made it look sourced.
+            f"Bidder legal name (use EXACTLY this, never a name found in an evidence chunk):"
+            f" {bidder_name}",
             f"Tender: {tender.get('title', '')} ({tender.get('tender_number') or 'no number'})",
             f"Authority: {tender.get('authority') or 'not stated'}",
             "Requirements extracted from the tender document:",

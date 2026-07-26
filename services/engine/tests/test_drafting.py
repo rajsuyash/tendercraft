@@ -253,3 +253,46 @@ def test_coverage_ignores_desirable():
 
 def test_coverage_no_mandatory_is_full():
     assert mandatory_coverage([{"requirement_level": "desirable", "draft_status": "missing"}]) == 1.0
+
+
+# --- unfilled template detection (an uploaded blank form is not evidence) ---
+
+
+def test_detects_square_bracket_placeholders():
+    from app.deterministic.drafting import template_placeholders
+
+    found = template_placeholders(
+        "I, [Insert Name], as the [Insert Designation] of Merdian Technology, declare..."
+    )
+    assert "[Insert Name]" in found
+    assert "[Insert Designation]" in found
+
+
+def test_detects_other_common_marker_styles():
+    from app.deterministic.drafting import template_placeholders
+
+    assert template_placeholders("Signed by <<Authorised Signatory>>")
+    assert template_placeholders("Company: {{company_name}}")
+    assert template_placeholders("Name: __________")
+
+
+def test_a_filled_document_reports_nothing():
+    from app.deterministic.drafting import template_placeholders
+
+    assert template_placeholders(
+        "I, Priya Sharma, as the Managing Director of Meridian Infotech Pvt Ltd, declare "
+        "that the firm has not been blacklisted by any department."
+    ) == []
+
+
+def test_ordinary_brackets_are_not_placeholders():
+    from app.deterministic.drafting import template_placeholders
+
+    assert template_placeholders("Turnover [see Annexure A] exceeds the threshold.") == []
+
+
+def test_results_are_deduplicated_and_capped():
+    from app.deterministic.drafting import template_placeholders
+
+    text = " ".join(["[Insert Name]"] * 20)
+    assert template_placeholders(text) == ["[Insert Name]"]

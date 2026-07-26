@@ -26,7 +26,10 @@ const STATUS_STYLE: Record<string, string> = {
   missing: "bg-danger-bg text-danger",
   manual: "bg-info-bg text-info",
 };
-const STAGES = ["review", "compliance", "approver"];
+// MUST match app/authz.py APPROVAL_STAGES — the engine validates against a closed set, so
+// a stage name that only exists here returns 422 and the button appears to do nothing.
+// "approver" was such a name.
+const STAGES = ["review", "compliance", "legal", "final"];
 
 export function ExportGate({
   tenderId,
@@ -138,6 +141,15 @@ export function ExportGate({
         <aside>
           <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Approval chain</h2>
           <ul className="space-y-2">
+            {done.size > 0 ? (
+              <li
+                data-sod-notice
+                className="rounded-card border border-warning bg-warning-bg p-card text-xs text-warning"
+              >
+                A different person must sign each remaining stage — one approver cannot
+                complete the chain alone. Invite a colleague from Settings.
+              </li>
+            ) : null}
             {STAGES.map((stage) => {
               const approved = done.has(stage);
               return (
@@ -151,7 +163,12 @@ export function ExportGate({
                   </span>
                   {!approved && (
                     <button
-                      onClick={() => post(`/api/proposals/${proposalId}/approve?stage=${stage}`, "Approved.")}
+                      onClick={() =>
+                        post(
+                          `/api/proposals/${proposalId}/approve?stage=${stage}`,
+                          `${stage} approved.`,
+                        )
+                      }
                       disabled={busy}
                       className="rounded border border-primary px-2 py-0.5 text-xs text-primary hover:bg-primary-tint disabled:opacity-50"
                     >

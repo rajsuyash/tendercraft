@@ -55,6 +55,24 @@ export default async function DashboardPage() {
         ))}
       </div>
 
+      <section className="mb-6">
+        <Link
+          href="/tenders/upload"
+          data-start-bid
+          className="flex items-center justify-between gap-4 rounded-card border border-primary bg-primary/5 p-card hover:bg-primary/10"
+        >
+          <span>
+            <span className="block font-heading text-base font-medium text-ink">
+              Start a new bid
+            </span>
+            <span className="text-sm text-muted">
+              Upload the tender document and we&rsquo;ll extract the requirements
+            </span>
+          </span>
+          <span aria-hidden className="text-xl text-primary">→</span>
+        </Link>
+      </section>
+
       <section>
         <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Deadlines</h2>
         {hasTenders ? (
