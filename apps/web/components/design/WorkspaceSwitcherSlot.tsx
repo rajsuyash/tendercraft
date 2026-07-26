@@ -22,17 +22,25 @@ export function WorkspaceSwitcherSkeleton() {
  * was blocking first paint on EVERY navigation, for a list that most navigations never touch.
  */
 export async function WorkspaceSwitcherSlot() {
-  const res = await engineFetch("/api/workspaces");
-  if (!res.ok) return <WorkspaceSwitcher workspaces={[]} activeId={null} />;
+  // Degrade, never throw. A `fetch` to an unreachable engine REJECTS rather than returning a
+  // non-ok response, and an uncaught throw here escapes the Suspense boundary and takes the
+  // whole route to the error boundary — the sidebar killing the page it decorates. Every
+  // screen still works without the switcher; none works without itself.
+  try {
+    const res = await engineFetch("/api/workspaces");
+    if (!res.ok) return <WorkspaceSwitcher workspaces={[]} activeId={null} />;
 
-  const body = await res.json();
-  if (!body.ok) return <WorkspaceSwitcher workspaces={[]} activeId={null} />;
+    const body = await res.json();
+    if (!body.ok) return <WorkspaceSwitcher workspaces={[]} activeId={null} />;
 
-  return (
-    <WorkspaceSwitcher
-      workspaces={body.data.workspaces as WorkspaceOption[]}
-      activeId={body.data.active_workspace_id as string | null}
-      canCreate={Boolean(body.data.is_org_admin)}
-    />
-  );
+    return (
+      <WorkspaceSwitcher
+        workspaces={body.data.workspaces as WorkspaceOption[]}
+        activeId={body.data.active_workspace_id as string | null}
+        canCreate={Boolean(body.data.is_org_admin)}
+      />
+    );
+  } catch {
+    return <WorkspaceSwitcher workspaces={[]} activeId={null} />;
+  }
 }
