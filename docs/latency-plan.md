@@ -3,13 +3,18 @@
 Status: **Option A EXECUTED 2026-07-26.** Both services now run in `europe-north1` (Finland),
 next to the Supabase project in Stockholm. Option B remains the plan for the move to India.
 
-Live demo URLs (the region change means new hostnames — the `asia-south1` ones are the old,
-slow deployment):
+Live demo URLs. The `asia-south1` services were **deleted** on 2026-07-26 so the slow
+deployment could not be demoed by accident; those hostnames now 404.
 
 ```
 web    https://tendercraft-web-eu-822379741897.europe-north1.run.app
 engine https://tendercraft-engine-eu-822379741897.europe-north1.run.app
 ```
+
+Rolling back to Mumbai is still possible — the images remain in the `asia-south1` Artifact
+Registry repo (`tendercraft-web:perf`, `tendercraft-engine:perf2`), so it is two
+`gcloud run deploy` commands plus repointing `ENGINE_URL`. It is a recreate, not a revision
+revert, and the hostnames will differ from the originals.
 
 ### Measured result
 
