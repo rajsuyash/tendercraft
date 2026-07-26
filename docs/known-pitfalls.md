@@ -93,3 +93,35 @@ Format: **symptom → cause → fix.**
 - Four counters describing the same object will disagree. Compute one figure and its itemised breakdown from the same function (`deterministic/submission.py`) so a count can never name a number nothing on screen explains.
 - A non-disabled primary `<a href>` pointing at an API that 409s ejects the user onto a raw JSON envelope with internal AC codes. Gate the element, not just the endpoint.
 - The most consequential click in a compliance product (waiving a mandatory requirement) must cost more than one unconfirmed click and must capture a reason — an audit row with no "why" is not an explanation.
+
+## Latency (from the production audit, 2026-07-26)
+
+The app runs in Cloud Run `asia-south1` (Mumbai); the Supabase project is in `eu-north-1`
+(Stockholm). **Every DB round trip costs ~130ms and nothing in the code can make it cheaper —
+only rarer.** That single fact turns each pitfall below from a style note into the difference
+between a 0.5s page and a 7s one. Co-locating the two is the structural fix (and PRD §9 wants
+Mumbai anyway); until then, count round trips like they cost money.
+
+- Module-level `httpx.get()` / `httpx.request()` build a NEW client per call → a fresh TCP + TLS
+  handshake to a host 130ms away is ~2 extra round trips, so an unpooled query costs ~390ms
+  against ~130ms pooled. `GET /readiness` made 8 sequentially → 2.5s of handshakes on a handler
+  that computes nothing → one shared `httpx.Client` in `app/http.py`. Verified by the live
+  isolation suite: 54s → 31s with no other change. Do not reintroduce a bare `httpx.*` call for
+  Supabase traffic. (`knowledge.py` is the deliberate exception — its manual redirect handling is
+  the SSRF control, and `pipeline/client.py` talks to Gemini where a handshake is noise next to a
+  45s generation.)
+- A Next.js route group with **no `loading.tsx` and no `<Suspense>`** shows the user NOTHING until
+  the entire server render resolves — every page here is dynamic (`cookies()`), so `<Link>`
+  prefetch has nothing to warm either. 6.8s of a frozen screen reads as a broken click, not a slow
+  one. `app/(app)/loading.tsx` is the floor; it must keep existing.
+- Awaiting independent reads one after another multiplies the 130ms by the number of reads.
+  `Promise.all` in the page, `_gather()` (threadpool) in the engine. Grep for two consecutive
+  `await supabase` / `await engineFetch` lines with no data dependency — that is the whole tell.
+- Data fetched in `app/(app)/layout.tsx` is re-fetched on EVERY navigation and blocks first paint
+  for all of them. The workspace switcher cost ~0.9s per page view this way → put layout-level
+  data behind `<Suspense>` and pass it into the client shell as a slot, not a prop.
+- Two endpoints that read the same rows will get called together by one page and do the work
+  twice — `/submission` re-ran the whole of `/readiness` internally. Return what the caller
+  already had (`_readiness_and_proposal`) rather than recomputing it.
+- Cloud Run with no `min-instances` scales to zero, so the first visitor after an idle period pays
+  a full container start (3.2s measured on `/dashboard`). Fine for a demo, wrong for a customer.

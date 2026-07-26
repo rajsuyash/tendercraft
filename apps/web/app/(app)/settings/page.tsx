@@ -57,33 +57,36 @@ export default async function SettingsPage() {
   // Members come from the ENGINE, not a direct Supabase read: the roster needs the
   // workspace_members join and profile identity, and the old direct query could only ever
   // return one row (profiles_self_select).
-  const meRes = await engineFetch("/api/me");
+  // The audit log needs nothing from /api/me, so it goes out alongside it rather than after.
+  const [meRes, { data: auditEvents }] = await Promise.all([
+    engineFetch("/api/me"),
+    supabase
+      .from("audit_events")
+      .select("id,actor,action,entity,entity_id,created_at")
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
   const me = meRes.ok ? (await meRes.json()).data : null;
+
+  // Round 2 — both of these need the resolved workspace id, and neither needs the other.
+  const [membersRes, { data: workspace }] = await Promise.all([
+    me?.workspace_id ? engineFetch(`/api/workspaces/${me.workspace_id}/members`) : null,
+    supabase
+      .from("workspaces")
+      .select("name")
+      .eq("id", me?.workspace_id ?? "")
+      .maybeSingle(),
+  ]);
 
   let members: Member[] = [];
   let invitations: Invitation[] = [];
-  if (me?.workspace_id) {
-    const res = await engineFetch(`/api/workspaces/${me.workspace_id}/members`);
-    if (res.ok) {
-      const body = await res.json();
-      if (body.ok) {
-        members = body.data.members as Member[];
-        invitations = body.data.invitations as Invitation[];
-      }
+  if (membersRes?.ok) {
+    const body = await membersRes.json();
+    if (body.ok) {
+      members = body.data.members as Member[];
+      invitations = body.data.invitations as Invitation[];
     }
   }
-
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("name")
-    .eq("id", me?.workspace_id ?? "")
-    .maybeSingle();
-
-  const { data: auditEvents } = await supabase
-    .from("audit_events")
-    .select("id,actor,action,entity,entity_id,created_at")
-    .order("created_at", { ascending: false })
-    .limit(20);
 
   return (
     <main className="p-page">

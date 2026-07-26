@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 
+from . import http
 from .config import get_settings
 from .envelope import ApiError
 
@@ -28,7 +29,7 @@ def _rest(
 ) -> Any:
     s = get_settings()
     try:
-        r = httpx.request(
+        r = http.client.request(
             method,
             f"{s.supabase_url}/rest/v1/{path}",
             headers={**_headers(), "Prefer": prefer},
@@ -548,7 +549,7 @@ def get_user_email(user_id: str) -> str | None:
     """Authoritative email from the auth system, for the invitation identity check."""
     s = get_settings()
     try:
-        r = httpx.get(
+        r = http.client.get(
             f"{s.supabase_url}/auth/v1/admin/users/{user_id}",
             headers=_headers(),
             timeout=10,

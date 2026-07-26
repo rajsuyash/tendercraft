@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
@@ -40,13 +42,38 @@ def _to_domain(row: dict) -> Criterion:
     )
 
 
-def _readiness_payload(workspace_id: str, tender_id: str) -> dict:
-    criteria = db.get_criteria(tender_id, workspace_id)
-    analysis_result = db.get_analysis(tender_id, workspace_id)
-    proposal = db.get_proposal_by_tender(tender_id, workspace_id)
+def _gather(*calls: Callable[[], Any]) -> list:
+    """Run independent DB reads concurrently.
+
+    These are sync PostgREST calls over the pooled client (app/http.py), so a threadpool is
+    the whole trick: four serial round trips collapse into one. Exceptions still surface —
+    .result() re-raises, so an ApiError from any branch propagates as it did when serial.
+
+    ponytail: a per-call executor. Four short-lived threads per request is noise next to the
+    network wait; swap in a module-level pool if request volume ever makes thread churn show up.
+    """
+    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+        return [f.result() for f in [pool.submit(c) for c in calls]]
+
+
+def _readiness_and_proposal(workspace_id: str, tender_id: str) -> tuple[dict, dict | None]:
+    """Readiness payload plus the proposal row it already had to load.
+
+    Returning the proposal is what stops `submission_state` re-fetching it (and, before this,
+    re-running this entire function) — the two endpoints read the same rows.
+    """
+    criteria, analysis_result, proposal, decisions = _gather(
+        lambda: db.get_criteria(tender_id, workspace_id),
+        lambda: db.get_analysis(tender_id, workspace_id),
+        lambda: db.get_proposal_by_tender(tender_id, workspace_id),
+        lambda: db.get_readiness_decisions(tender_id, workspace_id),
+    )
     responses = db.get_responses(proposal["id"], workspace_id) if proposal else []
-    decisions = db.get_readiness_decisions(tender_id, workspace_id)
-    return compute_readiness(criteria, analysis_result, responses, decisions)
+    return compute_readiness(criteria, analysis_result, responses, decisions), proposal
+
+
+def _readiness_payload(workspace_id: str, tender_id: str) -> dict:
+    return _readiness_and_proposal(workspace_id, tender_id)[0]
 
 
 @router.get("/api/tenders/{tender_id}/readiness")
@@ -106,15 +133,17 @@ def submission_state(tender_id: str, user: CurrentUser) -> dict:
     if not db.get_tender(tender_id, user.workspace_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
 
-    readiness = _readiness_payload(user.workspace_id, tender_id)["summary"]
-    proposal = db.get_proposal_by_tender(tender_id, user.workspace_id)
+    full, proposal = _readiness_and_proposal(user.workspace_id, tender_id)
+    readiness = full["summary"]
 
     doc_sections: list[dict] = []
     approvals: list[dict] = []
     required = 2
     if proposal:
-        doc_sections = db.get_sections(proposal["id"], user.workspace_id)
-        approvals = db.get_approvals(proposal["id"], user.workspace_id)
+        doc_sections, approvals = _gather(
+            lambda: db.get_sections(proposal["id"], user.workspace_id),
+            lambda: db.get_approvals(proposal["id"], user.workspace_id),
+        )
         required = proposal.get("approvals_required", 2)
 
     state = submission.compute(

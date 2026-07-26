@@ -41,27 +41,42 @@ function monthYear(dateStr: string): string {
 export default async function ProfilePage() {
   const supabase = await createClient();
 
+  // Round 1 — everything that does not depend on anything else. Serially these were five
+  // round trips stacked end to end; only the workspace NAME needs a result from this batch.
+  //
   // The active workspace comes from the ENGINE, which is the single authority on it.
   // NOT a bare .maybeSingle() on `workspaces`: that table's RLS deliberately returns EVERY
   // workspace you belong to (it backs the switcher), so a member of two would hit PGRST116.
-  const meRes = await engineFetch("/api/me");
+  const [meRes, { data: profile }, { data: financialsData }, { data: experienceData }, { data: certificationsData }] =
+    await Promise.all([
+      engineFetch("/api/me"),
+      supabase
+        .from("vendor_profiles")
+        .select(
+          "legal_name,cin,pan,gst,udyam_registration,dpiit_registered,net_worth_cr,working_capital_cr,oem_status",
+        )
+        .maybeSingle(),
+      supabase
+        .from("profile_financials")
+        .select("id,fy_label,turnover_cr")
+        .order("fy_label", { ascending: false }),
+      supabase
+        .from("experience_records")
+        .select("id,project_name,client_type,value_cr,scope_tags,completion_date")
+        .order("completion_date", { ascending: false })
+        .limit(20),
+      supabase
+        .from("certifications")
+        .select("id,name,cert_no,valid_from,valid_to")
+        .order("valid_to", { ascending: true }),
+    ]);
+
   const activeId = meRes.ok ? ((await meRes.json()).data?.workspace_id ?? null) : null;
   const { data: workspace } = activeId
     ? await supabase.from("workspaces").select("name").eq("id", activeId).maybeSingle()
     : { data: null };
   const orgName = workspace?.name ?? "Vendor profile";
 
-  const { data: profile } = await supabase
-    .from("vendor_profiles")
-    .select(
-      "legal_name,cin,pan,gst,udyam_registration,dpiit_registered,net_worth_cr,working_capital_cr,oem_status",
-    )
-    .maybeSingle();
-
-  const { data: financialsData } = await supabase
-    .from("profile_financials")
-    .select("id,fy_label,turnover_cr")
-    .order("fy_label", { ascending: false });
   const financials = financialsData ?? [];
   const recentFinancials = financials.slice(0, 3);
   const avgTurnover =
@@ -70,17 +85,7 @@ export default async function ProfilePage() {
         recentFinancials.length
       : null;
 
-  const { data: experienceData } = await supabase
-    .from("experience_records")
-    .select("id,project_name,client_type,value_cr,scope_tags,completion_date")
-    .order("completion_date", { ascending: false })
-    .limit(20);
   const experience = experienceData ?? [];
-
-  const { data: certificationsData } = await supabase
-    .from("certifications")
-    .select("id,name,cert_no,valid_from,valid_to")
-    .order("valid_to", { ascending: true });
   const certifications = certificationsData ?? [];
 
   const today = new Date();

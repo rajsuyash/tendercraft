@@ -23,14 +23,14 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   // Bounded list for display; exact count fetched separately (head-only) so the KPI
   // never depends on how many rows we happened to render (known-pitfalls: pagination).
-  const { data: tenders } = await supabase
-    .from("tenders")
-    .select("id,title,status,deadline,tender_number,authority")
-    .order("created_at", { ascending: false })
-    .limit(20);
-  const { count: activeCount } = await supabase
-    .from("tenders")
-    .select("id", { count: "exact", head: true });
+  const [{ data: tenders }, { count: activeCount }] = await Promise.all([
+    supabase
+      .from("tenders")
+      .select("id,title,status,deadline,tender_number,authority")
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase.from("tenders").select("id", { count: "exact", head: true }),
+  ]);
 
   const hasTenders = (tenders?.length ?? 0) > 0;
 

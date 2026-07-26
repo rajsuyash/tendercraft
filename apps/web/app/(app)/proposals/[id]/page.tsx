@@ -7,18 +7,11 @@ import { createClient } from "@/lib/supabase/server";
 export default async function ProposalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: tender } = await supabase
-    .from("tenders")
-    .select("id,title,status")
-    .eq("id", id)
-    .single();
+  const [{ data: tender }, { data: proposal }] = await Promise.all([
+    supabase.from("tenders").select("id,title,status").eq("id", id).single(),
+    supabase.from("proposals").select("id,status").eq("tender_id", id).maybeSingle(),
+  ]);
   if (!tender) notFound();
-
-  const { data: proposal } = await supabase
-    .from("proposals")
-    .select("id,status")
-    .eq("tender_id", id)
-    .maybeSingle();
 
   let sections: DocSection[] = [];
   if (proposal) {

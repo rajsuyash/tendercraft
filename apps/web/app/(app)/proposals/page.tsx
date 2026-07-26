@@ -12,12 +12,14 @@ const STATUS_STYLE: Record<string, string> = {
 // Proposals list — every tender is a potential proposal; locked ones can be drafted.
 export default async function ProposalsPage() {
   const supabase = await createClient();
-  const { data: tenders } = await supabase
-    .from("tenders")
-    .select("id,title,tender_number,status")
-    .order("created_at", { ascending: false })
-    .limit(50);
-  const { data: proposals } = await supabase.from("proposals").select("tender_id,status");
+  const [{ data: tenders }, { data: proposals }] = await Promise.all([
+    supabase
+      .from("tenders")
+      .select("id,title,tender_number,status")
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase.from("proposals").select("tender_id,status"),
+  ]);
   const byTender = new Map((proposals ?? []).map((p) => [p.tender_id, p.status]));
 
   return (

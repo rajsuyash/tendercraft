@@ -11,11 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 
-import httpx
 import jwt
 from fastapi import Header
 from jwt import PyJWKClient
 
+from . import http
 from .config import get_settings
 from .envelope import ApiError
 
@@ -54,7 +54,7 @@ def _rest_get(path: str, params: dict) -> list:
     settings = get_settings()
     if not settings.supabase_service_key:
         raise ApiError(500, "ENGINE_MISCONFIGURED", "service key not configured")
-    resp = httpx.get(
+    resp = http.client.get(
         f"{settings.supabase_url}/rest/v1/{path}",
         params=params,
         headers={

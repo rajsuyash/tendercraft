@@ -10,21 +10,17 @@ export default async function ExportPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: proposal } = await supabase
-    .from("proposals")
-    .select("id")
-    .eq("tender_id", id)
-    .maybeSingle();
+  // All three key off the tender id alone, so they issue together rather than in sequence.
+  const [{ data: proposal }, { data: criteria }, res] = await Promise.all([
+    supabase.from("proposals").select("id").eq("tender_id", id).maybeSingle(),
+    supabase.from("criteria").select("id,verbatim_text").eq("tender_id", id),
+    engineFetch(`/api/tenders/${id}/compliance-matrix`),
+  ]);
   if (!proposal) notFound();
 
-  const { data: criteria } = await supabase
-    .from("criteria")
-    .select("id,verbatim_text")
-    .eq("tender_id", id);
   const criteriaText: Record<string, string> = {};
   for (const c of criteria ?? []) criteriaText[c.id] = c.verbatim_text;
 
-  const res = await engineFetch(`/api/tenders/${id}/compliance-matrix`);
   if (!res.ok) notFound();
   const matrix = (await res.json()).data;
 

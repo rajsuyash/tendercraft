@@ -15,21 +15,15 @@ import { createClient } from "@/lib/supabase/server";
 export default async function ScorePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: tender } = await supabase
-    .from("tenders")
-    .select("id,title")
-    .eq("id", id)
-    .single();
+  // The rubric call is the slow one (~3.5s); it no longer waits behind two cheap reads.
+  const [{ data: tender }, { data: row }, res] = await Promise.all([
+    supabase.from("tenders").select("id,title").eq("id", id).single(),
+    supabase.from("score_estimates").select("result").eq("tender_id", id).maybeSingle(),
+    engineFetch(`/api/tenders/${id}/rubric`, { method: "POST" }),
+  ]);
   if (!tender) notFound();
 
-  const { data: row } = await supabase
-    .from("score_estimates")
-    .select("result")
-    .eq("tender_id", id)
-    .maybeSingle();
-
   let rubric: Rubric | null = null;
-  const res = await engineFetch(`/api/tenders/${id}/rubric`, { method: "POST" });
   if (res.ok) {
     const body = await res.json();
     if (body.ok) rubric = body.data as Rubric;

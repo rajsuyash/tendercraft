@@ -41,18 +41,15 @@ const REC_STYLE: Record<AnalysisResult["recommendation"], string> = {
 export default async function AnalysisPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: tender } = await supabase
-    .from("tenders")
-    .select("id,title,tender_number,authority,status")
-    .eq("id", id)
-    .single();
+  const [{ data: tender }, { data: analysisRow }] = await Promise.all([
+    supabase
+      .from("tenders")
+      .select("id,title,tender_number,authority,status")
+      .eq("id", id)
+      .single(),
+    supabase.from("analyses").select("result").eq("tender_id", id).maybeSingle(),
+  ]);
   if (!tender) notFound();
-
-  const { data: analysisRow } = await supabase
-    .from("analyses")
-    .select("result")
-    .eq("tender_id", id)
-    .maybeSingle();
 
   if (!analysisRow) {
     return (

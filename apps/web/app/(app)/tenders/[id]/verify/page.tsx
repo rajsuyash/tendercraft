@@ -8,17 +8,14 @@ import { createClient } from "@/lib/supabase/server";
 export default async function VerifyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: tender } = await supabase
-    .from("tenders")
-    .select("id,title,status")
-    .eq("id", id)
-    .single();
+  const [{ data: tender }, { data: criteria }] = await Promise.all([
+    supabase.from("tenders").select("id,title,status").eq("id", id).single(),
+    supabase
+      .from("criteria")
+      .select("id,verbatim_text,category,requirement_level,confidence,confirmed,anchor_page,anchor_clause")
+      .eq("tender_id", id),
+  ]);
   if (!tender) notFound();
-
-  const { data: criteria } = await supabase
-    .from("criteria")
-    .select("id,verbatim_text,category,requirement_level,confidence,confirmed,anchor_page,anchor_clause")
-    .eq("tender_id", id);
 
   return (
     <VerifyQueue

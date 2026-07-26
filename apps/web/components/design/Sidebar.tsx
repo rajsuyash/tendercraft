@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { WorkspaceSwitcher, type WorkspaceOption } from "./WorkspaceSwitcher";
-
 /** C1 — fixed 280px primary navigation; active item primary-tinted. */
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
@@ -15,15 +13,12 @@ const NAV = [
   { href: "/settings", label: "Settings" },
 ];
 
-export function Sidebar({
-  workspaces = [],
-  activeWorkspaceId = null,
-  canCreateWorkspace = false,
-}: {
-  workspaces?: WorkspaceOption[];
-  activeWorkspaceId?: string | null;
-  canCreateWorkspace?: boolean;
-}) {
+/**
+ * `switcher` is a slot, not props: resolving which workspaces you can reach costs an engine
+ * round trip (~0.9s measured), and inlining it here made every navigation wait for data that
+ * the nav links themselves do not need. The layout streams it in through a Suspense boundary.
+ */
+export function Sidebar({ switcher }: { switcher?: React.ReactNode }) {
   const pathname = usePathname();
   return (
     <nav
@@ -36,11 +31,7 @@ export function Sidebar({
         </span>
         <span className="font-heading text-lg font-semibold text-ink">TenderCraft</span>
       </div>
-      <WorkspaceSwitcher
-        workspaces={workspaces}
-        activeId={activeWorkspaceId}
-        canCreate={canCreateWorkspace}
-      />
+      {switcher}
       <ul className="flex flex-col gap-1">
         {NAV.map((item) => {
           const active = pathname.startsWith(item.href);

@@ -41,7 +41,7 @@ def _stub(monkeypatch, payload):
         captured["params"] = kw.get("params", {})
         return _Resp(payload)
 
-    monkeypatch.setattr(auth.httpx, "get", fake_get)
+    monkeypatch.setattr(auth.http.client, "get", fake_get)
     return captured
 
 
@@ -108,7 +108,7 @@ def _stub_paths(monkeypatch, by_path: dict):
         table = url.rstrip("/").rsplit("/", 1)[-1]
         return _Resp(by_path.get(table, []))
 
-    monkeypatch.setattr(auth.httpx, "get", fake_get)
+    monkeypatch.setattr(auth.http.client, "get", fake_get)
 
 
 def test_active_workspace_is_used_when_no_header(monkeypatch):

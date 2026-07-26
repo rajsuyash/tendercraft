@@ -9,17 +9,18 @@ const CATEGORIES = ["eligibility", "technical", "financial", "terms"] as const;
 export default async function TenderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: tender } = await supabase
-    .from("tenders")
-    .select("id,title,tender_number,authority,status,locked_at")
-    .eq("id", id)
-    .single();
+  const [{ data: tender }, { data: criteria }] = await Promise.all([
+    supabase
+      .from("tenders")
+      .select("id,title,tender_number,authority,status,locked_at")
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("criteria")
+      .select("id,verbatim_text,category,requirement_level,anchor_page,anchor_clause")
+      .eq("tender_id", id),
+  ]);
   if (!tender) notFound();
-
-  const { data: criteria } = await supabase
-    .from("criteria")
-    .select("id,verbatim_text,category,requirement_level,anchor_page,anchor_clause")
-    .eq("tender_id", id);
 
   const locked = tender.status === "locked";
 
