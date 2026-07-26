@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+
+import { StageProgress } from "./StageProgress";
 import { useState } from "react";
 
 export type DocSection = {
+  edited_at?: string | null;
   key: string;
   heading: string;
   kind: string;
@@ -112,6 +115,30 @@ export function ProposalDocument({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+
+  async function saveEdit(key: string) {
+    if (!proposalId) return;
+    setBusy(key);
+    setError(null);
+    try {
+      const res = await fetch(`/api/proposals/${proposalId}/sections/${key}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body_md: draft }),
+      });
+      const body = await res.json();
+      if (!body.ok) {
+        setError(body.error?.message ?? "Could not save");
+        return;
+      }
+      setEditing(null);
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const unapproved = sections.filter((s) => s.kind === "narrative" && !s.approved_at);
 
@@ -146,6 +173,21 @@ export function ProposalDocument({
         >
           {busy ? "Drafting…" : "Generate proposal document"}
         </button>
+        {busy ? (
+          <div className="mx-auto mt-5 max-w-md text-left">
+            <StageProgress
+              stages={[
+                "Assembling your compliance tables",
+                "Drafting the solution and methodology",
+                "Drafting quality, training and support",
+                "Drafting risk and the covering letter",
+                "Checking every claim against your evidence",
+              ]}
+              secondsPerStage={26}
+              note="17 sections, usually about 2 minutes"
+            />
+          </div>
+        ) : null}
         {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
       </div>
       </main>
@@ -237,7 +279,14 @@ export function ProposalDocument({
                 <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${st.cls}`}>
                   {st.label}
                 </span>
-                {s.kind === "narrative" && !s.approved_at ? (
+                {s.edited_at ? (
+                  <span
+                    data-edited
+                    className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary"
+                  >
+                    Your edit
+                  </span>
+                ) : s.kind === "narrative" && !s.approved_at ? (
                   <span
                     data-ai-watermark
                     className="rounded bg-warning-bg px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning"
@@ -250,7 +299,42 @@ export function ProposalDocument({
             <p className="mt-1 text-xs text-muted">{s.word_count} words</p>
 
             <div className="mt-3">
-              <Body md={s.body_md} />
+              {editing === s.key ? (
+                <div>
+                  <textarea
+                    data-edit-body={s.key}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    rows={Math.min(30, Math.max(8, draft.split("\n").length + 2))}
+                    className="w-full rounded border border-border bg-surface p-3 font-mono text-xs leading-relaxed text-ink focus:border-primary focus:outline-none"
+                  />
+                  <p className="mt-1 text-xs text-muted">
+                    Markdown: <code>### </code> for a sub-heading, <code>| a | b |</code> for
+                    a table. Saving clears this section&rsquo;s approval — it will need
+                    signing off again.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      data-save-edit={s.key}
+                      disabled={busy !== null}
+                      onClick={() => saveEdit(s.key)}
+                      className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                    >
+                      {busy === s.key ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(null)}
+                      className="rounded border border-border px-3 py-1.5 text-xs text-muted"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <Body md={s.body_md} />
+              )}
             </div>
 
             {(s.flags ?? []).length > 0 ? (
@@ -261,6 +345,22 @@ export function ProposalDocument({
                   </li>
                 ))}
               </ul>
+            ) : null}
+
+            {proposalId && editing !== s.key ? (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  data-edit-section={s.key}
+                  onClick={() => {
+                    setDraft(s.body_md ?? "");
+                    setEditing(s.key);
+                  }}
+                  className="text-xs font-medium text-primary underline"
+                >
+                  Edit this section
+                </button>
+              </div>
             ) : null}
 
             {s.kind === "narrative" && proposalId ? (

@@ -1,0 +1,284 @@
+- generic [active] [ref=f21e1]:
+  - generic [ref=f21e2]:
+    - navigation [ref=f21e3]:
+      - generic [ref=f21e4]:
+        - generic [ref=f21e5]: TC
+        - generic [ref=f21e6]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f21e8] [cursor=pointer]:
+        - generic [ref=f21e9]:
+          - generic [ref=f21e10]: Workspace
+          - generic [ref=f21e11]: Meridian Infotech Pvt Ltd
+        - generic [ref=f21e12]: ▼
+      - list [ref=f21e13]:
+        - listitem [ref=f21e14]:
+          - link "Dashboard" [ref=f21e15] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f21e16]:
+          - link "Tenders" [ref=f21e17] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f21e18]:
+          - link "Proposals" [ref=f21e19] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f21e20]:
+          - link "Knowledge Base" [ref=f21e21] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f21e22]:
+          - link "Vendor Profile" [ref=f21e23] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f21e24]:
+          - link "Settings" [ref=f21e25] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f21e63]:
+      - generic [ref=f21e64]:
+        - generic [ref=f21e65]:
+          - generic [ref=f21e66]:
+            - heading "Meridian Infotech Pvt Ltd" [level=1] [ref=f21e67]
+            - generic [ref=f21e68]: Active
+          - generic [ref=f21e69]: 100% complete
+        - generic [ref=f21e209]:
+          - heading "Update vendor profile" [level=1] [ref=f21e210]
+          - generic [ref=f21e211]:
+            - generic [ref=f21e212]:
+              - heading "Legal identity" [level=2] [ref=f21e213]
+              - generic [ref=f21e214]:
+                - generic [ref=f21e215]:
+                  - generic [ref=f21e216]: Registered company name
+                  - textbox "Registered company name" [ref=f21e217]:
+                    - /placeholder: As it appears on the certificate of incorporation
+                    - text: Meridian Infotech Pvt Ltd
+                - generic [ref=f21e218]:
+                  - generic [ref=f21e219]: CIN
+                  - textbox "CIN" [ref=f21e220]: U72200MH2011PTC214563
+                - generic [ref=f21e221]:
+                  - generic [ref=f21e222]: PAN
+                  - textbox "PAN" [ref=f21e223]: AAECM4321F
+                - generic [ref=f21e224]:
+                  - generic [ref=f21e225]: GST
+                  - textbox "GST" [ref=f21e226]: 27AAECM4321F1ZP
+                - generic [ref=f21e227]:
+                  - generic [ref=f21e228]: Udyam registration
+                  - textbox "Udyam registration" [ref=f21e229]: UDYAM-MH-18-0034521
+                - generic [ref=f21e230]:
+                  - generic [ref=f21e231]: Net worth (₹ Cr)
+                  - spinbutton "Net worth (₹ Cr)" [ref=f21e232]: "5.5"
+              - paragraph [ref=f21e233]: The registered name is written into the proposal directly. It is never taken from an uploaded document.
+            - generic [ref=f21e234]:
+              - heading "Annual turnover" [level=2] [ref=f21e235]
+              - paragraph [ref=f21e236]: Turnover thresholds are checked against these figures.
+              - generic [ref=f21e237]:
+                - generic [ref=f21e238]:
+                  - textbox "Financial year" [ref=f21e239]:
+                    - /placeholder: FY25
+                    - text: FY25
+                  - spinbutton "Turnover in crore" [ref=f21e240]: "9.7"
+                  - button "Remove" [ref=f21e241] [cursor=pointer]
+                - generic [ref=f21e242]:
+                  - textbox "Financial year" [ref=f21e243]:
+                    - /placeholder: FY25
+                    - text: FY24
+                  - spinbutton "Turnover in crore" [ref=f21e244]: "8.1"
+                  - button "Remove" [ref=f21e245] [cursor=pointer]
+                - generic [ref=f21e246]:
+                  - textbox "Financial year" [ref=f21e247]:
+                    - /placeholder: FY25
+                    - text: FY23
+                  - spinbutton "Turnover in crore" [ref=f21e248]: "6.8"
+                  - button "Remove" [ref=f21e249] [cursor=pointer]
+              - button "+ Add a financial year" [ref=f21e250] [cursor=pointer]
+            - generic [ref=f21e251]:
+              - heading "Certifications" [level=2] [ref=f21e252]
+              - paragraph [ref=f21e253]: An expired certificate fails its criterion and is excluded from retrieval — keep the validity date current.
+              - generic [ref=f21e254]:
+                - generic [ref=f21e255]:
+                  - textbox "Certification name" [ref=f21e256]:
+                    - /placeholder: ISO 9001:2015
+                    - text: ISO 9001:2015
+                  - textbox "Valid until" [ref=f21e257]: 2027-03-31
+                  - button "Remove" [ref=f21e258] [cursor=pointer]
+                - generic [ref=f21e259]:
+                  - textbox "Certification name" [ref=f21e260]:
+                    - /placeholder: ISO 9001:2015
+                    - text: ISO/IEC 27001:2022
+                  - textbox "Valid until" [ref=f21e261]: 2027-09-30
+                  - button "Remove" [ref=f21e262] [cursor=pointer]
+                - generic [ref=f21e263]:
+                  - textbox "Certification name" [ref=f21e264]:
+                    - /placeholder: ISO 9001:2015
+                    - text: CMMI Level 3
+                  - textbox "Valid until" [ref=f21e265]: 2028-01-15
+                  - button "Remove" [ref=f21e266] [cursor=pointer]
+              - button "+ Add a certification" [ref=f21e267] [cursor=pointer]
+            - generic [ref=f21e268]:
+              - heading "Past projects" [level=2] [ref=f21e269]
+              - paragraph [ref=f21e270]: Similar-works criteria are matched against these, by scope and value.
+              - generic [ref=f21e271]:
+                - generic [ref=f21e272]:
+                  - textbox "Project name" [ref=f21e273]: Hospital Management Information System (HMIS) deployment
+                  - spinbutton "Value in crore" [ref=f21e274]: "2.4"
+                  - textbox "Completion date" [ref=f21e275]: 2025-02-15
+                  - button "Remove" [ref=f21e276] [cursor=pointer]
+                - generic [ref=f21e277]:
+                  - textbox "Project name" [ref=f21e278]: Ministry IT infra (turnkey)
+                  - spinbutton "Value in crore" [ref=f21e279]: "4.9"
+                  - textbox "Completion date" [ref=f21e280]: 2025-01-20
+                  - button "Remove" [ref=f21e281] [cursor=pointer]
+                - generic [ref=f21e282]:
+                  - textbox "Project name" [ref=f21e283]: District e-Governance rollout
+                  - spinbutton "Value in crore" [ref=f21e284]: "3.4"
+                  - textbox "Completion date" [ref=f21e285]: 2024-11-30
+                  - button "Remove" [ref=f21e286] [cursor=pointer]
+                - generic [ref=f21e287]:
+                  - textbox "Project name" [ref=f21e288]: State e-Office & file-workflow software implementation
+                  - spinbutton "Value in crore" [ref=f21e289]: "3.8"
+                  - textbox "Completion date" [ref=f21e290]: 2024-06-30
+                  - button "Remove" [ref=f21e291] [cursor=pointer]
+                - generic [ref=f21e292]:
+                  - textbox "Project name" [ref=f21e293]: GST citizen-services portal development & rollout
+                  - spinbutton "Value in crore" [ref=f21e294]: "2.9"
+                  - textbox "Completion date" [ref=f21e295]: 2023-09-10
+                  - button "Remove" [ref=f21e296] [cursor=pointer]
+                - generic [ref=f21e297]:
+                  - textbox "Project name" [ref=f21e298]: PSU desktop refresh 800 units
+                  - spinbutton "Value in crore" [ref=f21e299]: "2.6"
+                  - textbox "Completion date" [ref=f21e300]: 2023-03-15
+                  - button "Remove" [ref=f21e301] [cursor=pointer]
+                - generic [ref=f21e302]:
+                  - textbox "Project name" [ref=f21e303]: Municipal CCTV network
+                  - spinbutton "Value in crore" [ref=f21e304]: "2.1"
+                  - textbox "Completion date" [ref=f21e305]: 2022-08-01
+                  - button "Remove" [ref=f21e306] [cursor=pointer]
+              - button "+ Add a project" [ref=f21e307] [cursor=pointer]
+            - generic [ref=f21e308]:
+              - button "Saving…" [disabled] [ref=f21e312]
+              - button "Cancel" [ref=f21e310] [cursor=pointer]
+              - generic [ref=f21e311]: Re-match any open bid afterwards so its eligibility is recalculated.
+      - generic [ref=f21e74]:
+        - generic [ref=f21e75]:
+          - generic [ref=f21e76]:
+            - heading "Legal identity" [level=2] [ref=f21e77]
+            - generic [ref=f21e78]:
+              - generic [ref=f21e79]:
+                - paragraph [ref=f21e80]: Corporate Identity Number (CIN)
+                - paragraph [ref=f21e81]: U72200MH2011PTC214563
+              - generic [ref=f21e82]:
+                - paragraph [ref=f21e83]: Permanent Account Number (PAN)
+                - paragraph [ref=f21e84]: AAECM4321F
+              - generic [ref=f21e85]:
+                - paragraph [ref=f21e86]: GSTIN
+                - paragraph [ref=f21e87]: 27AAECM4321F1ZP
+              - generic [ref=f21e88]:
+                - paragraph [ref=f21e89]: MSE / Udyam
+                - generic [ref=f21e90]:
+                  - generic [ref=f21e91]: MSE — exemptions active
+                  - generic [ref=f21e92]: UDYAM-MH-18-0034521
+            - generic [ref=f21e93]:
+              - paragraph [ref=f21e94]: DPIIT Startup
+              - paragraph [ref=f21e95]: Not registered
+          - generic [ref=f21e96]:
+            - generic [ref=f21e97]:
+              - heading "Financials" [level=2] [ref=f21e98]
+              - generic [ref=f21e99]: "3-yr average turnover: ₹8.2 Cr"
+            - table [ref=f21e100]:
+              - rowgroup [ref=f21e101]:
+                - row [ref=f21e102]:
+                  - columnheader "Year" [ref=f21e103]
+                  - columnheader "Turnover" [ref=f21e104]
+              - rowgroup [ref=f21e105]:
+                - row [ref=f21e106]:
+                  - cell "FY25" [ref=f21e107]
+                  - cell "₹9.7 Cr" [ref=f21e108]
+                - row [ref=f21e109]:
+                  - cell "FY24" [ref=f21e110]
+                  - cell "₹8.1 Cr" [ref=f21e111]
+                - row [ref=f21e112]:
+                  - cell "FY23" [ref=f21e113]
+                  - cell "₹6.8 Cr" [ref=f21e114]
+            - generic [ref=f21e115]:
+              - generic [ref=f21e116]:
+                - paragraph [ref=f21e117]: Net worth
+                - paragraph [ref=f21e118]: ₹4.3 Cr
+              - generic [ref=f21e119]:
+                - paragraph [ref=f21e120]: Working capital
+                - paragraph [ref=f21e121]: ₹2.1 Cr
+          - generic [ref=f21e122]:
+            - heading "Experience records" [level=2] [ref=f21e123]
+            - table [ref=f21e124]:
+              - rowgroup [ref=f21e125]:
+                - row [ref=f21e126]:
+                  - columnheader "Project" [ref=f21e127]
+                  - columnheader "Client" [ref=f21e128]
+                  - columnheader "Value" [ref=f21e129]
+                  - columnheader "Tags" [ref=f21e130]
+                  - columnheader "Completed" [ref=f21e131]
+              - rowgroup [ref=f21e132]:
+                - row [ref=f21e133]:
+                  - cell "Hospital Management Information System (HMIS) deployment" [ref=f21e134]
+                  - cell "psu" [ref=f21e135]
+                  - cell "₹2.4 Cr" [ref=f21e136]
+                  - cell "software-implementation" [ref=f21e137]
+                  - cell "15/02/2025" [ref=f21e140]
+                - row [ref=f21e141]:
+                  - cell "Ministry IT infra (turnkey)" [ref=f21e142]
+                  - cell "govt" [ref=f21e143]
+                  - cell "₹4.9 Cr" [ref=f21e144]
+                  - cell "hardware-supply installation turnkey" [ref=f21e145]:
+                    - generic [ref=f21e146]:
+                      - generic [ref=f21e147]: hardware-supply
+                      - generic [ref=f21e148]: installation
+                      - generic [ref=f21e149]: turnkey
+                  - cell "20/01/2025" [ref=f21e150]
+                - row [ref=f21e151]:
+                  - cell "District e-Governance rollout" [ref=f21e152]
+                  - cell "psu" [ref=f21e153]
+                  - cell "₹3.4 Cr" [ref=f21e154]
+                  - cell "hardware-supply installation" [ref=f21e155]:
+                    - generic [ref=f21e156]:
+                      - generic [ref=f21e157]: hardware-supply
+                      - generic [ref=f21e158]: installation
+                  - cell "30/11/2024" [ref=f21e159]
+                - row [ref=f21e160]:
+                  - cell "State e-Office & file-workflow software implementation" [ref=f21e161]
+                  - cell "govt" [ref=f21e162]
+                  - cell "₹3.8 Cr" [ref=f21e163]
+                  - cell "software-implementation workflow-automation" [ref=f21e164]:
+                    - generic [ref=f21e165]:
+                      - generic [ref=f21e166]: software-implementation
+                      - generic [ref=f21e167]: workflow-automation
+                  - cell "30/06/2024" [ref=f21e168]
+                - row [ref=f21e169]:
+                  - cell "GST citizen-services portal development & rollout" [ref=f21e170]
+                  - cell "govt" [ref=f21e171]
+                  - cell "₹2.9 Cr" [ref=f21e172]
+                  - cell "software-development software-implementation" [ref=f21e173]:
+                    - generic [ref=f21e174]:
+                      - generic [ref=f21e175]: software-development
+                      - generic [ref=f21e176]: software-implementation
+                  - cell "10/09/2023" [ref=f21e177]
+                - row [ref=f21e178]:
+                  - cell "PSU desktop refresh 800 units" [ref=f21e179]
+                  - cell "psu" [ref=f21e180]
+                  - cell "₹2.6 Cr" [ref=f21e181]
+                  - cell "hardware-supply" [ref=f21e182]
+                  - cell "15/03/2023" [ref=f21e185]
+                - row [ref=f21e186]:
+                  - cell "Municipal CCTV network" [ref=f21e187]
+                  - cell "govt" [ref=f21e188]
+                  - cell "₹2.1 Cr" [ref=f21e189]
+                  - cell "surveillance installation" [ref=f21e190]:
+                    - generic [ref=f21e191]:
+                      - generic [ref=f21e192]: surveillance
+                      - generic [ref=f21e193]: installation
+                  - cell "01/08/2022" [ref=f21e194]
+        - generic [ref=f21e196]:
+          - heading "Certifications" [level=2] [ref=f21e197]
+          - list [ref=f21e198]:
+            - listitem [ref=f21e199]:
+              - paragraph [ref=f21e200]: ISO 9001:2015
+              - generic [ref=f21e201]: Valid until 03/2027
+            - listitem [ref=f21e202]:
+              - paragraph [ref=f21e203]: ISO/IEC 27001:2022
+              - generic [ref=f21e204]: Valid until 09/2027
+            - listitem [ref=f21e205]:
+              - paragraph [ref=f21e206]: CMMI Level 3
+              - generic [ref=f21e207]: Valid until 01/2028
+  - alert [ref=f21e62]

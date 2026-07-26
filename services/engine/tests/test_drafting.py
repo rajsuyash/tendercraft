@@ -296,3 +296,13 @@ def test_results_are_deduplicated_and_capped():
 
     text = " ".join(["[Insert Name]"] * 20)
     assert template_placeholders(text) == ["[Insert Name]"]
+
+
+def test_placeholder_scan_stops_at_the_limit():
+    """A document that is nothing but blanks must not return hundreds of markers."""
+    from app.deterministic.drafting import template_placeholders
+
+    text = " ".join(f"[Insert Field{i}]" for i in range(30))
+    found = template_placeholders(text, limit=3)
+    assert len(found) == 3
+    assert found == ["[Insert Field0]", "[Insert Field1]", "[Insert Field2]"]

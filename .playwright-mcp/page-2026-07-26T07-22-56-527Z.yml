@@ -1,0 +1,117 @@
+- generic [active] [ref=f23e1]:
+  - generic [ref=f23e2]:
+    - navigation [ref=f23e3]:
+      - generic [ref=f23e4]:
+        - generic [ref=f23e5]: TC
+        - generic [ref=f23e6]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f23e8] [cursor=pointer]:
+        - generic [ref=f23e9]:
+          - generic [ref=f23e10]: Workspace
+          - generic [ref=f23e11]: Meridian Infotech Pvt Ltd
+        - generic [ref=f23e12]: ▼
+      - list [ref=f23e13]:
+        - listitem [ref=f23e14]:
+          - link "Dashboard" [ref=f23e15] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f23e16]:
+          - link "Tenders" [ref=f23e17] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f23e18]:
+          - link "Proposals" [ref=f23e19] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f23e20]:
+          - link "Knowledge Base" [ref=f23e21] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f23e22]:
+          - link "Vendor Profile" [ref=f23e23] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f23e24]:
+          - link "Settings" [ref=f23e25] [cursor=pointer]:
+            - /url: /settings
+    - generic [ref=f23e26]:
+      - generic [ref=f23e28]:
+        - generic [ref=f23e29]:
+          - heading "Submission readiness" [level=2] [ref=f23e30]
+          - generic [ref=f23e31]: "Next: Sections approved"
+        - generic [ref=f23e32]: 3/5 stages
+        - paragraph [ref=f23e36]: 2 things left
+        - list [ref=f23e37]:
+          - listitem [ref=f23e38]:
+            - text: Sections approved
+            - generic [ref=f23e39]: — 9 drafted section(s) not yet approved
+          - listitem [ref=f23e40]:
+            - text: Approvals complete
+            - generic [ref=f23e41]: — 1 of 2 sign-offs collected
+        - generic [ref=f23e42]:
+          - link "Requirements" [ref=f23e43] [cursor=pointer]:
+            - /url: /tenders/940f1f16-336c-4416-adbb-e9c76eef727f/readiness
+          - link "Proposal" [ref=f23e44] [cursor=pointer]:
+            - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+          - link "Technical score" [ref=f23e45] [cursor=pointer]:
+            - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f/score
+      - main [ref=f23e46]:
+        - generic [ref=f23e47]:
+          - heading "e-Office Software Implementation" [level=1] [ref=f23e48]
+          - paragraph [ref=f23e49]: MAHA/IT/2026/4415 · MahaIT
+          - paragraph [ref=f23e50]: Bid readiness — what your company already covers, and what's still needed.
+        - generic [ref=f23e51]:
+          - generic [ref=f23e52]:
+            - generic [ref=f23e53]: 0 blocking submission
+            - generic [ref=f23e54]: 1 P1
+            - generic [ref=f23e55]: 0 P2
+            - generic [ref=f23e56]: 2 covered
+          - generic [ref=f23e57]:
+            - button "Re-match" [ref=f23e58] [cursor=pointer]
+            - link "Generate proposal" [ref=f23e59] [cursor=pointer]:
+              - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+        - generic [ref=f23e61]:
+          - heading "Add to knowledge base" [level=2] [ref=f23e62]
+          - generic [ref=f23e63]:
+            - generic [ref=f23e64] [cursor=pointer]: Upload file (PDF / DOCX / PPTX)
+            - generic [ref=f23e65]: or
+            - generic [ref=f23e66]:
+              - textbox "https://your-company.com/about" [ref=f23e67]
+              - button "Fetch" [disabled] [ref=f23e68]
+        - list [ref=f23e69]:
+          - listitem [ref=f23e70]:
+            - generic [ref=f23e71]:
+              - generic [ref=f23e72]: mandatoryp.15 · Cl. 5.1
+              - generic [ref=f23e73]: Needs work
+            - paragraph [ref=f23e75]: Declaration of non-blacklisting on company letterhead.
+            - paragraph [ref=f23e76]: Borderline — needs your review
+            - paragraph [ref=f23e77]:
+              - text: Open the
+              - link "proposal draft" [ref=f23e78] [cursor=pointer]:
+                - /url: /proposals/940f1f16-336c-4416-adbb-e9c76eef727f
+              - text: to attest or cite a source for this claim.
+            - generic [ref=f23e79]:
+              - generic [ref=f23e80]:
+                - generic [ref=f23e81]: "Your call:"
+                - button "I’ll resolve" [ref=f23e82] [cursor=pointer]
+                - button "Ignore & proceed" [ref=f23e83] [cursor=pointer]
+                - button "Do not proceed" [ref=f23e84] [cursor=pointer]
+              - generic [ref=f23e85]:
+                - paragraph [ref=f23e86]: "Attach a supporting document:"
+                - generic [ref=f23e88]:
+                  - generic [ref=f23e89] [cursor=pointer]: Upload file (PDF / DOCX / PPTX)
+                  - generic [ref=f23e90]: or
+                  - generic [ref=f23e91]:
+                    - textbox "https://your-company.com/about" [ref=f23e92]
+                    - button "Fetch" [disabled] [ref=f23e93]
+                - paragraph [ref=f23e94]: Document attached ✓
+              - generic [ref=f23e95]:
+                - textbox "Add a note (optional)" [ref=f23e96]
+                - button "Save note" [disabled] [ref=f23e97]
+          - listitem [ref=f23e98]:
+            - generic [ref=f23e99]:
+              - generic [ref=f23e100]: mandatoryp.8 · Cl. 3.1(a)
+              - generic [ref=f23e101]: COVERED
+            - paragraph [ref=f23e103]: Average annual turnover of not less than ₹5 Crores over FY23–FY25.
+            - paragraph [ref=f23e104]: Covered by your knowledge base
+          - listitem [ref=f23e105]:
+            - generic [ref=f23e106]:
+              - generic [ref=f23e107]: mandatoryp.8 · Cl. 3.1(c)
+              - generic [ref=f23e108]: COVERED
+            - paragraph [ref=f23e110]: At least three similar works of software/IT implementation, each ≥ ₹2 Cr.
+            - paragraph [ref=f23e111]: Covered by your knowledge base
+  - alert [ref=f23e112]

@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+
+import { StageProgress } from "@/components/StageProgress";
 import { useState } from "react";
 
 // S3 — Upload Tender. Drop a PDF -> engine ingest (OCR/extract) -> verification queue.
@@ -13,7 +15,7 @@ export default function UploadPage() {
   async function upload(file: File) {
     setStatus("processing");
     setIllegible(null);
-    setMessage(`Parsing ${file.name}…`);
+    setMessage(`Reading ${file.name}…`);
     const form = new FormData();
     form.append("file", file);
     form.append("title", file.name.replace(/\.pdf$/i, ""));
@@ -60,6 +62,22 @@ export default function UploadPage() {
         <p className="font-heading text-lg font-medium text-ink">Drop tender package here</p>
         <p className="mt-1 text-sm text-muted">or click to browse files</p>
       </label>
+
+      {status === "processing" && (
+        <div className="mt-4">
+          <StageProgress
+            stages={[
+              "Reading the document",
+              "Extracting text from each page",
+              "Identifying eligibility requirements",
+              "Reading the tender number and title",
+              "Building your readiness checklist",
+            ]}
+            secondsPerStage={9}
+            note="usually 30–60s for a short RFP"
+          />
+        </div>
+      )}
 
       {message && (
         <p

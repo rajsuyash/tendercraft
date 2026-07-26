@@ -63,11 +63,15 @@ export function ReadinessHub({
   tenderTitle,
   readiness,
   prepared,
+  tenderNumber = null,
+  authority = null,
 }: {
   tenderId: string;
   tenderTitle: string;
   readiness: Readiness;
   prepared: boolean;
+  tenderNumber?: string | null;
+  authority?: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -131,6 +135,11 @@ export function ReadinessHub({
     <main className="p-page">
       <header className="mb-6">
         <h1 className="font-heading text-2xl font-semibold text-ink">{tenderTitle}</h1>
+        {tenderNumber || authority ? (
+          <p className="text-xs text-muted">
+            {[tenderNumber, authority].filter(Boolean).join(" · ")}
+          </p>
+        ) : null}
         <p className="text-sm text-muted">
           Bid readiness — what your company already covers, and what&apos;s still needed.
         </p>

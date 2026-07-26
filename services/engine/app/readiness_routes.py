@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import analysis, db
 from .auth import AuthedUser, get_current_user
+from .deterministic import submission
 from .deterministic.lock import evaluate_lock
 from .deterministic.readiness import OVERRIDDEN_DECISIONS, compute_readiness
 from .deterministic.types import Criterion, RequirementLevel, SourceAnchor
@@ -93,6 +94,52 @@ def _prepare(workspace_id: str, tender_id: str) -> dict:
     do_generate(workspace_id, tender_id)
 
     return _readiness_payload(workspace_id, tender_id)
+
+
+@router.get("/api/tenders/{tender_id}/submission")
+def submission_state(tender_id: str, user: CurrentUser) -> dict:
+    """One "how close am I to submitting" figure, with every blocker named.
+
+    Replaces four counters that described the same bid and disagreed. Computed from the same
+    rows the gates use, so the number and its explanation cannot drift apart.
+    """
+    if not db.get_tender(tender_id, user.workspace_id):
+        raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
+
+    readiness = _readiness_payload(user.workspace_id, tender_id)["summary"]
+    proposal = db.get_proposal_by_tender(tender_id, user.workspace_id)
+
+    doc_sections: list[dict] = []
+    approvals: list[dict] = []
+    required = 2
+    if proposal:
+        doc_sections = db.get_sections(proposal["id"], user.workspace_id)
+        approvals = db.get_approvals(proposal["id"], user.workspace_id)
+        required = proposal.get("approvals_required", 2)
+
+    state = submission.compute(
+        confirm_open=readiness["confirm_open"],
+        p0_blocking=readiness["p0_blocking"],
+        sections_total=len(doc_sections),
+        sections_placeholder=sum(1 for s in doc_sections if s.get("status") == "placeholder"),
+        narrative_unapproved=sum(
+            1 for s in doc_sections
+            if s.get("kind") == "narrative" and not s.get("approved_at")
+        ),
+        approvals_done=len(approvals),
+        approvals_required=required,
+    )
+    return ok({
+        "stage": state.stage,
+        "stage_label": state.stage_label,
+        "completed_stages": state.completed_stages,
+        "total_stages": state.total_stages,
+        "percent": state.percent,
+        "can_submit": state.can_submit,
+        "blockers": [
+            {"stage": b.stage, "label": b.label, "detail": b.detail} for b in state.blockers
+        ],
+    })
 
 
 @router.post("/api/tenders/{tender_id}/prepare")

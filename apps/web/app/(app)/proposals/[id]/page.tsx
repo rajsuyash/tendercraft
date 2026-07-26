@@ -24,7 +24,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
   if (proposal) {
     const { data } = await supabase
       .from("proposal_sections")
-      .select("key,heading,kind,status,body_md,word_count,flags,approved_at")
+      .select("key,heading,kind,status,body_md,word_count,flags,approved_at,edited_at")
       .eq("proposal_id", proposal.id)
       .order("order_index", { ascending: true });
     sections = (data ?? []) as DocSection[];

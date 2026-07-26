@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Response
+from pydantic import BaseModel, Field
 
 from pipeline.drafter import draft_response
 from pipeline.retrieval import chunk_docs, select_evidence
@@ -293,6 +294,29 @@ def approve(
     db.write_audit(user.workspace_id, user.user_id, "approval", "proposal", proposal_id,
                    after={"stage": stage})
     return ok({"proposal_id": proposal_id, "stage": stage})
+
+
+class SectionEdit(BaseModel):
+    body_md: str = Field(min_length=1, max_length=200_000)
+
+
+@router.patch("/api/proposals/{proposal_id}/sections/{key}")
+def edit_section(proposal_id: str, key: str, body: SectionEdit, user: CurrentUser) -> dict:
+    """Let a human rewrite a section in their own words.
+
+    The proposal was entirely read-only, so a bidder who spotted a wrong company name or an
+    overstated compliance claim could not fix it. Editing clears any approval — a section
+    changed after sign-off must be signed off again.
+    """
+    authz.check(user, authz.DRAFT)
+    if not db.get_proposal(proposal_id, user.workspace_id):
+        raise ApiError(404, "PROPOSAL_NOT_FOUND", "proposal not found in your workspace")
+
+    when = datetime.now(UTC).isoformat()
+    db.edit_section(user.workspace_id, proposal_id, key, body.body_md, user.user_id, when)
+    db.write_audit(user.workspace_id, user.user_id, "section_edited", "proposal",
+                   proposal_id, after={"section": key, "words": len(body.body_md.split())})
+    return ok({"section": key, "words": len(body.body_md.split()), "edited_at": when})
 
 
 @router.post("/api/proposals/{proposal_id}/sections/{key}/approve")

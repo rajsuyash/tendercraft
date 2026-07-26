@@ -1,0 +1,80 @@
+- generic [active] [ref=f21e1]:
+  - generic [ref=f21e2]:
+    - navigation [ref=f21e3]:
+      - generic [ref=f21e4]:
+        - generic [ref=f21e5]: TC
+        - generic [ref=f21e6]: TenderCraft
+      - button "Workspace Meridian Infotech Pvt Ltd" [ref=f21e8] [cursor=pointer]:
+        - generic [ref=f21e9]:
+          - generic [ref=f21e10]: Workspace
+          - generic [ref=f21e11]: Meridian Infotech Pvt Ltd
+        - generic [ref=f21e12]: ▼
+      - list [ref=f21e13]:
+        - listitem [ref=f21e14]:
+          - link "Dashboard" [ref=f21e15] [cursor=pointer]:
+            - /url: /dashboard
+        - listitem [ref=f21e16]:
+          - link "Tenders" [ref=f21e17] [cursor=pointer]:
+            - /url: /tenders
+        - listitem [ref=f21e18]:
+          - link "Proposals" [ref=f21e19] [cursor=pointer]:
+            - /url: /proposals
+        - listitem [ref=f21e20]:
+          - link "Knowledge Base" [ref=f21e21] [cursor=pointer]:
+            - /url: /library
+        - listitem [ref=f21e22]:
+          - link "Vendor Profile" [ref=f21e23] [cursor=pointer]:
+            - /url: /profile
+        - listitem [ref=f21e24]:
+          - link "Settings" [ref=f21e25] [cursor=pointer]:
+            - /url: /settings
+    - main [ref=f21e895]:
+      - generic [ref=f21e896]:
+        - generic [ref=f21e897]:
+          - heading "Export & Compliance Gate" [level=1] [ref=f21e898]
+          - paragraph [ref=f21e899]:
+            - text: Mandatory coverage 100% ·
+            - generic [ref=f21e900]: 10 blockers open
+        - generic [ref=f21e901]:
+          - button "Export final documents" [disabled] [ref=f21e902]
+          - button "⚠ Admin override (logged)" [ref=f21e904] [cursor=pointer]
+          - paragraph [ref=f21e944]: review approved.
+      - generic [ref=f21e905]:
+        - generic [ref=f21e906]:
+          - heading "Compliance matrix" [level=2] [ref=f21e907]
+          - table [ref=f21e909]:
+            - rowgroup [ref=f21e910]:
+              - row [ref=f21e911]:
+                - columnheader "Criterion" [ref=f21e912]
+                - columnheader "Level" [ref=f21e913]
+                - columnheader "Status" [ref=f21e914]
+            - rowgroup [ref=f21e915]:
+              - row [ref=f21e916]:
+                - cell "Average annual turnover of not less than ₹5 Crores over FY23–FY25." [ref=f21e917]
+                - cell "mandatory" [ref=f21e918]
+                - cell "covered" [ref=f21e919]
+              - row [ref=f21e920]:
+                - cell "At least three similar works of software/IT implementation, each ≥ ₹2 Cr." [ref=f21e921]
+                - cell "mandatory" [ref=f21e922]
+                - cell "covered" [ref=f21e923]
+              - row [ref=f21e924]:
+                - cell "Declaration of non-blacklisting on company letterhead." [ref=f21e925]
+                - cell "mandatory" [ref=f21e926]
+                - cell "covered" [ref=f21e927]
+        - complementary [ref=f21e928]:
+          - heading "Approval chain" [level=2] [ref=f21e929]
+          - list [ref=f21e930]:
+            - listitem [ref=f21e931]:
+              - generic [ref=f21e932]: review
+              - button "Approve" [ref=f21e933] [cursor=pointer]
+            - listitem [ref=f21e934]:
+              - generic [ref=f21e935]: compliance
+              - button "Approve" [ref=f21e936] [cursor=pointer]
+            - listitem [ref=f21e937]:
+              - generic [ref=f21e938]: legal
+              - button "Approve" [ref=f21e939] [cursor=pointer]
+            - listitem [ref=f21e940]:
+              - generic [ref=f21e941]: final
+              - button "Approve" [ref=f21e942] [cursor=pointer]
+          - paragraph [ref=f21e943]: 0/2 required approvals complete. Export locks until they are.
+  - alert [ref=f21e62]

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ReadinessHub, type Readiness } from "@/components/ReadinessHub";
+import { SubmissionMeter, type Submission } from "@/components/SubmissionMeter";
 import { engineFetch } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 
@@ -10,7 +11,7 @@ export default async function ReadinessPage({ params }: { params: Promise<{ id: 
   const supabase = await createClient();
   const { data: tender } = await supabase
     .from("tenders")
-    .select("id,title")
+    .select("id,title,tender_number,authority,deadline")
     .eq("id", id)
     .single();
   if (!tender) notFound();
@@ -26,12 +27,29 @@ export default async function ReadinessPage({ params }: { params: Promise<{ id: 
     .eq("tender_id", id)
     .maybeSingle();
 
+  // One reconciling readiness figure, rather than four counters that disagreed.
+  let submission: Submission | null = null;
+  const sres = await engineFetch(`/api/tenders/${id}/submission`);
+  if (sres.ok) {
+    const body = await sres.json();
+    if (body.ok) submission = body.data as Submission;
+  }
+
   return (
-    <ReadinessHub
+    <>
+      {submission ? (
+        <div className="px-page pt-page">
+          <SubmissionMeter tenderId={id} submission={submission} />
+        </div>
+      ) : null}
+      <ReadinessHub
       tenderId={id}
       tenderTitle={tender.title}
       readiness={readiness}
       prepared={!!analysis}
+      tenderNumber={tender.tender_number}
+      authority={tender.authority}
     />
+    </>
   );
 }

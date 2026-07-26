@@ -758,3 +758,32 @@ def replace_profile_collection(workspace_id: str, table: str, rows: list[dict]) 
     _rest("DELETE", table, params={"workspace_id": f"eq.{workspace_id}"})
     if rows:
         _rest("POST", table, json=[{**r, "workspace_id": workspace_id} for r in rows])
+
+
+def edit_section(workspace_id: str, proposal_id: str, key: str, body_md: str,
+                 editor: str, when_iso: str) -> None:
+    """Replace a section's prose with a human's own words.
+
+    Clears flags and resets status: cite-or-flag judged MODEL output, and once a person has
+    rewritten the text they own it — keeping an "unverified" flag raised against a sentence
+    the model no longer wrote would be meaningless. Approval is deliberately NOT granted
+    here; editing is authorship, sign-off is a separate act (and may be a separate person).
+    """
+    _rest(
+        "PATCH", "proposal_sections",
+        params={
+            "proposal_id": f"eq.{proposal_id}",
+            "workspace_id": f"eq.{workspace_id}",
+            "key": f"eq.{key}",
+        },
+        json={
+            "body_md": body_md,
+            "word_count": len(body_md.split()),
+            "status": "drafted",
+            "flags": [],
+            "edited_by": editor,
+            "edited_at": when_iso,
+            "approved_by": None,
+            "approved_at": None,
+        },
+    )

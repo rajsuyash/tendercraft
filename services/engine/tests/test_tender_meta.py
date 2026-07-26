@@ -100,3 +100,14 @@ def test_real_pdf_text_has_no_blank_lines_between_fields():
 def test_title_stops_at_the_next_label_not_at_the_end_of_the_page():
     assert "Estimated" not in (extract_tender_meta([PDF_SHAPED]).title or "")
     assert "Crore" not in (extract_tender_meta([PDF_SHAPED]).title or "")
+
+
+def test_a_label_with_an_empty_value_is_not_a_title():
+    """"Name of Work:" followed by punctuation only must yield None, not an empty heading."""
+    from app.deterministic.tender_meta import _clean
+
+    assert _clean(None) is None
+    assert _clean("") is None
+    assert _clean("   ") is None
+    assert _clean(" -- .. ") is None
+    assert _clean("  Property   Tax  System ") == "Property Tax System"
