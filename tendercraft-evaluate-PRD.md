@@ -228,11 +228,16 @@ by test rather than reached by a user. Every other feature has an entry point.
 | COI wall | **LOCKED** | No shared data, no shared inference, no shared retrieval index. Enforced in code (F13), asserted by test. |
 | Evaluation method | **LOCKED** | Two-bid QCBS only in v1 |
 | AI role in scoring | **LOCKED** | AI **proposes** a mark; a named human confirms. Proposal is revealed **after** the evaluator records their own mark (F7). |
-| Repo layout | PROPOSED | Same monorepo, `apps/evaluate` + `services/evaluate-engine`. Shared design tokens; **no shared data-access module** — sharing `db.py` is how the wall gets breached by accident. |
+| Repo layout | **LOCKED** | Same monorepo: `apps/evaluate` + `services/evaluate-engine`. Shared design tokens, CI and container patterns; **no shared data-access module** — sharing `db.py` is how the wall gets breached by accident. The wall is therefore separate-DB + a CI-enforced import ban (F13-AC1), not repo distance. |
 | LLM | PROPOSED | Same provider as bidder-side, **separate API key and separate project**, so usage/telemetry never commingles |
 | Deploy | PROPOSED | Cloud Run, co-located with its own Supabase project (bidder-side learning: co-locate compute and data or pay ~130ms per query) |
 | Response envelope | **LOCKED** | `{ ok, data, error: { code, message } }` — inherited |
 | Auth | PROPOSED | Supabase Auth on the evaluate project; email invitation only, no public sign-up (authorities are onboarded) |
+| Org shape | **LOCKED** | Flat — one workspace per department ("Corporation — IT" and "Corporation — Roads" are two authorities). Reuses the bidder-side multi-workspace tenancy and switcher unchanged. No cross-department roll-up in v1. |
+| Aggregation | **LOCKED** | Independent member scores → variance flag → chair-recorded consensus mark with a note. Individual marks retained. |
+| Quorum | **LOCKED** | Per-evaluation, set at creation (default 3). Hard-blocks technical lock. Removing a member does not lower it. |
+| Tie-break | **LOCKED** | The product never breaks a tie. It surfaces the RFP's published rule and requires a named human to record the outcome. |
+| Retention | **LOCKED** | Retain by default; soft-delete (archive) only; `audit_events` append-only forever. |
 
 ---
 
@@ -245,8 +250,8 @@ Vertical slices. Each milestone makes a journey segment walkable.
 | **M0** | Walking skeleton: separate Supabase project provisioned, schema v0, auth, `/evaluations` empty state, engine `/health`, seed + fixtures, `/verify` proven | Empty state renders; FIX-1 can sign in; **F13-AC1 passes (wall test exists and is green from day one)** |
 | **M1** | J1.1–J1.2: RFP upload → criteria extraction → framework review → lock | F2-AC1..3, F3-AC1..3, **J1-AC1** |
 | **M2** | J1.3–J1.5: committee + COI, bid intake, extraction, deterministic PQ screening | F4-AC1..3, F5-AC1..3, F6-AC1..4, **J1-AC2**, **J2-AC1** |
-| **M3** | J1.6–J1.7: independent scoring with blind-first AI proposal, aggregation, variance, technical lock | F7-AC1..6, F8-AC1..4, **J2-AC2** |
-| **M4** | J1.8–J1.9: financial gate, opening, QCBS combination, ranking | F9-AC1..4, F10-AC1..3, **J1-AC3 (the sealed-bid gate)** |
+| **M3** | J1.6–J1.7: independent scoring with blind-first AI proposal, aggregation, variance flagging, **chair consensus**, quorum gate, technical lock | F7-AC1..6, F8-AC1..6, **J2-AC2** |
+| **M4** | J1.8–J1.9: financial gate, opening, QCBS combination, ranking, tie handling | F9-AC1..4, F10-AC1..4, **J1-AC3 (the sealed-bid gate)** |
 | **M5** | J1.10: evaluation report generation + audit export | F11-AC1..4, F12-AC1..3 |
 | **M6** | Hardening: J1-AC4/AC5 recovery paths, all screen states, isolation suite in CI | All P0 ACs green |
 
@@ -282,8 +287,9 @@ membership → explicit "not provisioned" state, never an empty workspace.
 **Journey:** J1.1. Entry `/evaluations/new`. Success → `/evaluations/:id/framework`.
 
 Upload the RFP as published. Extract: PQ/eligibility criteria, technical evaluation criteria with
-published marks, the QCBS technical:financial ratio, technical qualifying threshold — each with a
-verbatim clause and page anchor. Reuses the bidder-side extraction component; **runs against its
+published marks, the QCBS technical:financial ratio, technical qualifying threshold, **and the
+published tie-break rule if the RFP states one** (consumed by F10) — each with a verbatim clause
+and page anchor. Reuses the bidder-side extraction component; **runs against its
 own model credential.**
 
 Input: `multipart/form-data` PDF. Output:
@@ -345,9 +351,9 @@ auto-exclude — it is recorded and surfaced on the evaluation report.
   *Verify: integration.*
 
 **Errors:** F4-ERR1 member invited to an evaluation whose framework is unlocked → allowed, but
-scoring stays disabled · F4-ERR2 fewer than 3 members at technical lock → warning naming the
-authority's own quorum rule (`TODO:` — confirm whether quorum should hard-block; likely varies by
-authority, so v1 warns).
+scoring stays disabled · F4-ERR2 committee smaller than the evaluation's quorum → allowed at
+committee stage, but F8 lock hard-blocks (see F8-AC1) · F4-ERR3 removing a member after they have
+scored → audited; their marks are retained and excluded from aggregation, and quorum is unchanged.
 
 ### F5 — Bid intake & response extraction · P0 · complexity: high
 *High: this is where sealed-envelope handling begins and where bidder identity must be controlled.*
@@ -438,26 +444,49 @@ timeout; **fallback = no proposal**, never a guess. Eval: golden set of scored b
 schema validity, anchor resolvability and that proposals stay within `0..max_marks` — never
 asserting a specific mark.
 
-### F8 — Aggregation, variance & technical lock · P0 · complexity: high
+### F8 — Aggregation, consensus & technical lock · P0 · complexity: high
 *High: irreversible, and it is the gate that governs F9.*
 
 **Journey:** J1.7. Entry `/evaluations/:id/technical`.
 
-Aggregate member marks per criterion per bid (mean by default). Flag criteria where member
-spread exceeds a threshold — divergence is a discussion trigger, not an error. The chair locks.
+Members score independently (F7). This feature reconciles them into one committee mark.
 
-- **F8-AC1:** Lock is disabled until every assigned (member × responsive bid) pair is submitted;
-  the count of outstanding pairs is on screen. *Verify: browser-verify.*
-- **F8-AC2:** Criteria with spread ≥ threshold render `[data-variance-flag]` with each member's
-  mark shown. *Verify: browser-verify.*
+**Three-step sequence:**
+1. **Aggregate** — mean of submitted member marks per criterion per bid.
+2. **Flag** — where the spread across members ≥ `EVAL_VARIANCE_THRESHOLD`, the criterion is
+   flagged and the mean does **not** stand. Divergence is a discussion trigger, not an error.
+3. **Consensus** — the chair records ONE agreed mark plus a note for each flagged criterion.
+   Individual member marks are retained and appear in the report; the consensus mark is what
+   enters the total.
+
+> This mirrors how an Indian TEC actually operates and is the point of the whole design: when
+> an auditor asks "why 15, when one expert said 12 and another said 18?", the answer is a
+> recorded discussion outcome and a named chair — not arithmetic.
+
+**Quorum** is set per evaluation at creation (default 3). Lock hard-blocks below it. Removing an
+absent member is an audited act and does **not** lower the quorum — a 3-quorum committee with one
+member removed is still blocked at 2.
+
+- **F8-AC1:** Lock is disabled while submitted-member count < the evaluation's quorum; the screen
+  names the quorum and who is outstanding. *Verify: browser-verify.*
+- **F8-AC2:** Criteria with spread ≥ threshold render `[data-variance-flag]` showing each member's
+  individual mark. *Verify: browser-verify.*
 - **F8-AC3:** Technical qualification (aggregate ≥ qualifying marks, from the **locked**
   framework) is computed deterministically. *Verify: unit — 100% branch.*
 - **F8-AC4:** Lock writes an audit event with actor, timestamp, and a hash of all constituent
   marks. *Verify: integration.*
+- **F8-AC5 (consensus gate):** A flagged criterion has no committee mark until a consensus mark
+  is recorded; lock returns `409 CONSENSUS_REQUIRED` naming each unresolved criterion.
+  *Verify: integration.*
+- **F8-AC6:** A consensus mark requires a note of ≥1 non-whitespace character, is attributed to
+  the chair, and retains every individual member mark alongside it. *Verify: integration.*
 
-**Errors:** F8-ERR1 lock with outstanding scores → 409 naming them · F8-ERR2 zero bids qualify →
-explicit state and a recorded recommendation to retender · F8-ERR3 reopen after lock → permitted
-to `officer` only, requires a reason, fully audited, and **re-seals the financial envelope**.
+**Errors:** F8-ERR1 lock below quorum → 409 `QUORUM_NOT_MET` naming outstanding members ·
+F8-ERR2 zero bids qualify → explicit state and a recorded recommendation to retender ·
+F8-ERR3 reopen after lock → `officer` only, requires a reason, fully audited, and **re-seals the
+financial envelope** · F8-ERR4 consensus mark outside `0..max_marks` → rejected ·
+F8-ERR5 chair is also a scoring member → permitted, but their individual mark is shown separately
+from the consensus mark so the two are never conflated.
 
 ### F9 — Financial envelope opening · P0 · complexity: high
 *High: **this is the sealed-bid gate.** Breaching it invalidates the tender.*
@@ -491,8 +520,13 @@ combine, rank. Pure function, no model in the path.
   financial_weight)` using the **locked** framework weights. *Verify: unit — 100% branch.*
 - **F10-AC2:** Every figure on the result screen is traceable to its inputs via an expand
   affordance. *Verify: browser-verify.*
-- **F10-AC3:** A tie renders explicitly as a tie with the authority's tie-break rule stated —
-  never silently ordered by row order. *Verify: unit + browser-verify.*
+- **F10-AC3 (the product does not break ties):** Equal combined scores render as an explicit tie
+  with `[data-tie]`; the tie-break rule extracted from the RFP (F2) is displayed with its clause
+  anchor; ranking cannot be finalised until a named human records the applied rule and outcome.
+  Software never selects the winner. *Verify: unit + browser-verify.*
+- **F10-AC4:** Where the RFP states no tie-break rule, the officer must type the rule they applied
+  before the ranking finalises; it is written to the audit trail and the report.
+  *Verify: browser-verify + integration.*
 
 **Errors:** F10-ERR1 a qualified bidder with no financial figure → ranking blocked, bidder named ·
 F10-ERR2 zero or negative quoted price → flagged for human decision, not auto-ranked.
@@ -570,10 +604,12 @@ errors. Binary export endpoints return bytes on 2xx and the envelope on every er
 | PUT | `/api/evaluations/:id/bids/:bidId/responsiveness` | F6 | 200 · 422 `REASON_REQUIRED` |
 | POST | `/api/evaluations/:id/scores` | F7 | 201 · 403 `NOT_ASSIGNED` · 409 `COI_NOT_FILED` · 422 `MARK_OUT_OF_RANGE` |
 | GET | `/api/evaluations/:id/scores/:bidId/proposal` | F7 | 200 · **409 `OWN_MARK_REQUIRED`** (blind-first) |
-| POST | `/api/evaluations/:id/technical/lock` | F8 | 200 · 409 `SCORING_INCOMPLETE` |
+| PUT | `/api/evaluations/:id/consensus/:bidId/:criterionId` | F8 | 200 · 422 `NOTE_REQUIRED` · 403 `NOT_CHAIR` |
+| POST | `/api/evaluations/:id/technical/lock` | F8 | 200 · 409 `QUORUM_NOT_MET` · 409 `CONSENSUS_REQUIRED` |
 | GET | `/api/evaluations/:id/financial` | F9 | 200 · **409 `FINANCIAL_SEALED`** · 409 `BID_NOT_QUALIFIED` |
 | POST | `/api/evaluations/:id/financial/open` | F9 | 200 · 409 `FINANCIAL_SEALED` |
-| GET | `/api/evaluations/:id/result` | F10 | 200 · 409 `FINANCIAL_NOT_OPENED` |
+| GET | `/api/evaluations/:id/result` | F10 | 200 · 409 `FINANCIAL_NOT_OPENED` · 409 `TIE_UNRESOLVED` |
+| POST | `/api/evaluations/:id/result/tie-break` | F10 | 200 · 422 `RULE_REQUIRED` |
 | POST | `/api/evaluations/:id/report` | F11 | 200 (bytes) · 409 `RANKING_INCOMPLETE` |
 | GET | `/api/evaluations/:id/audit` | F12 | 200 |
 | GET | `/api/evaluations/:id/audit/export` | F12 | 200 (bytes) |
@@ -595,11 +631,14 @@ Written before the bugs, not after. Every `high`-complexity feature appears here
 | F7 | The AI proposal leaking into the RSC payload or a prefetch even though the UI hides it | `F7-AC3` asserts absence from the **network response**, not just the DOM |
 | F7 | Anchoring making the model the de facto decider while the audit trail claims human authorship | Blind-first sequence + deference rate (`F7-AC5`) — the metric an auditor reads |
 | F7 | A member's draft marks lost on session expiry, silently re-entered differently | Per-criterion draft persistence (`F7-ERR2`) |
-| F8 | Aggregating over members who were removed mid-evaluation | Exclusion is explicit and recorded (`F7-ERR3`) |
+| F8 | Aggregating over members who were removed mid-evaluation | Exclusion is explicit and recorded (`F7-ERR3`); quorum is unaffected by removal |
+| F8 | A consensus mark silently overwriting the individual marks that justified it | `consensus_marks` is a separate table (E12); `scores` rows are never mutated (`F8-AC6`) |
+| F8 | The mean quietly standing on a criterion the committee never discussed | Flagged criteria have NO committee mark until consensus is recorded (`F8-AC5`) |
 | F9 | The gate enforced in the page but not the API, the export, or an error branch that returns partial data | `F9-AC1` is an integration test on the endpoint; the isolation suite probes every path |
 | F9 | Technical reopened after financials were seen — the bell cannot be un-rung | Re-seal, and the prior opening stays in the audit trail permanently (`F9-ERR3`) |
 | F10 | Floating-point drift making two equal bids rank arbitrarily | Decimal arithmetic; exact ties render as ties (`F10-AC3`) |
 | F10 | Financial normalisation dividing by zero on a ₹0 quote | `F10-ERR2` routes it to a human |
+| F10 | Software applying an unpublished tie-break rule and inventing a winner | Ranking cannot finalise until a human records the rule and outcome (`F10-AC3/AC4`) |
 | F12 | An UPDATE grant on `audit_events` added by a later migration | Grant revoked at DB level; `F12-AC1` asserts it against the service role |
 | F13 | A well-meaning refactor extracting a shared `db.py` across both products | No shared data-access module, by rule; `F13-AC1` is an import check in CI |
 | F13 | Convergent config — someone points staging at the bidder database "just to test" | `F13-AC2` fails the build if the hosts are equal |
@@ -641,6 +680,10 @@ Written before the bugs, not after. Every `high`-complexity feature appears here
 | E9 | `scores` | member × bid × criterion: pre-reveal mark, AI proposal, final mark, rationale. |
 | E10 | `coi_declarations` | Versioned, immutable. |
 | E11 | `audit_events` | Append-only; UPDATE/DELETE revoked at DB level. |
+| E12 | `consensus_marks` | bid × criterion: agreed mark, note, chair, timestamp. Individual `scores` rows are retained alongside, never overwritten. |
+| E13 | `tie_break_decisions` | Rule applied, outcome, actor, reason. Written before a ranking with a tie can finalise. |
+
+`evaluations.state` ∈ `active | concluded | archived`. There is no hard-delete path (§8.3).
 
 **Invariants (enforced, not documented):** every table carries `authority_id` + an RLS policy ·
 `bid_financials` has an additional policy keyed on the evaluation's technical-lock state ·
@@ -663,13 +706,36 @@ products share a database is not a refactor — it is the end of the product's v
 government buyer.
 
 ### 8.3 Compliance posture
-- Data residency: **India region required before any real bid data.** Unlike the bidder-side demo,
-  this is not deferrable — bid contents are commercially sensitive third-party data held by a
-  public authority. `TODO:` confirm the authority's own residency and empanelment requirements
-  before first production use.
-- Retention: evaluation records retained per the authority's schedule, typically 5–8 years.
-  `TODO:` confirm.
-- Every model call logged with token/cost attribution per evaluation.
+
+**Residency — deliberately deferred, with the production gate named.** Evaluate ships as a
+**demo-only product**, matching the bidder-side posture: no real authority, no real bid data.
+This is a decision, not an oversight, and it carries a sharper risk than the bidder demo does —
+an evaluation demo invites the security review *earlier*, because you are asking to hold a third
+party's confidential pricing rather than the customer's own documents. Expect the question in the
+first meeting; answer it with the gate below rather than with a shrug.
+
+> **PRODUCTION GATE — blocks onboarding the first real authority. All three must be true:**
+> 1. Database in an India region (Supabase `ap-south-1`).
+> 2. Compute co-located with it (Cloud Run `asia-south1`).
+> 3. **Model endpoint region-pinned in India** — this is the same open blocker the bidder-side
+>    `BUILD-LOG.md` already names, and it is the hard one. Items 1 and 2 are a deploy; item 3 is
+>    a procurement decision about the model provider.
+>
+> Until all three hold, no production authority is onboarded and no real bid is uploaded.
+
+**Retention — retain by default, soft-delete only.** Nothing is hard-deleted. A concluded
+evaluation moves `active → concluded → archived`; archived evaluations drop out of every normal
+view and are retained. `audit_events` stays append-only forever, unchanged from the bidder side.
+
+This is the correct posture for procurement records, and it has one known cost that must be
+specified now rather than discovered under pressure: **a true erasure request cannot be honoured
+by the product.** The bidder side already proved the append-only trigger refuses deletion even to
+the service role, which is the guarantee working correctly. Erasure is therefore an **exceptional
+documented process** — a named approver, a recorded reason and an explicit scope — and is
+deliberately **not** a product feature. `TODO:` draft that process before the first production
+authority; it is a legal artifact, not code.
+
+**Other:** every model call logged with token/cost attribution per evaluation.
 
 ---
 
@@ -685,7 +751,8 @@ Names only. Never values.
 | ENV-4 | `EVAL_MODEL_API_KEY` | **Separate credential** so usage never commingles |
 | ENV-5 | `EVAL_ENGINE_URL` | Web → engine |
 | ENV-6 | `EVAL_DOCUMENTS_BUCKET` | Bid storage |
-| ENV-7 | `EVAL_VARIANCE_THRESHOLD` | Marks spread that raises the flag (default 20% of max) |
+| ENV-7 | `EVAL_VARIANCE_THRESHOLD` | Marks spread that raises the consensus flag (default 20% of max) |
+| ENV-8 | `EVAL_DEFAULT_QUORUM` | Starting quorum offered at evaluation creation (default 3); per-evaluation value overrides it |
 
 ---
 
@@ -732,12 +799,26 @@ doubles as a live tenant-isolation fixture.
 
 | # | Assumption | Confidence | Veto cost if wrong |
 |---|---|---|---|
-| 1 | Blind-first reveal is the right default for AI-proposed marks | high | One flag; low |
-| 2 | Mean is the right default aggregation across members | medium | Low — add median/trimmed-mean |
-| 3 | Authorities will upload bids rather than expect portal integration | high | High — portal integration is a large surface |
-| 4 | A declared interest is recorded, not auto-excluding | medium | Low |
-| 5 | Quorum is warned, not hard-blocked (F4-ERR2) | low | Low — flip to a gate |
-| 6 | Single authority per workspace; no parent/department hierarchy in v1 | medium | Medium — data model change |
+| # | Assumption | Confidence | Veto cost if wrong |
+|---|---|---|---|
+| 1 | Blind-first reveal is the right default for AI-proposed marks (F7) | high | One flag; low |
+| 2 | Authorities will upload bids rather than expect portal integration | high | High — portal integration is a large surface |
+| 3 | A declared interest is recorded, not auto-excluding (F4) | medium | Low |
+| 4 | Consensus is required only for variance-flagged criteria; the mean stands elsewhere | medium | Low — widen to all criteria |
+| 5 | Default quorum of 3 is the right starting value | medium | None — it is per-evaluation configurable |
+| 6 | Removing a member does not lower the quorum | medium | Low — but it is the rule a lawyer checks |
 
-**Open `TODO:` for a human:** committee quorum rule (F4-ERR2) · data residency and empanelment
-requirements (§8.3) · retention schedule (§8.3) · the authority's tie-break rule (F10-AC3).
+### Resolved by the human (no longer assumptions)
+
+| Decision | Answer | Where |
+|---|---|---|
+| Repo layout | Same monorepo, `apps/evaluate`; wall = separate DB + CI import ban | §4 |
+| Data residency | Deferred — demo-only, production gate specified | §8.3 |
+| Aggregation | Independent scores → variance flag → **recorded consensus** | F8 |
+| Org shape | Flat: one workspace per department, reusing bidder-side tenancy | §4, E1 |
+| Quorum | Configurable per evaluation, **hard-blocks** technical lock | F8-AC1 |
+| Tie-break | Product refuses to decide; applies the RFP's published rule, human records outcome | F10-AC3/AC4 |
+| Retention | Retain by default, soft-delete only; erasure is an out-of-product process | §8.3 |
+
+**Remaining `TODO:` for a human:** draft the documented erasure-exception process (§8.3) before
+the first production authority.
