@@ -276,20 +276,20 @@ export function ProposalDocument({
             <div className="flex flex-wrap items-start justify-between gap-2">
               <h2 className="font-heading text-lg font-medium text-ink">{s.heading}</h2>
               <div className="flex items-center gap-2">
-                <span className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase ${st.cls}`}>
+                <span className={`rounded px-2 py-0.5 text-2xs font-semibold uppercase ${st.cls}`}>
                   {st.label}
                 </span>
                 {s.edited_at ? (
                   <span
                     data-edited
-                    className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary"
+                    className="rounded bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide text-primary"
                   >
                     Your edit
                   </span>
                 ) : s.kind === "narrative" && !s.approved_at ? (
                   <span
                     data-ai-watermark
-                    className="rounded bg-warning-bg px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning"
+                    className="rounded bg-warning-bg px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide text-warning"
                   >
                     AI Draft
                   </span>

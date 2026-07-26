@@ -19,16 +19,29 @@
 
 ## §C Tokens (extracted Design DNA — canonical file: `design/tokens.json`)
 
+> **Revision `ios-2026-07-26`.** The system was restyled to an Apple HIG-flavoured language on
+> request. Token **names**, the layout grid, and the reserved verdict semantics are unchanged —
+> only values moved — so every screen spec in §E and every design AC in §H still applies as
+> written. What changed is how it looks, not what it must prove.
+
 | Token | Value | Notes |
 |---|---|---|
-| color.primary | #1F4E79 | actions, active nav, links |
-| color.surface / color.surface-alt | #FFFFFF / #F8FAFC | cards on alt surface, 1px #E2E8F0 borders |
-| color.success / danger / warning | #15803D / #B91C1C / #B45309 | **verdict semantics: Pass / Fail / Needs-review — reserved, never repurposed** |
-| font.heading / font.body | Lexend / Inter | + 'Noto Sans Devanagari' fallback in both stacks (PH2 Hindi) |
-| type.scale | 12/14/16/20/24/32 | body 14px |
-| space.base | 4px | page padding 24px · card padding 16px · table rows 44px · sidebar fixed 280px |
-| radius | 8px | chips full-round |
+| color.primary | #0066CC | iOS system blue, darkened until white-on-it passes 4.5:1 (5.57:1) |
+| color.surface / color.surface-alt | #FFFFFF / #F2F2F7 | iOS systemGroupedBackground; cards sit on the tint, 1px #D6D6DB hairline |
+| color.success / danger / warning | #207B37 / #D70015 / #8A6100 | **verdict semantics: Pass / Fail / Needs-review — reserved, never repurposed.** iOS system green/red/orange darkened until each clears 4.5:1 on its own tint; the raw system colours do not |
+| color.info | #4B4ACF | iOS indigo, darkened |
+| font.heading / font.body | San Francisco via `-apple-system` | one family at every size, per Apple. Inter is the cross-platform fallback (`--font-body-fallback`); 'Noto Sans Devanagari' retained in both stacks (PH2 Hindi). Lexend dropped |
+| type.scale | 12/13/15/17/20/22/28/34 | body **15px** (was 14). Mirrors the iOS text styles; negative tracking from 20px up |
+| space.base | 4px | page padding 24px · card padding 16px · table rows 44px · sidebar fixed 280px — **unchanged** |
+| radius | 10px controls / 16px cards / 20px sheets | chips full-round |
+| elevation | two-layer | tight contact shadow + wide soft shadow; a single blurred shadow reads as Material, not Apple |
+| motion | cubic-bezier(0.32, 0.72, 0, 1) | ~critically-damped iOS spring · 150/220/320ms · always degrades under `prefers-reduced-motion` |
+| material | rgba(255,255,255,0.72) + blur(20px) saturate(180%) | **chrome only** — sidebar, toolbars, sheets. Data surfaces stay opaque: frosting a dense compliance table costs contrast and paint time for no gain |
 | breakpoints | sm 640 / md 768 / lg 1024 / xl 1280 | desktop-first; below lg the sidebar collapses |
+
+**GLB-D1 re-verified after the restyle:** all 19 foreground/background pairs clear 4.5:1
+(narrowest: `text-muted` on `surface-alt` at 4.54, `success` on `success-bg` at 4.87). The check
+is scripted — see the contrast harness in the restyle commit.
 
 ## §D Screen inventory
 

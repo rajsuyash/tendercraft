@@ -19,7 +19,7 @@ export function VerdictChip({ verdict, confidence }: { verdict: Verdict; confide
     >
       {label}
       {confidence !== undefined && (
-        <span data-confidence className="font-mono text-[10px] opacity-80">
+        <span data-confidence className="font-mono text-2xs opacity-80">
           {confidence.toFixed(2)}
         </span>
       )}

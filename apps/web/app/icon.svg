@@ -1,4 +1,7 @@
+<!-- Fill is design/tokens.json color.primary; rx matches radius.default. An SVG cannot read
+     the token file, so these two values are the one place the palette is duplicated — change
+     them with the token. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#1F4E79"/>
+  <rect width="32" height="32" rx="10" fill="#0066CC"/>
   <path d="M9 8h14v3.2h-5.2V24h-3.6V11.2H9V8z" fill="#fff"/>
 </svg>

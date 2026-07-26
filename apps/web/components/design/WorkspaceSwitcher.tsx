@@ -83,7 +83,7 @@ export function WorkspaceSwitcher({
         className="flex w-full items-center justify-between gap-2 rounded border border-border bg-surface-alt px-2.5 py-2 text-left hover:border-primary disabled:cursor-default"
       >
         <span className="min-w-0">
-          <span className="block font-mono text-[10px] uppercase tracking-wider text-muted">
+          <span className="block font-mono text-2xs uppercase tracking-wider text-muted">
             Workspace
           </span>
           <span className="block truncate text-sm font-medium text-ink">
@@ -111,7 +111,7 @@ export function WorkspaceSwitcher({
                 }`}
               >
                 <span className="truncate">{w.name ?? "Untitled"}</span>
-                <span className="shrink-0 font-mono text-[10px] uppercase text-muted">
+                <span className="shrink-0 font-mono text-2xs uppercase text-muted">
                   {w.role}
                 </span>
               </button>
