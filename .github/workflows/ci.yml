@@ -10,6 +10,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  wall:
+    name: F13 conflict-of-interest wall (CI-blocking)
+    runs-on: ubuntu-latest
+    # Runs FIRST and on every push, including before the evaluate product exists. The wall is
+    # this company's licence to sell an evaluation tool while also selling a bidder tool: we
+    # help bidders win, and we score bids for the buyer. Those two things may share source
+    # patterns and may share nothing else. A wall added after the data model is a wall with
+    # holes, so the check ships in M0 ahead of the first evaluate feature.
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_EVAL_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_EVAL_SUPABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: wall check (F13-AC1..3)
+        run: ./tools/check-wall.sh
+
   engine:
     name: engine (unit + gates)
     runs-on: ubuntu-latest
@@ -89,3 +105,51 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
         run: pnpm build
+
+  evaluate-engine:
+    name: evaluate engine (unit + gates)
+    runs-on: ubuntu-latest
+    # Skips cleanly until the surface exists, so this job is safe to land in M0 before code.
+    defaults:
+      run:
+        working-directory: services/evaluate-engine
+    steps:
+      - uses: actions/checkout@v4
+      - id: exists
+        run: |
+          if [ -f services/evaluate-engine/pyproject.toml ]; then echo "go=yes" >> "$GITHUB_OUTPUT";
+          else echo "go=no" >> "$GITHUB_OUTPUT"; echo "evaluate engine not scaffolded yet — skipping"; fi
+        working-directory: .
+      - uses: astral-sh/setup-uv@v5
+        if: steps.exists.outputs.go == 'yes'
+        with:
+          enable-cache: true
+      - if: steps.exists.outputs.go == 'yes'
+        run: uv sync --frozen
+      - name: ruff
+        if: steps.exists.outputs.go == 'yes'
+        run: uv run ruff check
+      - name: unit tests
+        if: steps.exists.outputs.go == 'yes'
+        run: uv run pytest tests --ignore=tests/isolation -q
+      - name: deterministic gates — 100% branch coverage
+        # Same rule as the bidder side, and it matters more here: these gates decide
+        # responsiveness, qualification and whether a financial envelope may open.
+        if: steps.exists.outputs.go == 'yes'
+        run: >
+          uv run pytest tests --ignore=tests/isolation -q
+          --cov=evaluate/deterministic --cov-branch --cov-report=term-missing --cov-fail-under=100
+      - name: no model imports in evaluate/deterministic
+        if: steps.exists.outputs.go == 'yes'
+        run: |
+          if grep -rnE '^\s*(from|import)\s+(google|anthropic|openai)' evaluate/deterministic/; then
+            echo "::error::model import inside evaluate/deterministic — code decides, models do not"
+            exit 1
+          fi
+      - name: sealed-bid gate must be covered
+        # F9 is the one gate whose failure invalidates a tender. If its test file is missing,
+        # the suite can be green while the gate is unproven.
+        if: steps.exists.outputs.go == 'yes'
+        run: |
+          test -f tests/test_sealed_bid_gate.py || {
+            echo "::error::tests/test_sealed_bid_gate.py missing — F9 is unproven"; exit 1; }

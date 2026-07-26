@@ -8,6 +8,13 @@
     "typecheck": "pnpm --filter @tendercraft/web typecheck",
     "lint": "pnpm --filter @tendercraft/web lint",
     "test": "pnpm --filter @tendercraft/web test",
-    "seed": "pnpm --filter @tendercraft/web seed"
+    "seed": "pnpm --filter @tendercraft/web seed",
+    "dev:evaluate": "pnpm --filter @tendercraft/evaluate dev",
+    "build:evaluate": "pnpm --filter @tendercraft/evaluate build",
+    "typecheck:evaluate": "pnpm --filter @tendercraft/evaluate typecheck",
+    "lint:evaluate": "pnpm --filter @tendercraft/evaluate lint",
+    "test:evaluate": "pnpm --filter @tendercraft/evaluate test",
+    "seed:evaluate": "pnpm --filter @tendercraft/evaluate seed",
+    "wall": "./tools/check-wall.sh"
   }
 }

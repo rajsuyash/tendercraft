@@ -1,0 +1,37 @@
+# TenderCraft Evaluate — test strategy
+
+**An AC is verified at its tagged layer only.** A green unit suite never satisfies a
+browser-verify AC; a green eval never satisfies a deterministic-gate AC.
+
+| Layer | Command | Owns |
+|---|---|---|
+| unit | `uv run pytest` (engine) · `pnpm test:evaluate` (web) | **every deterministic gate** — screening (F6), qualification (F8-AC3), sealed-bid state, QCBS arithmetic (F10), quorum. 100% branch, CI-enforced |
+| integration | `uv run pytest tests/` + `/verify-eval-api` | endpoint contracts vs PRD §6.1, error taxonomy, authz from JWT, audit writes, **and the sealed-bid gate at the API layer (F9-AC1)** |
+| browser-verify | `/verify-eval` | J-ACs on a fresh account, screen states, console/network cleanliness |
+| evals | `/evals` | extraction recall (F2), evidence-locator anchor resolvability, score-proposal schema + range (F7) |
+| isolation | `uv run pytest tests/isolation` | authority A never sees authority B (FIX-8), CI-blocking |
+| **wall** | `./tools/check-wall.sh` | **F13 — runs on every push, before anything else** |
+
+## The two suites that cannot be allowed to pass for the wrong reason
+
+**The sealed-bid gate (F9).** Test it at the API, not through the UI. A UI test passes if the
+button is hidden; the requirement is that the *data* is unreachable. `tests/test_sealed_bid_gate.py`
+is required by CI — if the file is missing the job fails, because a green suite with no gate test
+is worse than a red one.
+
+**The wall (F13).** `tools/check-wall.sh` must be able to fail. Its first version could not: it
+excluded the directory it was inspecting and reported success on a planted breach. When you
+change it, plant a breach and watch it go red before you trust it green.
+
+## Eval discipline
+
+Golden sets are fixtures. Never edit a case, label or threshold to make a run pass — threshold
+changes are human PRD edits. No exact-text assertions on generative output: assert schema,
+anchor resolvability, and that a proposed mark is within `0..max_marks`. Never assert a
+specific mark.
+
+## Coverage target
+
+80% line on `apps/evaluate` and `services/evaluate-engine/evaluate`; **100% branch on
+`evaluate/deterministic/`**. Pipeline wrappers are covered by evals and fault injection, not
+line-coverage theatre.

@@ -4,6 +4,23 @@ AI-native SaaS for Indian procurement: converts tender documents (GeM/CPPP/state
 
 > Scaffold assumptions (confirmed 2026-07-23): Next.js + FastAPI split, Supabase Postgres + RLS, Claude API, Vercel + Railway. PRD is not prd-builder v3 — execution-layer stubs live in `docs/PRD.md`; the product PRD is `tendercraft-PRD.md` (root, sha-pinned by the design contract — never edit it).
 
+## Two products in this repo — know which one you are in
+
+| Surface | Product | Contract | Verifier |
+|---|---|---|---|
+| `apps/web`, `services/engine` | **TenderCraft** — helps *bidders* win tenders | this file | `/verify`, `/verify-api`, `/design-review` |
+| `apps/evaluate`, `services/evaluate-engine` | **TenderCraft Evaluate** — helps *government buyers* score bids | `apps/evaluate/CLAUDE.md`, `services/evaluate-engine/CLAUDE.md` | `/verify-eval`, `/verify-eval-api` |
+
+The evaluate subtrees carry their own `CLAUDE.md`, which loads automatically when you work in
+them and **overrides this file where they differ**. Its docs live in `docs/evaluate/`.
+
+**The wall (F13).** We sell a tool that helps bidders win and a tool that scores those bids for
+the buyer. They may share design tokens, CI patterns and container patterns. They share **no
+data, no database, no credential, and no data-access code** — that separation is the product's
+licence to exist with a government buyer, and "we have RLS policies" does not survive a
+procurement audit. `./tools/check-wall.sh` enforces it in CI on every push, including before the
+evaluate product exists. Never import across the boundary in either direction; copy instead.
+
 ## Stack
 
 | Layer | Choice | Notes |
