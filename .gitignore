@@ -13,3 +13,4 @@ playwright-report/
 .claude/verify-artifacts/
 .claude/dev-server.log
 .gstack/
+apps/*/.env

@@ -1,0 +1,35 @@
+# TenderCraft Evaluate — web container. Built from the REPO ROOT (pnpm workspace).
+FROM node:22-slim AS deps
+RUN corepack enable
+WORKDIR /repo
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/
+COPY apps/evaluate/package.json apps/evaluate/
+RUN pnpm install --frozen-lockfile
+
+FROM node:22-slim AS build
+RUN corepack enable
+WORKDIR /repo
+COPY --from=deps /repo/node_modules ./node_modules
+COPY --from=deps /repo/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /repo/apps/evaluate/node_modules ./apps/evaluate/node_modules
+COPY . .
+# NEXT_PUBLIC_* are inlined at BUILD time, so they must be present here, not only at runtime.
+# These are the EVALUATE project's public values — the bidder project's are never passed in.
+ARG NEXT_PUBLIC_EVAL_SUPABASE_URL
+ARG NEXT_PUBLIC_EVAL_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_EVAL_SUPABASE_URL=$NEXT_PUBLIC_EVAL_SUPABASE_URL \
+    NEXT_PUBLIC_EVAL_SUPABASE_ANON_KEY=$NEXT_PUBLIC_EVAL_SUPABASE_ANON_KEY \
+    NEXT_TELEMETRY_DISABLED=1
+RUN pnpm --filter @tendercraft/evaluate build
+
+FROM node:22-slim AS runtime
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=8080
+WORKDIR /app
+# standalone does not carry public/ or .next/static — copy them or every asset 404s.
+COPY --from=build /repo/apps/evaluate/.next/standalone ./
+COPY --from=build /repo/apps/evaluate/.next/static ./apps/evaluate/.next/static
+RUN useradd --create-home --uid 10001 web && chown -R web:web /app
+USER web
+EXPOSE 8080
+CMD ["node", "apps/evaluate/server.js"]

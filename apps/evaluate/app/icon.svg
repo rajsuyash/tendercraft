@@ -1,0 +1,7 @@
+<!-- Fill is design/tokens.json color.primary; rx matches radius.default. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="10" fill="#0066CC"/>
+  <path d="M8 8h16v3.1h-6.2V24h-3.6V11.1H8V8z" fill="#fff"/>
+  <circle cx="24" cy="23" r="4.4" fill="#fff"/>
+  <path d="M21.9 23l1.5 1.5 2.8-2.9" stroke="#0066CC" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
