@@ -134,23 +134,38 @@
     </script>
 </head>
 <body class="bg-background font-body-md text-on-surface">
+<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[60] focus:px-unit-lg focus:py-3 focus:rounded-lg focus:bg-primary focus:text-white focus:font-semibold">Skip to content</a>
 <!-- TopNavBar -->
 <header class="fixed top-0 w-full z-50 backdrop-blur-xl border-b border-outline-variant/20 bg-surface/70 shadow-sm">
 <nav class="flex justify-between items-center max-w-container-max mx-auto px-margin-desktop h-20">
 <div class="font-headline-md text-headline-md font-bold text-primary">TenderEvaluate AI</div>
 <div class="hidden md:flex gap-unit-xl items-center">
-<a class="text-primary border-b-2 border-secondary-container pb-1 font-body-md" href="#">Solutions</a>
-<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#">Industries</a>
-<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#">Resources</a>
-<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#">Pricing</a>
+<a class="text-primary border-b-2 border-secondary-container font-body-md inline-flex items-center min-h-[44px]" href="#features">Solutions</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md inline-flex items-center min-h-[44px]" href="#sectors">Industries</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md inline-flex items-center min-h-[44px]" href="#faq">Resources</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md inline-flex items-center min-h-[44px]" href="#contact">Pricing</a>
 </div>
 <div class="flex gap-unit-md items-center">
-<a href="/login" class="px-unit-lg py-2 rounded-lg text-primary font-semibold hover:bg-surface-container-low transition-all inline-flex items-center">Sign In</a>
+<button id="menu-btn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="menu-panel" class="md:hidden inline-flex items-center justify-center w-11 h-11 rounded-lg text-primary hover:bg-surface-container-low transition-all">
+<span class="relative block w-5 h-[10px]" aria-hidden="true">
+<span class="menu-bar absolute left-0 top-0 block w-5 h-[2px] bg-current rounded-full"></span>
+<span class="menu-bar absolute left-0 bottom-0 block w-5 h-[2px] bg-current rounded-full"></span>
+</span>
+</button>
+<a href="/login" class="px-unit-lg py-2 min-h-[44px] rounded-lg text-primary font-semibold hover:bg-surface-container-low transition-all inline-flex items-center">Sign In</a>
 <a href="/login" class="px-unit-lg py-3 rounded-lg bg-primary text-white font-bold shadow-lg hover:scale-105 active:scale-95 transition-all inline-flex items-center">Get Started</a>
 </div>
 </nav>
+<div id="menu-panel" hidden class="md:hidden border-t border-outline-variant/20 bg-surface/95 backdrop-blur-xl">
+<div class="max-w-container-max mx-auto px-margin-mobile py-unit-md flex flex-col">
+<a class="menu-link py-3 text-on-surface-variant hover:text-primary transition-colors" href="#features">Solutions</a>
+<a class="menu-link py-3 text-on-surface-variant hover:text-primary transition-colors" href="#sectors">Industries</a>
+<a class="menu-link py-3 text-on-surface-variant hover:text-primary transition-colors" href="#faq">Resources</a>
+<a class="menu-link py-3 text-on-surface-variant hover:text-primary transition-colors" href="#contact">Pricing</a>
+</div>
+</div>
 </header>
-<main class="pt-20 overflow-x-hidden">
+<main id="main" class="pt-20 overflow-x-hidden">
 <!-- Hero Section -->
 <section class="relative hero-gradient pt-unit-xl pb-24 overflow-hidden">
 <div class="max-w-container-max mx-auto px-margin-desktop text-center">
@@ -221,7 +236,7 @@
 </div>
 </section>
 <!-- Problem Section -->
-<section class="py-24 bg-white">
+<section id="problem" class="py-24 bg-white">
 <div class="max-w-container-max mx-auto px-margin-desktop">
 <div class="text-center mb-16">
 <h2 class="font-headline-lg text-headline-lg text-primary mb-4">The Status Quo is Costing You</h2>
@@ -289,7 +304,7 @@
 </div>
 <div class="lg:w-1/2">
 <div class="rounded-2xl overflow-hidden shadow-2xl glass-card p-4">
-<img class="w-full rounded-lg" data-alt="A clean, high-fidelity UI dashboard showing an AI evaluation process for a government tender. The screen features split views with bid documents on the left and a structured AI analysis matrix on the right. Colors are professional navy and saffron. High-quality lighting and 3D depth effects." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDorNOHOvEyef1QuTjy9YfhjEr3Riv39AHcHGwvgT4wfIs7OVEb4tL_HYqsETTrDkrG4JTCK-yHRlnQ_wwxhrANW_BVRGqi45ZekGVFJ-5KKpkD1rvmYQzJUexvsE3anAwaEcKHm9to8-C1KPnXFf718cMhkVlbzt0-9ajQ9Hjuy1LYRVnPLlLv77mZHo8yIdHsSZMkhSVsZlltlclj-s-7fr_va4yVuKionaqTxrnkz9uxQ5Kx-EHWN5iSWcHUf5fYdhdcsohdi5w"/>
+<img class="w-full rounded-lg" width="1200" height="800" loading="lazy" decoding="async" alt="The evaluation workspace: a bid document on the left, and on the right each published criterion with the value found in the bid and the page it was read from." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDorNOHOvEyef1QuTjy9YfhjEr3Riv39AHcHGwvgT4wfIs7OVEb4tL_HYqsETTrDkrG4JTCK-yHRlnQ_wwxhrANW_BVRGqi45ZekGVFJ-5KKpkD1rvmYQzJUexvsE3anAwaEcKHm9to8-C1KPnXFf718cMhkVlbzt0-9ajQ9Hjuy1LYRVnPLlLv77mZHo8yIdHsSZMkhSVsZlltlclj-s-7fr_va4yVuKionaqTxrnkz9uxQ5Kx-EHWN5iSWcHUf5fYdhdcsohdi5w"/>
 </div>
 </div>
 </div>
@@ -298,7 +313,7 @@
 <!-- Feature Grid (Bento) -->
 <section class="py-24 bg-white">
 <div class="max-w-container-max mx-auto px-margin-desktop">
-<h2 class="font-headline-lg text-headline-lg text-primary text-center mb-16">Enterprise Features for Institutional Precision</h2>
+<h2 id="features" class="font-headline-lg text-headline-lg text-primary text-center mb-16 scroll-mt-28">Enterprise Features for Institutional Precision</h2>
 <div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
 <!-- Feature 1 -->
 <div class="md:col-span-8 p-unit-lg rounded-2xl glass-card hover:shadow-xl transition-all relative overflow-hidden group">
@@ -345,7 +360,7 @@
 </div>
 </section>
 <!-- AI Capabilities & Security (Dark Integration) -->
-<section class="py-24 bg-primary text-white overflow-hidden relative">
+<section id="security" class="py-24 bg-primary text-white overflow-hidden relative">
 
 <div class="max-w-container-max mx-auto px-margin-desktop relative z-10">
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-unit-xl items-center">
@@ -399,11 +414,11 @@
 <!-- Industries -->
 <section class="py-24 bg-white">
 <div class="max-w-container-max mx-auto px-margin-desktop text-center">
-<h2 class="font-headline-lg text-headline-lg text-primary mb-16">Sector-Specific Evaluation Intelligence</h2>
+<h2 id="sectors" class="font-headline-lg text-headline-lg text-primary mb-16 scroll-mt-28">Sector-Specific Evaluation Intelligence</h2>
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-unit-md">
 <div class="group cursor-pointer">
 <div class="relative h-64 rounded-2xl overflow-hidden mb-4">
-<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" data-alt="A high-tech defense infrastructure control room with large glowing maps and data visualization screens. The atmosphere is professional, modern, and high-security, using a palette of deep blues and oranges." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB6b4CJXFLt9AE9oJM2LyodDNbB_noWREb4QVZ8OZ8MArM-VSu2xxrdfXvQVUOIFSf9GaIqdoUKYVSYE0K4NpgtRplxAZnQX5N9_fLs4lvM3SO0PkuQmit7ugM6SbhMZUkPNuZre9IX4PG8l3YQfbieIHeRHDNGw2KwWWjJF_zNGYSseIGbRulUBgmD5F-2vaCS_qIFLFWtIY3LXt7c1nuCPXEMLhGSKTQBNpz0GerhNGlrgH3tSVT1x0QSEaqdZswfCN4Pyne_764')"></div>
+<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" aria-hidden="true" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB6b4CJXFLt9AE9oJM2LyodDNbB_noWREb4QVZ8OZ8MArM-VSu2xxrdfXvQVUOIFSf9GaIqdoUKYVSYE0K4NpgtRplxAZnQX5N9_fLs4lvM3SO0PkuQmit7ugM6SbhMZUkPNuZre9IX4PG8l3YQfbieIHeRHDNGw2KwWWjJF_zNGYSseIGbRulUBgmD5F-2vaCS_qIFLFWtIY3LXt7c1nuCPXEMLhGSKTQBNpz0GerhNGlrgH3tSVT1x0QSEaqdZswfCN4Pyne_764')"></div>
 <div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent"></div>
 <div class="absolute bottom-4 left-4 text-white text-left">
 <h4 class="font-headline-md">Defense</h4>
@@ -412,7 +427,7 @@
 </div>
 <div class="group cursor-pointer">
 <div class="relative h-64 rounded-2xl overflow-hidden mb-4">
-<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" data-alt="A futuristic railway station design with streamlined trains and glass architecture. The lighting is bright and airy, suggesting a smart city infrastructure project, captured in a clean architectural photography style." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD81ctXf00MKteZd5nVFazr3P_sZPWQgud8WkNirNVTikhGjJOsiHAuNEj3UsFHXKGSHMLaCfBFQYNE3HiOp1_jyt5z6x9oWPRPQK7Bggx81b1qhiBd4a3MAu76QE8TIF2-3K-2TlssWOb7AZdp5iuZVgVIln6AfjWj5x73vU38O39lFqHWVPQ-C9aeAdoqiXXfLjBecV-gRaI1qA8uVpGUKwIO4dZIOjTxk9hbSlWq26gK7typGsXQ5_CdRHaFrCANdad46M5J81E')"></div>
+<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" aria-hidden="true" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD81ctXf00MKteZd5nVFazr3P_sZPWQgud8WkNirNVTikhGjJOsiHAuNEj3UsFHXKGSHMLaCfBFQYNE3HiOp1_jyt5z6x9oWPRPQK7Bggx81b1qhiBd4a3MAu76QE8TIF2-3K-2TlssWOb7AZdp5iuZVgVIln6AfjWj5x73vU38O39lFqHWVPQ-C9aeAdoqiXXfLjBecV-gRaI1qA8uVpGUKwIO4dZIOjTxk9hbSlWq26gK7typGsXQ5_CdRHaFrCANdad46M5J81E')"></div>
 <div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent"></div>
 <div class="absolute bottom-4 left-4 text-white text-left">
 <h4 class="font-headline-md">Railways</h4>
@@ -421,7 +436,7 @@
 </div>
 <div class="group cursor-pointer">
 <div class="relative h-64 rounded-2xl overflow-hidden mb-4">
-<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" data-alt="A high-altitude aerial view of a smart city at dusk. Glowing fiber-optic-like light patterns connect buildings, representing data flow and connectivity. The colors are vibrant blues and golds." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD6auwjqDK7-rBV-zjaHk2t5OXAAJPC5XxBqcjos6WR0V0rVw98ozgt9qEmA-q1P6Vj8uVsnDP9fT7BB0Rne_HhnlR_wdIfnT_Ra0-2jixedkut_xQ04RcsTFv0oaQbEeaFEoNu4Z5RYeSUHhN1q91NucpT_BLEKqLJrGsW6Sdw91nUOagS2K_E0MiggBlWEV7XNyV85pjyKY9EuBEhNbszqt3d8UW57GidMZci8-3XwHjguNLMpeGgj48WRFiaYcDGqPYiP_aHzKg')"></div>
+<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" aria-hidden="true" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD6auwjqDK7-rBV-zjaHk2t5OXAAJPC5XxBqcjos6WR0V0rVw98ozgt9qEmA-q1P6Vj8uVsnDP9fT7BB0Rne_HhnlR_wdIfnT_Ra0-2jixedkut_xQ04RcsTFv0oaQbEeaFEoNu4Z5RYeSUHhN1q91NucpT_BLEKqLJrGsW6Sdw91nUOagS2K_E0MiggBlWEV7XNyV85pjyKY9EuBEhNbszqt3d8UW57GidMZci8-3XwHjguNLMpeGgj48WRFiaYcDGqPYiP_aHzKg')"></div>
 <div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent"></div>
 <div class="absolute bottom-4 left-4 text-white text-left">
 <h4 class="font-headline-md">Smart Cities</h4>
@@ -430,7 +445,7 @@
 </div>
 <div class="group cursor-pointer">
 <div class="relative h-64 rounded-2xl overflow-hidden mb-4">
-<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" data-alt="A modern medical diagnostic center featuring advanced MRI machines and digital medical record screens. The style is clean, clinical, and reassuring, using soft whites and professional blue accents." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDJzlcQZgfj2_f2q3hL1LrA4sOEoXoVqb4n5l2s7Mhtzt-k3sjwmNL1Zgx8ASkLhe0RKbNLVr_5oS8wCUJI8LYIuj1Yh-ufTdK0wlGsK6yWTXnhrbWsqkvhCPVOmY2b9j1BbWPx_6eyesBDsTxgTtLyVLuLEWWd84pt05IfmuTBE2Hfy9zMF5wWMHeqA3a-gjM0BUK9PPZOzWVkqMcmfWIzvDCQHMknZ2IIQuf4Pthuz8OgHO4_fkFa8G78dn5BM5Tcn445UdzzWa8')"></div>
+<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" aria-hidden="true" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDJzlcQZgfj2_f2q3hL1LrA4sOEoXoVqb4n5l2s7Mhtzt-k3sjwmNL1Zgx8ASkLhe0RKbNLVr_5oS8wCUJI8LYIuj1Yh-ufTdK0wlGsK6yWTXnhrbWsqkvhCPVOmY2b9j1BbWPx_6eyesBDsTxgTtLyVLuLEWWd84pt05IfmuTBE2Hfy9zMF5wWMHeqA3a-gjM0BUK9PPZOzWVkqMcmfWIzvDCQHMknZ2IIQuf4Pthuz8OgHO4_fkFa8G78dn5BM5Tcn445UdzzWa8')"></div>
 <div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent"></div>
 <div class="absolute bottom-4 left-4 text-white text-left">
 <h4 class="font-headline-md">Healthcare</h4>
@@ -443,10 +458,10 @@
 <!-- FAQ Section -->
 <section class="py-24 bg-surface">
 <div class="max-w-3xl mx-auto px-margin-desktop">
-<h2 class="font-headline-lg text-headline-lg text-primary text-center mb-12">Frequently Asked Questions</h2>
+<h2 id="faq" class="font-headline-lg text-headline-lg text-primary text-center mb-12 scroll-mt-28">Frequently Asked Questions</h2>
 <div class="space-y-4">
 <details class="group p-6 rounded-xl bg-white border border-outline-variant/30 cursor-pointer">
-<summary class="flex justify-between items-center font-headline-md list-none">
+<summary class="flex justify-between items-center font-headline-md list-none py-[10px] -my-[10px]">
                             Does AI replace the Evaluation Committee?
                             <span class="material-symbols-outlined group-open:rotate-180 transition-transform">expand_more</span>
 </summary>
@@ -455,7 +470,7 @@
                         </p>
 </details>
 <details class="group p-6 rounded-xl bg-white border border-outline-variant/30 cursor-pointer">
-<summary class="flex justify-between items-center font-headline-md list-none">
+<summary class="flex justify-between items-center font-headline-md list-none py-[10px] -my-[10px]">
                             How are scores generated?
                             <span class="material-symbols-outlined group-open:rotate-180 transition-transform">expand_more</span>
 </summary>
@@ -464,7 +479,7 @@
                         </p>
 </details>
 <details class="group p-6 rounded-xl bg-white border border-outline-variant/30 cursor-pointer">
-<summary class="flex justify-between items-center font-headline-md list-none">
+<summary class="flex justify-between items-center font-headline-md list-none py-[10px] -my-[10px]">
                             Is it compliant with GFR and Indian Procurement Rules?
                             <span class="material-symbols-outlined group-open:rotate-180 transition-transform">expand_more</span>
 </summary>
@@ -476,7 +491,7 @@
 </div>
 </section>
 <!-- Final CTA -->
-<section class="py-24 bg-white">
+<section id="contact" class="py-24 bg-white">
 <div class="max-w-container-max mx-auto px-margin-desktop">
 <div class="rounded-3xl bg-primary text-white p-12 lg:p-24 text-center relative overflow-hidden">
 <div class="absolute inset-0 bg-gradient-to-r from-secondary-container/20 to-transparent"></div>
@@ -589,6 +604,17 @@ header nav{transition:height .45s cubic-bezier(.32,.72,0,1)}
   [data-pulse]::before{animation:none}
   *{transition-duration:.01ms!important}
 }
+/* mobile menu — the bars rotate into a cross rather than swapping icons */
+.menu-bar{transition:transform .4s cubic-bezier(.32,.72,0,1), opacity .25s ease}
+#menu-btn[aria-expanded="true"] .menu-bar:first-child{transform:translateY(4px) rotate(45deg)}
+#menu-btn[aria-expanded="true"] .menu-bar:last-child{transform:translateY(-4px) rotate(-45deg)}
+#menu-panel .menu-link{opacity:0; transform:translateY(-6px);
+  transition:opacity .45s cubic-bezier(.16,1,.3,1), transform .45s cubic-bezier(.16,1,.3,1)}
+#menu-panel.is-open .menu-link{opacity:1; transform:none}
+#menu-panel.is-open .menu-link:nth-child(1){transition-delay:.04s}
+#menu-panel.is-open .menu-link:nth-child(2){transition-delay:.08s}
+#menu-panel.is-open .menu-link:nth-child(3){transition-delay:.12s}
+#menu-panel.is-open .menu-link:nth-child(4){transition-delay:.16s}
 </style>
 
 <script>
@@ -705,7 +731,27 @@ header nav{transition:height .45s cubic-bezier(.32,.72,0,1)}
     sio.observe(el);
   });
 
-  /* ── 5 · nav condenses past the hero ────────────────────────────────── */
+  /* ── 5 · mobile menu ────────────────────────────────────────────────── */
+  var mb = document.getElementById('menu-btn'), mp = document.getElementById('menu-panel');
+  if (mb && mp) {
+    var setMenu = function(open){
+      mb.setAttribute('aria-expanded', String(open));
+      mb.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      if (open) { mp.hidden = false; requestAnimationFrame(function(){ mp.classList.add('is-open'); }); }
+      else { mp.classList.remove('is-open'); setTimeout(function(){ mp.hidden = true; }, reduce ? 0 : 320); }
+    };
+    mb.addEventListener('click', function(){
+      setMenu(mb.getAttribute('aria-expanded') !== 'true');
+    });
+    $$('#menu-panel a').forEach(function(a){ a.addEventListener('click', function(){ setMenu(false); }); });
+    addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && mb.getAttribute('aria-expanded') === 'true'){ setMenu(false); mb.focus(); }
+    });
+    // a resize past the breakpoint must not leave the panel stranded open
+    matchMedia('(min-width: 768px)').addEventListener('change', function(e){ if (e.matches) setMenu(false); });
+  }
+
+  /* ── 6 · nav condenses past the hero ────────────────────────────────── */
   var hdr = document.querySelector('header');
   if (hdr) addEventListener('scroll', function(){
     hdr.classList.toggle('is-tucked', scrollY > 60);
