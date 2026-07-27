@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import {
-  CLAIMS, CLOSING, FEATURES, FOOTER, HERO, NAV, PIPELINE, PRICING, PROBLEMS, SECTORS, WORKFLOW,
+  CLAIMS, CLOSING, FEATURES, FOOTER, HERO, NAV, PIPELINE, PROBLEMS, SECTORS, WORKFLOW,
 } from "./content";
 import { Icon, type IconName } from "./Icon";
 import { Marquee, Odometer, Reveal, Spotlight } from "./Motion";
@@ -504,106 +504,6 @@ export function Sectors() {
           </span>
         </div>
       </Reveal>
-    </section>
-  );
-}
-
-export function Pricing() {
-  return (
-    <section id="pricing" className="py-24" style={{ background: "var(--m-surface-low)" }}>
-      <div className="m-shell">
-        <Reveal>
-          <h2 className="text-center text-[2rem] font-semibold md:text-[2.75rem]">
-            {PRICING.title}
-          </h2>
-          <p className="mt-4 text-center" style={{ color: "var(--m-ink-soft)" }}>
-            {PRICING.subtitle}
-          </p>
-        </Reveal>
-
-        <div className="mt-14 grid items-start gap-5 lg:grid-cols-3">
-          {PRICING.plans.map((plan, i) => {
-            const featured = plan.featured;
-            return (
-              <Reveal key={plan.name} delay={i * 90}>
-                <article
-                  className={
-                    featured
-                      ? "relative h-full rounded-[var(--m-radius-lg)] p-8 lg:-mt-5 lg:pb-12"
-                      : "m-card m-card-hover h-full p-8"
-                  }
-                  style={
-                    featured
-                      ? {
-                          background: "linear-gradient(160deg, var(--m-primary), var(--m-primary-deep))",
-                          color: "var(--m-on-primary)",
-                          boxShadow: "var(--m-shadow-lg)",
-                        }
-                      : undefined
-                  }
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-lg font-semibold">{plan.name}</h3>
-                    {"tag" in plan && plan.tag && (
-                      <span
-                        className="m-label rounded-full px-2.5 py-1"
-                        style={{ background: "var(--m-accent)", color: "var(--m-inverse)" }}
-                      >
-                        {plan.tag}
-                      </span>
-                    )}
-                  </div>
-
-                  <p
-                    className="mt-6 text-[2.5rem] font-bold leading-none"
-                    style={{ fontFamily: "var(--font-marketing-display)" }}
-                  >
-                    {plan.price}
-                    {plan.period && (
-                      <span className="text-base font-medium opacity-70">{plan.period}</span>
-                    )}
-                  </p>
-                  <p
-                    className="mt-3 text-sm"
-                    style={{ color: featured ? undefined : "var(--m-ink-soft)" }}
-                  >
-                    {plan.blurb}
-                  </p>
-
-                  <ul className="mt-7 space-y-3 text-sm">
-                    {plan.features.map((f) => (
-                      <li key={f} className="flex items-center gap-2.5">
-                        <span style={{ color: featured ? "var(--m-accent)" : "var(--m-primary)" }}>
-                          <Icon name="check" size={18} />
-                        </span>
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Link
-                    href="#demo"
-                    className="m-btn mt-9 w-full"
-                    style={
-                      featured
-                        ? { background: "var(--m-surface)", color: "var(--m-primary)" }
-                        : plan.name === "Enterprise"
-                          ? { background: "var(--m-ink)", color: "var(--m-on-inverse)" }
-                          : {
-                              border: "1px solid var(--m-outline)",
-                              color: "var(--m-primary)",
-                              background: "var(--m-surface)",
-                            }
-                    }
-                  >
-                    {plan.cta}
-                  </Link>
-                </article>
-              </Reveal>
-            );
-          })}
-        </div>
-      </div>
     </section>
   );
 }

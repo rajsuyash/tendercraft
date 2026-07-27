@@ -29,7 +29,6 @@ export const NAV = [
   { label: "Product", href: "#features" },
   { label: "Solutions", href: "#workflow" },
   { label: "Industries", href: "#sectors" },
-  { label: "Pricing", href: "#pricing" },
   { label: "Resources", href: "/guide" },
 ] as const;
 
@@ -157,51 +156,6 @@ export const CLAIMS = {
     "Built with bid teams who live inside GeM, CPPP and state portals every week.",
 } as const;
 
-export const PRICING = {
-  title: "Transparent Pricing",
-  subtitle: "Plans that scale with your contract volume.",
-  plans: [
-    {
-      name: "Starter",
-      price: "₹4,999",
-      period: "/mo",
-      blurb: "For boutique firms and freelancers.",
-      features: ["3 Bids / Month", "AI Portal Monitoring", "Standard Email Support"],
-      cta: "Start Free Trial",
-      featured: false,
-    },
-    {
-      name: "Professional",
-      price: "₹14,999",
-      period: "/mo",
-      blurb: "For high-growth enterprise teams.",
-      features: [
-        "Unlimited Bids",
-        "Compliance Matrix Gen",
-        "Technical Writer AI",
-        "24/7 Priority Support",
-      ],
-      cta: "Go Professional",
-      featured: true,
-      tag: "MOST POPULAR",
-    },
-    {
-      name: "Enterprise",
-      price: "Custom",
-      period: "",
-      blurb: "For Fortune 500 & PSU contractors.",
-      features: [
-        "Custom LLM Fine-tuning",
-        "On-Premise Deployment",
-        "Dedicated Account Manager",
-        "API Access",
-      ],
-      cta: "Contact Sales",
-      featured: false,
-    },
-  ],
-} as const;
-
 export const CLOSING = {
   title: "Ready to Win More Government Contracts?",
   primaryCta: "Book a Demo",
@@ -219,8 +173,7 @@ export const FOOTER = {
         { label: "Features", href: "#features" },
         { label: "RFP Analysis", href: "#features" },
         { label: "Compliance Matrix", href: "#features" },
-        { label: "Pricing", href: "#pricing" },
-      ],
+            ],
     },
     {
       title: "Industries",
