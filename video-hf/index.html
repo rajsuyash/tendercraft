@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TenderCraft demo</title>
+  </head>
+  <body>
+    <div data-composition-id="root" data-width="1920" data-height="1080" data-start="0" data-duration="54.3">
+      <!-- Narration. Scene boundaries below are the paragraph gaps ffmpeg silencedetect found
+           in this exact file, so every cut lands in a pause rather than over a word. -->
+      <audio id="vo" data-start="0" data-duration="54.3" data-track-index="0" src="voiceover.mp3" data-volume="1"></audio>
+
+      <!-- Scenes alternate track index so consecutive clips can overlap by 0.5s. The overlap IS
+           the transition: the incoming scene wipes over a still-fully-visible outgoing one. -->
+
+      <!-- S1 · 0 – 8.6 -->
+      <div id="s1" class="clip scene light" data-start="0" data-duration="8.6" data-track-index="1">
+        <div class="grid-tex"></div>
+        <div class="ghost">300</div>
+        <div class="wash wash-a"></div>
+        <div class="scene-content">
+          <div class="eyebrow">Notice Inviting Tender</div>
+          <h1 class="display">A government tender<br />runs 300 pages.</h1>
+          <div class="rule"></div>
+          <p class="body">
+            The requirements that decide whether your bid is read are somewhere inside it.
+          </p>
+        </div>
+        <div class="pagestack" aria-hidden="true"></div>
+        <div class="regmark br">01 / 06</div>
+      </div>
+
+      <!-- S2 · 8.1 – 24.6 -->
+      <div id="s2" class="clip scene light" data-start="8.1" data-duration="16.5" data-track-index="2">
+        <div class="grid-tex"></div>
+        <div class="wash wash-b"></div>
+        <div class="scene-content">
+          <div class="eyebrow">NABARD · NAFIS Third Round</div>
+          <div class="figrow">
+            <div class="fig">
+              <div class="fignum" id="s2-pages">0</div>
+              <div class="figlabel">pages read</div>
+            </div>
+            <div class="figdiv"></div>
+            <div class="fig">
+              <div class="fignum accentnum" id="s2-req">0</div>
+              <div class="figlabel">requirements extracted</div>
+            </div>
+          </div>
+          <div class="rule"></div>
+          <ul class="anchors">
+            <li class="anchor"><span class="mono">p.8 · Cl. 3.1(a)</span><span class="atext">Average annual turnover of not less than Rs. 5 Crore</span></li>
+            <li class="anchor"><span class="mono">p.12 · Cl. 4.2</span><span class="atext">Valid ISO 9001:2015 certificate on the date of submission</span></li>
+            <li class="anchor"><span class="mono">p.26 · Cl. 7.1</span><span class="atext">Agency shall indemnify and keep NABARD indemnified</span></li>
+          </ul>
+        </div>
+        <div class="regmark br">02 / 06</div>
+      </div>
+
+      <!-- S3 · 24.1 – 32.3 -->
+      <div id="s3" class="clip scene dark" data-start="24.1" data-duration="8.2" data-track-index="1">
+        <div class="wash wash-dark"></div>
+        <div class="ghost ghost-dark">57</div>
+        <div class="scene-content">
+          <div class="eyebrow eyebrow-dark">The denominator</div>
+          <h2 class="display display-dark">Every obligation<br />sentence, counted.</h2>
+          <div class="rule rule-dark"></div>
+          <div class="claimrow">
+            <div class="claimnum" id="s3-num">0</div>
+            <p class="body body-dark">carried an obligation that no requirement covered yet</p>
+          </div>
+        </div>
+        <div class="regmark br light-mark">03 / 06</div>
+      </div>
+
+      <!-- S4 · 31.8 – 42.5 -->
+      <div id="s4" class="clip scene light" data-start="31.8" data-duration="10.7" data-track-index="2">
+        <div class="grid-tex"></div>
+        <div class="wash wash-a"></div>
+        <div class="scene-content s4-content">
+          <div class="s4-left">
+            <div class="eyebrow">The artifact</div>
+            <h2 class="display s4-head">A matrix your<br />team can own.</h2>
+            <div class="rule"></div>
+            <ul class="chips">
+              <li class="chip">Assign</li>
+              <li class="chip">Track</li>
+              <li class="chip">Export to Excel</li>
+              <li class="chip">Re-import</li>
+            </ul>
+          </div>
+          <div class="shotwrap"><img class="shot" src="matrix.png" alt="" /></div>
+        </div>
+        <div class="regmark br">04 / 06</div>
+      </div>
+
+      <!-- S5 · 42.0 – 51.6 -->
+      <div id="s5" class="clip scene light" data-start="42.0" data-duration="9.6" data-track-index="1">
+        <div class="grid-tex"></div>
+        <div class="wash wash-b"></div>
+        <div class="scene-content">
+          <div class="eyebrow">Cite or flag</div>
+          <h2 class="display s5-head">Every claim points at<br />a document you own.</h2>
+          <ul class="rows">
+            <li class="row"><span class="tag ok">CITED</span><span class="rtext">Meridian has completed 4 water metering projects above Rs. 1 Cr.</span><span class="mono src">completion-certs.pdf · p.3</span></li>
+            <li class="row"><span class="tag ok">CITED</span><span class="rtext">Average annual turnover of Rs. 8.2 Cr across FY23 to FY25.</span><span class="mono src">ca-certificate.pdf · p.1</span></li>
+            <li class="row flagged"><span class="tag flag">FLAGGED</span><span class="rtext">ISO 9001:2015 certification valid on the submission date.</span><span class="mono src">expired 03/2026 · no source</span></li>
+          </ul>
+          <p class="body kicker">What it cannot source, it flags. It never invents.</p>
+        </div>
+        <div class="regmark br">05 / 06</div>
+      </div>
+
+      <!-- S6 · 51.1 – 55.4 -->
+      <div id="s6" class="clip scene dark" data-start="51.1" data-duration="3.2" data-track-index="2">
+        <div class="wash wash-dark"></div>
+        <div class="ghost ghost-dark ghost-close">TC</div>
+        <div class="scene-content close-content">
+          <div class="wordmark">TenderCraft <span class="wm-ai">AI</span></div>
+          <div class="rule rule-dark rule-close"></div>
+          <p class="body body-dark">Try it on your own tender.</p>
+          <div class="url mono">tendercraft.aisewak.com</div>
+        </div>
+      </div>
+
+      <!-- Wipe panel used as the transition between every scene pair. -->
+      <div id="wipe" class="clip wipe" data-start="0" data-duration="54.3" data-track-index="3"></div>
+
+      <style>
+        @font-face { font-family: 'Geist'; src: url('fonts/geist.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Geist Mono'; src: url('fonts/geist-mono.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+        [data-composition-id="root"] { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #faf8ff; }
+        [data-composition-id="root"] * { box-sizing: border-box; margin: 0; }
+
+        .scene { position: absolute; inset: 0; overflow: hidden; }
+        .light { background: #faf8ff; color: #131b2e; }
+        .dark  { background: #101728; color: #eef0ff; }
+
+        /* Content fills the scene; padding does the positioning. Anchored left with a wide
+           right margin — the house frame. */
+        .scene-content {
+          position: relative; z-index: 3;
+          display: flex; flex-direction: column; justify-content: center;
+          width: 100%; height: 100%; padding: 110px 140px; gap: 30px;
+        }
+
+        /* ── texture ─────────────────────────────────────────────── */
+        .grid-tex {
+          position: absolute; inset: 0; z-index: 0; opacity: 0.5;
+          background-image:
+            linear-gradient(to right, rgba(19,27,46,0.09) 2px, transparent 2px),
+            linear-gradient(to bottom, rgba(19,27,46,0.09) 2px, transparent 2px);
+          background-size: 96px 96px;
+          -webkit-mask-image: radial-gradient(ellipse 70% 80% at 82% 50%, #000 10%, transparent 72%);
+          mask-image: radial-gradient(ellipse 70% 80% at 82% 50%, #000 10%, transparent 72%);
+        }
+        .wash { position: absolute; z-index: 1; border-radius: 50%; filter: blur(90px); }
+        .wash-a { width: 900px; height: 900px; right: -180px; top: -240px; background: radial-gradient(circle, rgba(0,82,204,0.30), transparent 68%); }
+        .wash-b { width: 820px; height: 820px; right: -140px; bottom: -280px; background: radial-gradient(circle, rgba(255,153,51,0.22), transparent 68%); }
+        .wash-dark { position: absolute; inset: auto auto -320px -220px; width: 1100px; height: 1100px; border-radius: 50%; filter: blur(110px); background: radial-gradient(circle, rgba(0,82,204,0.55), transparent 66%); z-index: 1; }
+
+        .ghost {
+          position: absolute; right: 60px; bottom: -160px; z-index: 1;
+          font-family: Geist, Inter, sans-serif; font-weight: 800; font-size: 620px;
+          line-height: 1; color: rgba(0,82,204,0.13); letter-spacing: -0.05em;
+        }
+        .ghost-dark { color: rgba(255,153,51,0.14); }
+        .ghost-close { right: 90px; bottom: -220px; font-size: 560px; }
+
+        .pagestack {
+          position: absolute; right: 150px; top: 50%; transform: translateY(-50%);
+          z-index: 2; width: 430px; height: 470px;
+          background: repeating-linear-gradient(to bottom, rgba(0,82,204,0.30) 0 5px, transparent 5px 15px);
+          -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+          mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent);
+        }
+
+        .regmark {
+          position: absolute; z-index: 4; font-family: 'Geist Mono', ui-monospace, monospace;
+          font-size: 21px; letter-spacing: 0.16em; color: rgba(19,27,46,0.72);
+        }
+        .br { right: 64px; bottom: 54px; }
+        .light-mark { color: rgba(238,240,255,0.82); }
+
+        /* ── type ────────────────────────────────────────────────── */
+        .eyebrow {
+          font-family: 'Geist Mono', ui-monospace, monospace; font-size: 23px; font-weight: 500;
+          letter-spacing: 0.16em; text-transform: uppercase; color: #0052cc;
+        }
+        .eyebrow-dark { color: #ff9933; }
+        .display {
+          font-family: Geist, Inter, sans-serif; font-weight: 800; font-size: 104px;
+          line-height: 1.04; letter-spacing: -0.035em; color: #131b2e; max-width: 1120px;
+        }
+        .display-dark { color: #eef0ff; }
+        .body { font-family: Inter, sans-serif; font-size: 36px; font-weight: 400; line-height: 1.42; color: #434654; max-width: 26ch; }
+        .body-dark { color: rgba(238,240,255,0.9); }
+        .mono { font-family: 'Geist Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+        .rule { width: 190px; height: 4px; background: #0052cc; border-radius: 2px; }
+        .rule-dark { background: #ff9933; }
+
+        /* ── S2 figures ──────────────────────────────────────────── */
+        .figrow { display: flex; align-items: flex-end; gap: 70px; }
+        .figdiv { width: 3px; height: 130px; background: rgba(19,27,46,0.16); }
+        .fignum { font-family: Geist, Inter, sans-serif; font-weight: 800; font-size: 168px; line-height: 0.94; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; color: #131b2e; }
+        .accentnum { color: #0052cc; }
+        .figlabel { font-family: Inter, sans-serif; font-size: 30px; color: #434654; margin-top: 12px; }
+        .anchors { list-style: none; display: flex; flex-direction: column; gap: 16px; padding: 0; }
+        .anchor { display: flex; align-items: center; gap: 30px; }
+        .anchor .mono { font-size: 25px; color: #0052cc; width: 260px; }
+        .atext { font-family: Inter, sans-serif; font-size: 30px; color: #434654; }
+
+        /* ── S3 claim ────────────────────────────────────────────── */
+        .claimrow { display: flex; align-items: center; gap: 44px; }
+        .claimnum { font-family: Geist, Inter, sans-serif; font-weight: 800; font-size: 230px; line-height: 0.9; letter-spacing: -0.05em; color: #ff9933; font-variant-numeric: tabular-nums; }
+
+        /* ── S4 artifact ─────────────────────────────────────────── */
+        .s4-content { flex-direction: row; align-items: center; gap: 70px; padding: 100px 120px; }
+        .s4-left { display: flex; flex-direction: column; gap: 28px; width: 640px; flex-shrink: 0; }
+        .s4-head { font-size: 82px; }
+        .chips { list-style: none; display: flex; flex-wrap: wrap; gap: 14px; padding: 0; }
+        .chip {
+          font-family: Inter, sans-serif; font-size: 27px; font-weight: 600; color: #0052cc;
+          background: #ffffff; border: 2px solid #dae2ff; border-radius: 999px; padding: 14px 28px;
+        }
+        .shotwrap { flex: 1; border-radius: 22px; overflow: hidden; border: 3px solid #dae2ff; box-shadow: 0 40px 90px rgba(0,82,204,0.24); }
+        .shot { display: block; width: 100%; height: auto; }
+
+        /* ── S5 rows ─────────────────────────────────────────────── */
+        .s5-head { font-size: 78px; }
+        .rows { list-style: none; display: flex; flex-direction: column; gap: 16px; padding: 0; }
+        .row {
+          display: flex; align-items: center; gap: 26px;
+          background: #ffffff; border: 2px solid #dfe3f5; border-radius: 18px; padding: 24px 30px;
+        }
+        .flagged { border-color: #ff9933; }
+        .tag { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 20px; letter-spacing: 0.12em; border-radius: 999px; padding: 9px 18px; white-space: nowrap; }
+        .ok { color: #0052cc; border: 2px solid #0052cc; }
+        .flag { color: #8f4e00; border: 2px solid #ff9933; background: #fff3e3; }
+        .rtext { font-family: Inter, sans-serif; font-size: 29px; color: #131b2e; flex: 1; }
+        .src { font-size: 21px; color: #6b6f80; white-space: nowrap; }
+        .kicker { font-size: 33px; color: #434654; max-width: none; }
+
+        /* ── S6 close ────────────────────────────────────────────── */
+        .close-content { justify-content: center; gap: 26px; }
+        .wordmark { font-family: Geist, Inter, sans-serif; font-weight: 800; font-size: 128px; letter-spacing: -0.04em; color: #eef0ff; }
+        .wm-ai { color: #5b9bff; }
+        .rule-close { width: 150px; }
+        .url { font-size: 32px; letter-spacing: 0.1em; color: #ff9933; }
+
+        /* ── transition ──────────────────────────────────────────── */
+        .wipe { position: absolute; inset: 0; z-index: 20; background: #0052cc; transform: scaleY(0); transform-origin: bottom; }
+      </style>
+
+      <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+      <script>
+        window.__timelines = window.__timelines || {};
+        const tl = gsap.timeline({ paused: true });
+
+        // Counters are driven through a proxy object rather than by tweening text, so the
+        // value is a deterministic function of timeline position and seeks correctly.
+        const count = (sel, to, at, dur) => {
+          const o = { v: 0 };
+          tl.to(o, {
+            v: to, duration: dur, ease: "power2.out",
+            onUpdate: () => { const el = document.querySelector(sel); if (el) el.textContent = Math.round(o.v); },
+          }, at);
+        };
+
+        /* ── S1 ── */
+        tl.from("#s1 .eyebrow", { y: -24, opacity: 0, duration: 0.5, ease: "power2.out" }, 0.25);
+        tl.from("#s1 .display", { y: 64, opacity: 0, duration: 0.9, ease: "expo.out" }, 0.4);
+        tl.from("#s1 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.6, ease: "power3.inOut" }, 1.0);
+        tl.from("#s1 .body", { y: 34, opacity: 0, duration: 0.7, ease: "power2.out" }, 1.25);
+        tl.from("#s1 .pagestack", { scaleY: 0, transformOrigin: "top", opacity: 0, duration: 1.5, ease: "power3.out" }, 0.5);
+        tl.from("#s1 .ghost", { x: 90, opacity: 0, duration: 1.4, ease: "power2.out" }, 0.6);
+        tl.from("#s1 .regmark", { opacity: 0, duration: 0.5 }, 1.6);
+        // ambient drift, finite repeats only
+        tl.to("#s1 .wash-a", { x: -60, y: 40, duration: 4, ease: "sine.inOut", repeat: 1, yoyo: true }, 0);
+
+        /* ── S2 ── */
+        tl.from("#s2 .eyebrow", { x: -30, opacity: 0, duration: 0.5, ease: "power2.out" }, 8.5);
+        tl.from("#s2 .fig", { y: 46, opacity: 0, duration: 0.7, stagger: 0.16, ease: "back.out(1.1)" }, 8.7);
+        tl.from("#s2 .figdiv", { scaleY: 0, opacity: 0, duration: 0.5, ease: "power3.out" }, 9.0);
+        count("#s2-pages", 81, 8.9, 1.5);
+        count("#s2-req", 192, 9.5, 2.6);
+        tl.from("#s2 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.6, ease: "power3.inOut" }, 13.2);
+        tl.from("#s2 .anchor", { x: -44, opacity: 0, duration: 0.6, stagger: 0.55, ease: "power3.out" }, 13.8);
+        tl.from("#s2 .regmark", { opacity: 0, duration: 0.5 }, 9.4);
+        tl.to("#s2 .wash-b", { x: 50, y: -40, duration: 6, ease: "sine.inOut", repeat: 1, yoyo: true }, 8.2);
+
+        /* ── S3 ── */
+        tl.from("#s3 .eyebrow", { y: -22, opacity: 0, duration: 0.5, ease: "power2.out" }, 24.5);
+        tl.from("#s3 .display", { y: 54, opacity: 0, duration: 0.85, ease: "expo.out" }, 24.65);
+        tl.from("#s3 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.55, ease: "power3.inOut" }, 25.2);
+        tl.from("#s3 .claimnum", { scale: 0.7, opacity: 0, duration: 0.8, ease: "power4.out" }, 25.5);
+        count("#s3-num", 57, 25.6, 1.7);
+        tl.from("#s3 .body", { x: 40, opacity: 0, duration: 0.7, ease: "power2.out" }, 26.1);
+        tl.from("#s3 .ghost", { scale: 0.86, opacity: 0, duration: 1.3, ease: "power2.out" }, 24.8);
+        tl.from("#s3 .regmark", { opacity: 0, duration: 0.5 }, 26.4);
+        tl.to("#s3 .wash-dark", { scale: 1.14, duration: 5, ease: "sine.inOut", repeat: 0 }, 24.2);
+
+        /* ── S4 ── */
+        tl.from("#s4 .eyebrow", { y: -22, opacity: 0, duration: 0.5, ease: "power2.out" }, 32.2);
+        tl.from("#s4 .s4-head", { y: 46, opacity: 0, duration: 0.8, ease: "expo.out" }, 32.35);
+        tl.from("#s4 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.55, ease: "power3.inOut" }, 32.9);
+        tl.from("#s4 .shotwrap", { x: 120, opacity: 0, duration: 1.0, ease: "power3.out" }, 32.5);
+        tl.from("#s4 .chip", { y: 26, opacity: 0, duration: 0.5, stagger: 0.14, ease: "back.out(1.2)" }, 34.6);
+        tl.from("#s4 .regmark", { opacity: 0, duration: 0.5 }, 33.4);
+        // slow push-in on the screenshot: scale only
+        tl.to("#s4 .shotwrap", { scale: 1.05, duration: 8, ease: "none" }, 33.4);
+
+        /* ── S5 ── */
+        tl.from("#s5 .eyebrow", { x: -28, opacity: 0, duration: 0.5, ease: "power2.out" }, 42.4);
+        tl.from("#s5 .s5-head", { y: 48, opacity: 0, duration: 0.8, ease: "expo.out" }, 42.55);
+        tl.from("#s5 .row", { y: 34, opacity: 0, duration: 0.6, stagger: 0.65, ease: "power3.out" }, 43.5);
+        tl.from("#s5 .kicker", { opacity: 0, y: 24, duration: 0.7, ease: "power2.out" }, 48.4);
+        tl.from("#s5 .regmark", { opacity: 0, duration: 0.5 }, 43.2);
+
+        /* ── S6 (final scene: the only one allowed to animate out) ── */
+        tl.from("#s6 .wordmark", { y: 46, opacity: 0, duration: 0.8, ease: "expo.out" }, 51.5);
+        tl.from("#s6 .rule-close", { scaleX: 0, transformOrigin: "left", duration: 0.5, ease: "power3.inOut" }, 52.0);
+        tl.from("#s6 .body", { y: 26, opacity: 0, duration: 0.6, ease: "power2.out" }, 52.15);
+        tl.from("#s6 .url", { opacity: 0, y: 20, duration: 0.6, ease: "power2.out" }, 52.5);
+        tl.from("#s6 .ghost-close", { opacity: 0, scale: 0.9, duration: 1.2, ease: "power2.out" }, 51.4);
+        tl.to("#s6 .close-content", { opacity: 0, duration: 0.45, ease: "power2.in" }, 53.8);
+
+        /* ── transitions ──────────────────────────────────────────
+           One wipe panel drives every scene change: it sweeps up over the outgoing scene
+           (which is still fully visible — no exit animations exist) and sweeps off to reveal
+           the incoming one. */
+        [8.1, 24.1, 31.8, 42.0, 51.1].forEach((t) => {
+          tl.fromTo("#wipe", { scaleY: 0, transformOrigin: "bottom" },
+            { scaleY: 1, duration: 0.26, ease: "power3.in" }, t - 0.3);
+          tl.to("#wipe", { scaleY: 0, transformOrigin: "top", duration: 0.3, ease: "power3.out" }, t + 0.02);
+        });
+
+        window.__timelines["root"] = tl;
+      </script>
+    </div>
+  </body>
+</html>
