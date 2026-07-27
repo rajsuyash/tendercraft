@@ -62,6 +62,12 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
             >
               Eligibility analysis
             </Link>
+            <Link
+              href={`/tenders/${id}/matrix`}
+              className="rounded border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary-tint"
+            >
+              Compliance matrix
+            </Link>
           </div>
         )}
       </header>

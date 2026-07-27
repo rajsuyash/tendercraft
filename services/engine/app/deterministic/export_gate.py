@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from .matrix import coverage
 from .types import ComplianceRow, CoverageStatus, RequirementLevel, SectionKind
 
 _BLOCKING_STATUSES = {CoverageStatus.PLACEHOLDER, CoverageStatus.UNVERIFIED, CoverageStatus.MISSING}
@@ -101,15 +102,14 @@ def evaluate_export(
                 "not human-approved (B-FR4)"
             )
 
-    mandatory = [r for r in rows if r.requirement_level is RequirementLevel.MANDATORY]
-    addressed = 0
-    for row in mandatory:
-        if row.status in _BLOCKING_STATUSES:
+    for row in rows:
+        if (
+            row.requirement_level is RequirementLevel.MANDATORY
+            and row.status in _BLOCKING_STATUSES
+        ):
             override.append(
                 f"{row.criterion_id}: {row.status.value} on mandatory criterion (B-FR1/B-FR2)"
             )
-        else:
-            addressed += 1  # COVERED or MANUAL (original-required, handled at physical submission)
 
     if not approvals.is_complete():
         override.append(
@@ -121,7 +121,13 @@ def evaluate_export(
             f"{approvals.distinct_approvers} person(s) (E-FR1)"
         )
 
-    resolved = addressed / len(mandatory) if mandatory else 1.0
+    # G-FR7: the arithmetic lives in matrix.coverage() and nowhere else. The export gate and
+    # the matrix screen count different things (draft status vs workflow status) but must
+    # never compute "what fraction is done" two different ways — that is how a compliance
+    # product ends up reporting 95% on one screen and 93% on the next.
+    resolved = coverage(
+        [(r.requirement_level, r.status not in _BLOCKING_STATUSES) for r in rows]
+    ).mandatory_fraction
 
     # Hard blockers never clear; override-able blockers clear only under a logged admin override.
     override_used = bool(override) and admin_override

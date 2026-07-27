@@ -26,6 +26,7 @@ CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
 def create_app() -> FastAPI:
     from .analyze_routes import router as analyze_router
     from .knowledge_routes import router as knowledge_router
+    from .matrix_routes import router as matrix_router
     from .members_routes import router as members_router
     from .proposal_routes import router as proposal_router
     from .readiness_routes import router as readiness_router
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     app.include_router(readiness_router)
     app.include_router(knowledge_router)
     app.include_router(members_router)
+    app.include_router(matrix_router)
 
     @app.get("/health")
     async def health() -> dict:

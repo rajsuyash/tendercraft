@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from pypdf import PdfReader
 
+from .deterministic.shred import unmapped_sentences
 from .deterministic.tender_meta import extract_tender_meta
 from .deterministic.types import EXTRACTION_CONFIRM_THRESHOLD
 from .envelope import ApiError
@@ -80,9 +81,17 @@ def ingest_pages(pages: list[tuple[int, str]]) -> dict:
     # being called "rfp.pdf" on every screen.
     meta = extract_tender_meta([text for _page, text in pages])
 
+    # G-FR2, and it has to happen HERE. This codebase does not persist tender text — pages are
+    # parsed in memory and discarded — so this is the only moment the denominator can be
+    # computed without asking the user to upload the document a second time.
+    unmapped = unmapped_sentences(
+        legible, [(r["anchor_page"], r["verbatim_text"]) for r in rows]
+    )
+
     return {
         "meta": meta,
         "criteria_rows": rows,
+        "unmapped_rows": [{"sentence": u.text, "page": u.page} for u in unmapped],
         "extracted": len(rows),
         "low_confidence": low_conf,
         "illegible_pages": illegible_pages,

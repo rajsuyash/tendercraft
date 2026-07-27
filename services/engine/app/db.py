@@ -788,3 +788,104 @@ def edit_section(workspace_id: str, proposal_id: str, key: str, body_md: str,
             "approved_at": None,
         },
     )
+
+
+# --- Module G: compliance matrix + the unmapped-requirement denominator ------------------
+
+
+def insert_unmapped(workspace_id: str, tender_id: str, rows: list[dict]) -> list[dict]:
+    """Persist the ingest-time requirement backlog (G-FR2).
+
+    on_conflict names workspace_id alongside the natural key: the engine writes with the
+    service role, which bypasses RLS, so a conflict target that omits the scope column can
+    reassign another workspace's row (known-pitfalls).
+    """
+    payload = [{**r, "workspace_id": workspace_id, "tender_id": tender_id} for r in rows]
+    return (
+        _rest(
+            "POST", "matrix_unmapped",
+            params={"on_conflict": "workspace_id,tender_id,page,sentence"},
+            json=payload,
+            prefer="return=representation,resolution=merge-duplicates",
+        )
+        or []
+    )
+
+
+def get_unmapped(tender_id: str, workspace_id: str, only_open: bool = False) -> list[dict]:
+    params = {
+        "tender_id": f"eq.{tender_id}",
+        "workspace_id": f"eq.{workspace_id}",
+        "select": "*",
+        "order": "page.asc,created_at.asc",
+    }
+    if only_open:
+        params["resolution"] = "eq.open"
+    return _rest("GET", "matrix_unmapped", params=params) or []
+
+
+def resolve_unmapped(
+    unmapped_id: str, workspace_id: str, resolution: str, actor: str, when_iso: str
+) -> list[dict]:
+    return (
+        _rest(
+            "PATCH", "matrix_unmapped",
+            params={"id": f"eq.{unmapped_id}", "workspace_id": f"eq.{workspace_id}"},
+            json={"resolution": resolution, "resolved_by": actor, "resolved_at": when_iso},
+        )
+        or []
+    )
+
+
+def upsert_matrix_rows(workspace_id: str, tender_id: str, rows: list[dict]) -> list[dict]:
+    """Generate-or-refresh matrix rows. Existing human edits survive a regeneration.
+
+    merge-duplicates on (workspace_id, tender_id, criterion_id) means re-running generation
+    after a corrigendum refreshes the requirement text without wiping owners and statuses.
+    """
+    payload = [{**r, "workspace_id": workspace_id, "tender_id": tender_id} for r in rows]
+    return (
+        _rest(
+            "POST", "matrix_rows",
+            params={"on_conflict": "workspace_id,tender_id,criterion_id"},
+            json=payload,
+            prefer="return=representation,resolution=merge-duplicates",
+        )
+        or []
+    )
+
+
+def get_matrix_rows(tender_id: str, workspace_id: str) -> list[dict]:
+    return (
+        _rest(
+            "GET", "matrix_rows",
+            params={
+                "tender_id": f"eq.{tender_id}",
+                "workspace_id": f"eq.{workspace_id}",
+                "select": "*",
+                "order": "anchor_page.asc,created_at.asc",
+            },
+        )
+        or []
+    )
+
+
+def update_matrix_row(row_id: str, tender_id: str, workspace_id: str, patch: dict) -> list[dict]:
+    """Patch the editable fields of one row.
+
+    tender_id is in the filter as well as the id: the id arrives from the caller, and a write
+    that binds a caller-supplied id without proving it belongs to this tender AND workspace is
+    the cross-workspace write this codebase has already been bitten by.
+    """
+    return (
+        _rest(
+            "PATCH", "matrix_rows",
+            params={
+                "id": f"eq.{row_id}",
+                "tender_id": f"eq.{tender_id}",
+                "workspace_id": f"eq.{workspace_id}",
+            },
+            json=patch,
+        )
+        or []
+    )

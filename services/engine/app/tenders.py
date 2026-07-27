@@ -82,6 +82,10 @@ def _process_ingest(workspace_id: str, data: bytes, title: str) -> dict:
         db.set_tender_meta(tender["id"], workspace_id, meta.tender_number, meta.authority)
     if result["criteria_rows"]:
         db.insert_criteria(workspace_id, tender["id"], result["criteria_rows"])
+    # The denominator (G-FR2). Computed during ingest because page text is never persisted —
+    # there is no later moment at which this could be recovered without a re-upload.
+    if result["unmapped_rows"]:
+        db.insert_unmapped(workspace_id, tender["id"], result["unmapped_rows"])
     return {
         "tender_id": tender["id"],
         "title": display_title(meta, title),
