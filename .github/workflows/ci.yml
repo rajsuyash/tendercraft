@@ -72,32 +72,53 @@ jobs:
           fi
 
   isolation:
-    name: ET-6 tenant isolation (live, CI-blocking)
+    name: ET-6 tenant isolation + migration replay (CI-blocking)
     runs-on: ubuntu-latest
-    # Forks cannot read secrets; conftest raises under CI when creds are absent, so this
-    # would fail for the wrong reason. Skip the job rather than let it fail open.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    defaults:
-      run:
-        working-directory: services/engine
+    # Runs on EVERY event, forks included. It used to be skipped for forks and gated on repo
+    # secrets that were never configured, so this job had never executed once — the Sev-1
+    # control we sell to bid consultants was unverified on every push while the check looked
+    # like part of a healthy pipeline.
+    #
+    # Fixed by removing the dependency instead of satisfying it: the suite now runs against a
+    # throwaway Supabase stack inside the runner. No secrets, so forks can run it; no shared
+    # project, so the permanently-undeletable workspaces this suite creates (audit_events is
+    # append-only) are destroyed with the container instead of accumulating in the database we
+    # develop against; no shared GoTrue, so password-grant rate limits cannot fail random
+    # tests. It is also ~12x faster than the hosted run (2.7s vs 31s) because nothing crosses
+    # a network.
     env:
       CI: "true" # conftest.py fails CLOSED under CI — missing creds raise instead of skipping
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-      SUPABASE_ANON_JWT: ${{ secrets.SUPABASE_ANON_JWT }}
-      SUPABASE_SERVICE_JWT: ${{ secrets.SUPABASE_SERVICE_JWT }}
     steps:
       - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --frozen
-      - name: assert the suite is not silently skipping
-        # A skipped isolation test is not a passing isolation test. Fail loudly here rather
-        # than let a green check mean "executed nothing".
+
+      - name: start Supabase (Postgres + GoTrue + PostgREST)
+        # A bare Postgres cannot prove this: the suite signs users in through GoTrue and the
+        # policies it exercises call auth.uid(). The whole stack is the unit under test.
+        run: supabase start
+
+      - name: build the database from the migration chain
+        # Replays 0001→N onto an EMPTY database. Nothing else verifies that this chain still
+        # works from scratch, and without it we could not stand up staging, move region, or
+        # recover from a loss — and would not find out until we tried.
         run: |
-          test -n "$NEXT_PUBLIC_SUPABASE_URL" || { echo "::error::isolation secrets missing"; exit 1; }
-      - name: isolation suite
-        run: uv run pytest tests/isolation -q -rs
+          eval "$(supabase status -o env | grep -E '^[A-Z_]+=' | sed 's/^/export /')"
+          SUPABASE_SERVICE_JWT="$SERVICE_ROLE_KEY" DB_URL="$DB_URL" API_URL="$API_URL" \
+            ./tools/local-db.sh
+
+      - name: isolation suite (ET-6)
+        working-directory: services/engine
+        run: |
+          eval "$(cd "$GITHUB_WORKSPACE" && supabase status -o env | grep -E '^[A-Z_]+=' | sed 's/^/export /')"
+          NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
+          SUPABASE_ANON_JWT="$ANON_KEY" \
+          SUPABASE_SERVICE_JWT="$SERVICE_ROLE_KEY" \
+            uv run pytest tests/isolation -q -rs
 
   web:
     name: web (typecheck, lint, test, build)

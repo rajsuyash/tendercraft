@@ -5,6 +5,15 @@
 | Layer | Owner | Covers |
 |---|---|---|
 | unit | `pnpm test` (Vitest) · `uv run pytest` | format helpers, components, **all deterministic engines** — comparators, lock gate (A-AC5), coverage counts (B-AC2), export blockers (B-AC4/E-AC2), suppression gate (D-AC4), anchor validator (A-AC3), verdict-rationale validator (C-AC4). Gate ACs get exhaustive unit coverage — they are the product's safety story. |
+> **Isolation + migration replay run against an ephemeral stack.** `supabase start` +
+> `./tools/local-db.sh` builds a throwaway database from migrations 0001→N on every CI run, and
+> the ET-6 suite runs against that. Never point it at a shared project: the suite creates
+> workspaces and audits actions in them, and `audit_events` is append-only, so the rows are
+> permanently undeletable (known-pitfalls). The script refuses any non-localhost `DB_URL`
+> because it drops and rebuilds `public`. Side benefit worth as much as the isolation proof:
+> the migration chain is now verified to replay onto an empty database, which is what standing
+> up staging, moving region, or recovering from a loss all depend on.
+
 | integration | `uv run pytest` (API tests) + `/verify-api` live smoke | endpoint contracts vs docs/PRD.md §6 envelope, error taxonomy, authz (tenant from JWT), audit-event writes (E-AC1), **tenant-isolation tests** (ET-6 — a seeded tenant-B must never appear in tenant-A responses or retrievals; CI-blocking) |
 | browser-verify | browser-verifier via `/verify` (Playwright MCP) | user-visible flows on S1–S13 routes; signs in as FIX-1; console/network cleanliness |
 | design-review | `/design-review` (stitch-ux-designer contract) | S#-D# + GLB-D# design ACs from docs/DESIGN_SPEC.md §H — DOM assertions on contractual selectors, breakpoint screenshots, token conformance |
