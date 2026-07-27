@@ -6,6 +6,8 @@ import { useState, useTransition } from "react";
 // Mirrors app/deterministic/matrix.py::MatrixRowStatus. If one end changes, change the other
 // — a UI array that mirrors a server enum WILL drift, and the symptom is a dead-looking
 // control that 422s (known-pitfalls).
+const UNMAPPED_PREVIEW = 20;
+
 const STATUSES = ["not_started", "drafting", "drafted", "reviewed", "approved"] as const;
 type Status = (typeof STATUSES)[number];
 
@@ -39,6 +41,7 @@ export type Unmapped = {
 
 export type Matrix = {
   tender_id: string;
+  title: string | null;
   rows: MatrixRow[];
   coverage: {
     total: number;
@@ -54,15 +57,34 @@ export type Matrix = {
   blockers: string[];
 };
 
+// Requirement LEVEL is not a verdict. DESIGN_SPEC §C reserves success/danger/warning for
+// Pass/Fail/Needs-review and forbids repurposing them — and rendering every mandatory row in
+// danger red made a freshly generated matrix look like a wall of failures when nothing has
+// been assessed yet. Level gets neutral weight; verdict colour stays for verdicts.
 const LEVEL_STYLE: Record<MatrixRow["requirement_level"], string> = {
-  mandatory: "bg-danger-bg text-danger",
-  desirable: "bg-info-bg text-info",
+  mandatory: "bg-ink/10 text-ink font-semibold",
+  desirable: "bg-surface-alt text-muted",
   self_attestation: "bg-surface-alt text-muted",
 };
+
+const LEVEL_LABEL: Record<MatrixRow["requirement_level"], string> = {
+  mandatory: "Mandatory",
+  desirable: "Desirable",
+  self_attestation: "Self-attested",
+};
+
+/** "p.12 · Cl. 4.1(a)" — without doubling a "Cl." the extractor already put in the clause. */
+function sourceAnchor(page: number | null, clause: string | null): string {
+  if (!page) return "—";
+  const c = (clause ?? "").trim();
+  if (!c) return `p.${page}`;
+  return /^(cl\.?|clause|annexure|section)\b/i.test(c) ? `p.${page} · ${c}` : `p.${page} · Cl. ${c}`;
+}
 
 export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initial: Matrix }) {
   const [matrix, setMatrix] = useState(initial);
   const [error, setError] = useState<string | null>(null);
+  const [showAllUnmapped, setShowAllUnmapped] = useState(false);
   const [busy, startTransition] = useTransition();
   const router = useRouter();
 
@@ -103,6 +125,7 @@ export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initi
 
   const cov = matrix.coverage;
   const open = matrix.unmapped.filter((u) => u.resolution === "open");
+  const outstandingMandatory = cov.mandatory_total - cov.mandatory_resolved;
 
   return (
     <div className="space-y-6">
@@ -161,13 +184,27 @@ export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initi
         </p>
       )}
 
-      {!matrix.complete && matrix.blockers.length > 0 && (
-        <ul data-matrix-blockers className="rounded-card border border-hairline bg-surface-alt p-card text-sm text-muted">
-          {matrix.blockers.slice(0, 5).map((b) => (
-            <li key={b}>· {b}</li>
-          ))}
-          {matrix.blockers.length > 5 && <li>· +{matrix.blockers.length - 5} more</li>}
-        </ul>
+      {/* The gate returns one blocker per offending row, each keyed by criterion id — correct
+          for an API, unreadable as a UI. A freshly generated matrix has every mandatory row
+          outstanding, so rendering that list verbatim greeted the user with a column of UUIDs
+          describing the normal starting state. Summarise; the table below already says which
+          rows they are. */}
+      {!matrix.complete && (
+        <p
+          data-matrix-blockers
+          data-blocker-count={matrix.blockers.length}
+          className="rounded-card border border-hairline bg-surface-alt p-card text-sm text-muted"
+        >
+          <span className="font-medium text-ink">Not yet complete.</span>{" "}
+          {[
+            matrix.open_unmapped > 0 &&
+              `${matrix.open_unmapped} requirement sentence${matrix.open_unmapped === 1 ? "" : "s"} still unmapped`,
+            outstandingMandatory > 0 &&
+              `${outstandingMandatory} mandatory requirement${outstandingMandatory === 1 ? "" : "s"} not yet drafted`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
       )}
 
       {open.length > 0 && (
@@ -176,7 +213,7 @@ export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initi
             Requirement sentences with no row ({open.length})
           </h2>
           <ul className="divide-y divide-hairline">
-            {open.map((u) => (
+            {(showAllUnmapped ? open : open.slice(0, UNMAPPED_PREVIEW)).map((u) => (
               <li key={u.id} data-unmapped-sentence className="flex gap-4 p-card text-sm">
                 <span className="shrink-0 font-mono text-xs text-muted">
                   {u.page ? `p.${u.page}` : "—"}
@@ -199,6 +236,20 @@ export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initi
               </li>
             ))}
           </ul>
+          {/* An 81-page RFP really does contain ~175 obligations — measured on a live NABARD
+              tender, and that is the finding, not a bug. Rendering all of them at once buries
+              the table below, so preview and let the user open the rest. Never truncate the
+              COUNT: a silently capped list would read as "only 20 outstanding". */}
+          {open.length > UNMAPPED_PREVIEW && (
+            <button
+              onClick={() => setShowAllUnmapped((v) => !v)}
+              className="w-full border-t border-hairline p-3 text-sm font-medium text-primary hover:bg-surface-alt"
+            >
+              {showAllUnmapped
+                ? "Show fewer"
+                : `Show all ${open.length} sentences (${open.length - UNMAPPED_PREVIEW} more)`}
+            </button>
+          )}
         </section>
       )}
 
@@ -218,13 +269,13 @@ export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initi
               <tr key={row.id} data-matrix-row className="align-top">
                 <td className="p-3 text-ink">{row.requirement_text}</td>
                 <td className="p-3">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LEVEL_STYLE[row.requirement_level]}`}>
-                    {row.requirement_level.replace("_", " ")}
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${LEVEL_STYLE[row.requirement_level]}`}>
+                    {LEVEL_LABEL[row.requirement_level]}
                   </span>
                 </td>
                 <td className="p-3 whitespace-nowrap font-mono text-xs text-muted">
                   {/* A-AC3's UI face: a requirement with no traceable source is not auditable. */}
-                  {row.anchor_page ? `p.${row.anchor_page} · Cl. ${row.anchor_clause || "—"}` : "—"}
+                  {sourceAnchor(row.anchor_page, row.anchor_clause)}
                 </td>
                 <td className="p-3 text-muted">{row.evidence_required || "—"}</td>
                 <td className="p-3">
@@ -254,6 +305,7 @@ export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initi
  *  raw JSON envelope whenever the gate refuses (TOM not locked, no criteria). */
 export function GenerateMatrixButton({ tenderId }: { tenderId: string }) {
   const [error, setError] = useState<string | null>(null);
+  const [showAllUnmapped, setShowAllUnmapped] = useState(false);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
 

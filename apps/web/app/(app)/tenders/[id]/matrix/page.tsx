@@ -61,8 +61,13 @@ export default async function MatrixPage({ params }: { params: Promise<{ id: str
     <main className="p-page">
       <header className="mb-6">
         <h1 className="font-heading text-2xl font-semibold text-ink">Compliance matrix</h1>
+        {/* Name the tender. Bid desks run 15–30 pursuits at once; a page headed only
+            "Compliance matrix" is ambiguous the moment a second tab is open. */}
         <p className="text-sm text-muted">
-          Every requirement in the locked tender model, with where it is answered and who owns
+          <Link href={`/tenders/${id}`} className="text-primary hover:underline">
+            {matrix.title ?? "Tender"}
+          </Link>{" "}
+          · every requirement in the locked tender model, with where it is answered and who owns
           it. Export to Excel and re-import without losing traceability.
         </p>
       </header>

@@ -39,7 +39,10 @@ class CriterionVerdict:
 
 
 def _anchor(row: dict) -> str:
-    if row.get("anchor_page") and row.get("anchor_clause"):
+    # Page alone is a resolvable anchor: real tenders state obligations in unnumbered
+    # prose, and requiring a clause here silently produced anchor=None, which the lock
+    # gate then refused forever (types.SourceAnchor.is_resolvable).
+    if row.get("anchor_page"):
         return f"p.{row['anchor_page']} · Cl. {row['anchor_clause']}"
     return f"p.{row['anchor_page']}" if row.get("anchor_page") else "no anchor"
 

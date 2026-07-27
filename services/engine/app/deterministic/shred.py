@@ -51,6 +51,11 @@ _FURNITURE = re.compile(
     re.IGNORECASE,
 )
 
+# A run of dots is a table-of-contents leader ("Pro forma of Integrity Pact ......... 42").
+# The ToC quotes requirement headings verbatim, so without this every mandatory item is
+# counted twice — once where it is stated and once where it is listed.
+_TOC_LEADER = re.compile(r"\.{4,}")
+
 _SENTENCE_SPLIT = re.compile(r"(?<=[.;:])\s+(?=[A-Z(\d])|\n{2,}")
 
 # Abbreviations whose trailing period is not a sentence end. Indian tender prose is dense with
@@ -99,7 +104,7 @@ def split_sentences(page_text: str) -> list[str]:
     pending = ""
     for raw in _SENTENCE_SPLIT.split(page_text or ""):
         cleaned = _WS.sub(" ", raw).strip()
-        if not cleaned or _FURNITURE.match(cleaned):
+        if not cleaned or _FURNITURE.match(cleaned) or _TOC_LEADER.search(cleaned):
             continue
         cleaned = f"{pending} {cleaned}".strip() if pending else cleaned
         if _ABBREV_TAIL.search(cleaned):

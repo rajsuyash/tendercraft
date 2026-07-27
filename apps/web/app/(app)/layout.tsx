@@ -31,7 +31,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </Suspense>
         }
       />
-      <div className="flex-1">{children}</div>
+      {/* min-w-0: a flex child defaults to min-width:auto, so any wide C2 table inside its own
+          overflow-x-auto container still forces THIS element wider than the viewport and the
+          whole page scrolls sideways (DESIGN_SPEC §F says it never may). Fixed here rather than
+          per page — every dense table on every route inherits the same bug otherwise. */}
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
 }

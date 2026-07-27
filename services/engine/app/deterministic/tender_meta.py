@@ -33,6 +33,26 @@ _TITLE = re.compile(
     re.I | re.S,
 )
 
+# Headline form, with no label at all:
+#   "Notice Inviting Tender (NIT) (Only through GeM) For Selection of Agency for Conducting
+#    NABARD All-India Rural Financial Inclusion Survey (NAFIS Third Round)"
+# Real NITs often state their subject this way and never write "Name of Work:", so the
+# label-based pattern above finds nothing and every screen falls back to the FILENAME — the
+# exact failure tender_meta exists to prevent (found on a live 81-page NABARD RFP).
+#
+# Terminates on a run of 3+ spaces as well as a newline: PDF text extraction frequently
+# collapses a cover page into one long line, with column gaps surviving as wide runs of
+# spaces. Three, not two — a title containing "(NAFIS  Third Round)" has a double space
+# INSIDE it, and cutting there leaves an unclosed bracket on every screen.
+_TITLE_HEADLINE = re.compile(
+    r"\b(?:notice\s+inviting\s+tender|nit|request\s+for\s+proposal|rfp|tender\s+document)\b"
+    r"[^\n]{0,120}?\bfor\s+"
+    r"((?:selection|engagement|appointment|empanelment|providing|provision|supply|"
+    r"procurement|hiring|design|development|implementation)\b.{6,200}?)"
+    r"(?:\s{3,}|\n|$)",
+    re.I | re.S,
+)
+
 # Issuing authority — usually the first government-sounding line on page one.
 _AUTHORITY = re.compile(
     r"^\s*((?:office\s+of\s+the\s+|directorate\s+of\s+|department\s+of\s+|government\s+of\s+|"
@@ -64,7 +84,11 @@ def extract_tender_meta(pages: list[str], max_pages: int = 3) -> TenderMeta:
         return TenderMeta()
 
     number = _clean(m.group(1)) if (m := _NUMBER.search(head)) else None
+    # Labelled form first — it is explicit and unambiguous. The headline form is the fallback
+    # for documents that never write "Name of Work:", which is most NITs.
     title = _clean(m.group(1)) if (m := _TITLE.search(head)) else None
+    if not title and (m := _TITLE_HEADLINE.search(head)):
+        title = _clean(m.group(1))
     # Prefer the ISSUING BODY over the parent government. "Directorate of Municipal
     # Administration" tells a bid manager who to deal with; "Government of Maharashtra"
     # does not, and is what a first-match wins rule returns on almost every Indian RFP.

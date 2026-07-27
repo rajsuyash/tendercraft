@@ -60,8 +60,18 @@ def test_unresolvable_anchor_blocks_lock():
     assert evaluate_lock(crits).ok is False
 
 
+def test_a_page_without_a_clause_number_is_still_resolvable():
+    # Real tenders state obligations in unnumbered prose ("Note: Certificate should be on
+    # official letterhead..."). Requiring a clause identifier made every such tender
+    # permanently unlockable, with no way for a human to supply a number the document never
+    # had. A page plus the stored verbatim text is enough to find the sentence again, which is
+    # what A-AC3 exists to guarantee. Measured on a live NABARD RFP: 12 of 192 criteria.
+    crits = [_crit("C1", 0.99, True, anchor=SourceAnchor(page=68, clause=""))]
+    assert evaluate_lock(crits).ok is True
+
+
 def test_one_criterion_can_trip_both_blockers():
-    crits = [_crit("C1", 0.5, False, anchor=SourceAnchor(page=5, clause="  "))]
+    crits = [_crit("C1", 0.5, False, anchor=SourceAnchor(page=0, clause="  "))]
     result = evaluate_lock(crits)
     assert result.ok is False
-    assert len(result.blockers) == 2  # missing anchor AND low-confidence
+    assert len(result.blockers) == 2  # unresolvable anchor AND low-confidence

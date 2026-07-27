@@ -69,13 +69,24 @@ class CoverageStatus(StrEnum):
 
 @dataclass(frozen=True)
 class SourceAnchor:
-    """A-AC3: every locked criterion must resolve to page + clause."""
+    """A-AC3: every locked criterion must resolve back to where it came from.
+
+    A page is required. A clause identifier is NOT, and requiring it was a defect: on a real
+    81-page NABARD RFP, 12 of 192 criteria came from prose that states an obligation without
+    numbering it ("Note: Certificate should be in official letterhead..."). The gate refused
+    the lock, and since nothing in the product lets a human supply a clause number the
+    document never had, every prose-style tender was permanently unlockable.
+
+    A page plus the stored verbatim text is a resolvable anchor: a human can open that page and
+    find that sentence, which is the whole point of A-AC3. A clause identifier is a convenience
+    the document supplies or does not.
+    """
 
     page: int
     clause: str
 
     def is_resolvable(self) -> bool:
-        return self.page > 0 and bool(self.clause.strip())
+        return self.page > 0
 
 
 @dataclass(frozen=True)

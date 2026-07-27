@@ -195,3 +195,17 @@ def test_a_trailing_abbreviation_at_end_of_page_is_still_emitted():
     assert split_sentences("The bidder shall pay the fee of Rs.") == [
         "The bidder shall pay the fee of Rs."
     ]
+
+
+def test_a_table_of_contents_leader_is_not_a_requirement():
+    # The ToC quotes requirement headings verbatim. Without this filter every mandatory item is
+    # counted twice — once where it is stated and once where it is listed — which inflates the
+    # denominator with duplicates the user cannot act on. Found on a real 81-page NABARD RFP.
+    toc = "Pro forma of Integrity Pact (to be submitted mandatorily) ....................... 42"
+    assert find_requirement_sentences([(5, toc)]) == []
+
+
+def test_a_legitimate_sentence_containing_a_full_stop_run_is_not_lost():
+    # Guard the filter's blast radius: three dots is an ellipsis, not a leader.
+    s = "The bidder shall submit the certificate... and the annexure duly signed by an officer."
+    assert len(find_requirement_sentences([(1, s)])) == 1

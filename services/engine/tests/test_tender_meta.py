@@ -111,3 +111,38 @@ def test_a_label_with_an_empty_value_is_not_a_title():
     assert _clean("   ") is None
     assert _clean(" -- .. ") is None
     assert _clean("  Property   Tax  System ") == "Property Tax System"
+
+
+NABARD_COVER = (
+    "Notice Inviting Tender (NIT) (Only through GeM) For Selection of Agency for Conducting "
+    "NABARD All-India Rural Financial Inclusion Survey (NAFIS  Third Round)      "
+    "National Bank for Agriculture and Rural Development"
+)
+
+
+def test_headline_form_without_any_label_is_read():
+    # Most NITs never write "Name of Work:". Before this, the label patterns found nothing and
+    # every screen fell back to the filename — the exact failure this module exists to prevent.
+    # Taken verbatim from a live 81-page NABARD RFP.
+    meta = extract_tender_meta([NABARD_COVER])
+    assert meta.title == (
+        "Selection of Agency for Conducting NABARD All-India Rural Financial "
+        "Inclusion Survey (NAFIS Third Round)"
+    )
+
+
+def test_a_double_space_inside_the_title_does_not_truncate_it():
+    # "(NAFIS  Third Round)" carries an internal double space; cutting there would leave an
+    # unclosed bracket on every screen. Only a wider run of spaces is a column gap.
+    assert "(NAFIS Third Round)" in extract_tender_meta([NABARD_COVER]).title
+
+
+def test_a_labelled_title_still_wins_over_the_headline_form():
+    text = "Request for Proposal for Supply of Meters\nName of Work: Ward 7 smart meters\n\n"
+    assert extract_tender_meta([text]).title == "Ward 7 smart meters"
+
+
+def test_headline_form_needs_a_recognised_purpose_verb():
+    # "...for the Financial Year 2026-27" is not a scope statement; guessing one would be
+    # worse than keeping the filename.
+    assert extract_tender_meta(["Notice Inviting Tender for the Financial Year 2026-27  "]).title is None

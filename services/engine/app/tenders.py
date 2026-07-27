@@ -59,8 +59,11 @@ class CriterionIn(BaseModel):
 
 def _to_domain(row: dict) -> Criterion:
     anchor = None
-    if row.get("anchor_page") and row.get("anchor_clause"):
-        anchor = SourceAnchor(page=row["anchor_page"], clause=row["anchor_clause"])
+    # Page alone is a resolvable anchor: real tenders state obligations in unnumbered
+    # prose, and requiring a clause here silently produced anchor=None, which the lock
+    # gate then refused forever (types.SourceAnchor.is_resolvable).
+    if row.get("anchor_page"):
+        anchor = SourceAnchor(page=row["anchor_page"], clause=row.get("anchor_clause") or "")
     return Criterion(
         id=row["id"],
         confidence=float(row["confidence"]),
