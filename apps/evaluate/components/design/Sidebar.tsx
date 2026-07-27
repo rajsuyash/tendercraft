@@ -15,6 +15,9 @@ type Role = "officer" | "chair" | "member" | "auditor";
 
 const NAV: { href: string; label: string; roles: Role[] }[] = [
   { href: "/tenders", label: "Tenders", roles: ["officer", "chair", "member", "auditor"] },
+  // Before a tender exists there is a draft. Officers only — a TEC member evaluates what was
+  // published and has no business in the authoring of it.
+  { href: "/drafts", label: "Drafts", roles: ["officer"] },
   { href: "/my-scoring", label: "My scoring", roles: ["chair", "member"] },
   { href: "/settings", label: "Settings", roles: ["officer", "chair"] },
   { href: "/guide", label: "How evaluation works", roles: ["officer", "chair", "member", "auditor"] },

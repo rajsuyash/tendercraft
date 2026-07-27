@@ -14,6 +14,16 @@ AI-native SaaS for Indian procurement: converts tender documents (GeM/CPPP/state
 The evaluate subtrees carry their own `CLAUDE.md`, which loads automatically when you work in
 them and **overrides this file where they differ**. Its docs live in `docs/evaluate/`.
 
+**The throughput extension (F14–F28) is NOT a third product either.** It extends the *evaluate*
+surfaces above — `apps/evaluate` + `services/evaluate-engine`, same database, no new CLAUDE.md.
+It covers the manual work on either side of the evaluation: authoring an unambiguous tender
+before publication, and absorbing bids in mixed formats after it closes. Product truth:
+`tendercraft-evaluate-throughput-PRD.md`; milestones N1–N5 in `docs/evaluate/PRD.md`; verifiers
+are the existing `/verify-eval` and `/verify-eval-api`. `./tools/check-throughput-guardrails.sh`
+is CI-blocking and skips cleanly until the code exists. Of the seven procurement-manager pain
+points it answers, **two (TP32 committee silos, TP36 report drafting) are already covered by
+F7/F8/F11/F12 — build nothing for them.**
+
 **Modules F and G (discovery, triage, traceability) are NOT a third product.** They extend the
 bidder surfaces above — `apps/web` + `services/engine`, same database, no new CLAUDE.md. Product
 truth: `tendercraft-discovery-PRD.md`; execution layer and docs: `docs/discovery/`; verifier:

@@ -21,6 +21,33 @@ const VERDICT: Record<string, { label: string; cls: string; title: string }> = {
 export default async function ScreeningPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const res = await engineJson<Matrix>(`/api/tenders/${id}/screening`);
+
+  // Triage pending is not an error and must not render as one (F15-AC4). The matrix would
+  // be computed over a partial set of files, look complete, and a bidder could be marked
+  // non-responsive off it. Say what is missing and where to go.
+  if (res.code === "TRIAGE_PENDING") {
+    return (
+      <main className="mx-auto max-w-3xl px-page py-page">
+        <Link href={`/tenders/${id}`} className="text-sm text-primary hover:underline">← Evaluation</Link>
+        <div data-screening-blocked className="mt-4 rounded-card border border-warning bg-warning-bg p-8 text-center">
+          <h1 className="font-heading text-xl font-semibold text-warning">
+            Some uploaded files are not matched to a bidder yet
+          </h1>
+          <p className="mx-auto mt-2 max-w-lg text-sm text-warning">
+            {res.message ?? "Files are awaiting attribution."} Screening opens once they are
+            settled — a matrix built on a partial set of files looks finished and is not.
+          </p>
+          <Link
+            href={`/tenders/${id}/bids/triage`}
+            className="mt-5 inline-block rounded border border-warning px-4 py-2 text-sm font-medium text-warning"
+          >
+            Match the remaining files
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   if (!res.ok || !res.data) notFound();
   const { criteria, bids } = res.data;
 

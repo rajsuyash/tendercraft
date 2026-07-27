@@ -360,7 +360,23 @@ def file_coi(tender_id: str, body: CoiIn, user: CurrentUser) -> dict:
 @router.get("/api/tenders/{tender_id}/screening")
 def screening(tender_id: str, user: CurrentUser) -> dict:
     _tender_or_404(tender_id, user)
+    _require_triage_clear(tender_id, user)
     return ok(service.screening_matrix(tender_id, user.authority_id))
+
+
+def _require_triage_clear(tender_id: str, user: AuthedUser) -> None:
+    """F15-AC4. A matrix computed over a partial set of files reads as complete and is not.
+
+    Refusing is the safe failure: the officer sees a named count and a link to the pile.
+    Rendering the matrix anyway would show a finished-looking screen that a bidder can be
+    disqualified from.
+    """
+    from .intake import triage_blocked
+
+    pending = triage_blocked(tender_id, user.authority_id)
+    if pending:
+        raise ApiError(409, "TRIAGE_PENDING",
+                       f"{pending} uploaded file(s) are not yet attributed to a bidder")
 
 
 class ResponsivenessIn(BaseModel):
@@ -636,3 +652,434 @@ def set_quorum(tender_id: str, body: QuorumIn, user: CurrentUser) -> dict:
              {"quorum": body.quorum})
     return ok({"quorum": body.quorum})
 
+
+
+# ── bulk intake (F14/F15/F16) ──────────────────────────────────────────────────
+@router.post("/api/tenders/{tender_id}/bids/bulk")
+async def upload_bulk(tender_id: str, user: CurrentUser,
+                      files: Annotated[list[UploadFile], File()]) -> dict:
+    """Drop the whole portal download — many files, or one ZIP holding them.
+
+    Runs in a threadpool for the same reason the single upload does: parsing, OCR and a model
+    call per file are blocking, and a 25-file archive would hold the event loop for minutes.
+    """
+    require_write(user)
+    ev = _tender_or_404(tender_id, user)
+    if not ev.get("framework_locked_at"):
+        raise ApiError(409, "FRAMEWORK_NOT_LOCKED",
+                       "lock the published framework before uploading bids")
+    if ev.get("technical_locked_at"):
+        raise ApiError(409, "TECHNICAL_LOCKED", "technical scores are locked")
+
+    payloads: list[tuple[str, bytes]] = []
+    for f in files:
+        data = await f.read()
+        if data:
+            payloads.append((f.filename or "unnamed", data))
+    if not payloads:
+        raise ApiError(400, "EMPTY_FILE", "no readable files in the upload")
+
+    return ok(await run_in_threadpool(_ingest_bulk, tender_id, user, payloads))
+
+
+def _ingest_bulk(tender_id: str, user: AuthedUser,
+                 payloads: list[tuple[str, bytes]]) -> dict:
+    from .config import get_settings
+    from .intake import expand, ingest_one, intake_state
+
+    s = get_settings()
+    expanded: list[tuple[str, bytes]] = []
+    rejected: list[str] = []
+    for name, data in payloads:
+        # An oversized archive raises here and fails the whole request on purpose: the officer
+        # must know their upload was refused, not discover later that files are missing.
+        found, refused = expand(name, data, max_files=s.archive_max_files,
+                                max_bytes=s.archive_max_bytes)
+        expanded.extend(found)
+        rejected.extend(refused)
+
+    outcomes = [ingest_one(tender_id, user.authority_id, user.user_id, name, data)
+                for name, data in expanded]
+
+    db.audit(user.authority_id, tender_id, user.user_id, "bulk_intake", "tender", tender_id,
+             {"uploaded": len(payloads), "files": len(expanded),
+              "failed": sum(1 for o in outcomes if o.status == "failed"),
+              "duplicates": sum(1 for o in outcomes if o.duplicate),
+              "rejected_entries": rejected})
+
+    state = intake_state(tender_id, user.authority_id)
+    return {
+        "received": len(expanded),
+        "ingested": sum(1 for o in outcomes if o.status == "extracted"),
+        "duplicates": sum(1 for o in outcomes if o.duplicate),
+        "failed": [{"filename": o.filename, "error_code": o.error_code, "detail": o.detail}
+                   for o in outcomes if o.status == "failed"],
+        # Archive entries we refused to read. Named, never silently dropped (F14-ERR3).
+        "rejected_entries": rejected,
+        **state,
+    }
+
+
+@router.get("/api/tenders/{tender_id}/intake")
+def intake(tender_id: str, user: CurrentUser) -> dict:
+    """Per-file rows plus the triage count. One read model for both intake screens."""
+    from .intake import intake_state
+
+    _tender_or_404(tender_id, user)
+    return ok(intake_state(tender_id, user.authority_id))
+
+
+class AttributionIn(BaseModel):
+    # None is a real answer meaning "this file belongs to no bidder" — a covering note, a
+    # duplicate, a portal receipt. It settles the file rather than leaving it in the pile.
+    bid_id: str | None = None
+    new_bidder_name: str | None = Field(default=None, max_length=300)
+    document_type: str | None = Field(default=None, max_length=60)
+    envelope: str | None = Field(default=None, pattern="^(technical|financial|unknown)$")
+
+
+@router.put("/api/tenders/{tender_id}/intake/{file_id}/attribution")
+def confirm_attribution(tender_id: str, file_id: str, body: AttributionIn,
+                        user: CurrentUser) -> dict:
+    """A human settles one file. Always wins over the proposal, and is always audited."""
+    from .intake import intake_state
+
+    require_write(user)
+    _tender_or_404(tender_id, user)
+
+    files = {f["id"]: f for f in db.bid_files(tender_id, user.authority_id)}
+    if file_id not in files:
+        raise ApiError(404, "FILE_NOT_FOUND", "file not found in this tender")
+
+    bid_id = body.bid_id
+    if body.new_bidder_name:
+        name = body.new_bidder_name.strip()
+        existing = db.bid_by_name(tender_id, user.authority_id, name)
+        bid_id = existing["id"] if existing else db.create_bid(
+            user.authority_id, tender_id, name)["id"]
+    elif bid_id is not None:
+        # Never bind a caller-supplied id without checking it belongs to this tender AND
+        # authority. The bidder product paid for this exact bug class.
+        if not db.get_bid(bid_id, tender_id, user.authority_id):
+            raise ApiError(404, "BID_NOT_FOUND", "bid not found in this tender")
+
+    db.upsert_attribution(user.authority_id, {
+        "file_id": file_id,
+        "confirmed_bid_id": bid_id,
+        "confirmed_document_type": body.document_type,
+        "confirmed_envelope": body.envelope,
+        "confirmed_by": user.user_id,
+        "confirmed_at": "now()",
+    })
+    db.audit(user.authority_id, tender_id, user.user_id, "attribution_confirmed", "bid_file",
+             file_id, {"filename": files[file_id]["filename"], "bid_id": bid_id,
+                       "envelope": body.envelope})
+    return ok(intake_state(tender_id, user.authority_id))
+
+
+# ── required documents & presence (F17/F18) ────────────────────────────────────
+@router.get("/api/tenders/{tender_id}/documents")
+def documents(tender_id: str, user: CurrentUser) -> dict:
+    """Bidders × required documents. The printed checklist, filled in."""
+    from .documents import presence_matrix
+
+    _tender_or_404(tender_id, user)
+    return ok(presence_matrix(tender_id, user.authority_id))
+
+
+class RequirementIn(BaseModel):
+    label: str = Field(min_length=2, max_length=300)
+    mandatory: bool = True
+    accepted_types: list[str] = Field(default_factory=list)
+    original_required: bool = False
+    criterion_id: str | None = None
+
+
+class RegisterIn(BaseModel):
+    requirements: list[RequirementIn]
+
+
+@router.put("/api/tenders/{tender_id}/documents/register")
+def set_register(tender_id: str, body: RegisterIn, user: CurrentUser) -> dict:
+    """Author the checklist. Frozen once any file has been attributed (F17-AC2)."""
+    from .documents import presence_matrix
+
+    require_write(user)
+    _tender_or_404(tender_id, user)
+    if db.bid_files(tender_id, user.authority_id):
+        raise ApiError(409, "REGISTER_FROZEN",
+                       "bids have already been received; changing the checklist now would "
+                       "change who qualifies, retroactively")
+
+    labels = [r.label.strip() for r in body.requirements]
+    if len(set(labels)) != len(labels):
+        raise ApiError(422, "DUPLICATE_REQUIREMENT", "two requirements share a label")
+
+    rows = [{
+        "label": r.label.strip(), "mandatory": r.mandatory,
+        "accepted_types": r.accepted_types, "original_required": r.original_required,
+        "criterion_id": r.criterion_id, "order_index": i + 1,
+    } for i, r in enumerate(body.requirements)]
+    saved = db.replace_required_documents(user.authority_id, tender_id, rows)
+    db.audit(user.authority_id, tender_id, user.user_id, "register_set", "tender", tender_id,
+             {"requirements": len(saved)})
+    return ok(presence_matrix(tender_id, user.authority_id))
+
+
+@router.post("/api/tenders/{tender_id}/documents/derive")
+def derive_documents(tender_id: str, user: CurrentUser) -> dict:
+    """Propose the checklist from the published criteria. Deterministic keyword matching —
+    no model call. The officer edits it before it counts."""
+    from .documents import derive_register, presence_matrix
+
+    require_write(user)
+    _tender_or_404(tender_id, user)
+    if db.bid_files(tender_id, user.authority_id):
+        raise ApiError(409, "REGISTER_FROZEN", "bids have already been received")
+
+    proposed = derive_register(db.criteria(tender_id, user.authority_id))
+    if not proposed:
+        # Never fabricate. An empty proposal is a real answer: nothing in the criteria named a
+        # recognisable document, and "supporting documents as applicable" is a row every bidder
+        # fails and nobody can satisfy.
+        raise ApiError(422, "NOTHING_DERIVABLE",
+                       "no recognisable document requirements in the published criteria — "
+                       "add them by hand")
+    saved = db.replace_required_documents(user.authority_id, tender_id, proposed)
+    db.audit(user.authority_id, tender_id, user.user_id, "register_derived", "tender",
+             tender_id, {"requirements": len(saved)})
+    return ok(presence_matrix(tender_id, user.authority_id))
+
+
+class PresenceOverrideIn(BaseModel):
+    verdict: Literal["present", "missing", "needs_review"]
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+@router.put("/api/tenders/{tender_id}/documents/{requirement_id}/{bid_id}")
+def override_presence(tender_id: str, requirement_id: str, bid_id: str,
+                      body: PresenceOverrideIn, user: CurrentUser) -> dict:
+    """A human corrects one cell — e.g. the EMD arrived as a physical demand draft.
+
+    A reason is mandatory. An override with no 'why' is not an explanation, and this cell can
+    be the difference between a bid standing and being rejected.
+    """
+    from .documents import presence_matrix
+
+    require_write(user)
+    _tender_or_404(tender_id, user)
+    if not db.get_requirement(requirement_id, tender_id, user.authority_id):
+        raise ApiError(404, "REQUIREMENT_NOT_FOUND", "requirement not found in this tender")
+    if not db.get_bid(bid_id, tender_id, user.authority_id):
+        raise ApiError(404, "BID_NOT_FOUND", "bid not found in this tender")
+
+    db.upsert_document_override(user.authority_id, {
+        "requirement_id": requirement_id, "bid_id": bid_id,
+        "override_verdict": body.verdict, "override_reason": body.reason.strip(),
+        "overridden_by": user.user_id, "overridden_at": "now()",
+    })
+    db.audit(user.authority_id, tender_id, user.user_id, "presence_overridden",
+             "required_document", requirement_id,
+             {"bid_id": bid_id, "verdict": body.verdict, "reason": body.reason.strip()})
+    return ok(presence_matrix(tender_id, user.authority_id))
+
+
+# ── technical compliance matrix (F19–F21) ──────────────────────────────────────
+@router.get("/api/tenders/{tender_id}/compliance")
+def compliance(tender_id: str, user: CurrentUser) -> dict:
+    """Every bid against every technical requirement, with page anchors.
+
+    This is EVIDENCE, not a verdict: nothing here writes to responsiveness_decisions, scores or
+    consensus_marks, and `not_found` never means non-compliance (F20-AC3/AC4).
+    """
+    _tender_or_404(tender_id, user)
+    return ok(service.compliance_matrix(tender_id, user.authority_id))
+
+
+# ── award & debrief (F27/F28) ──────────────────────────────────────────────────
+@router.get("/api/tenders/{tender_id}/award")
+def award(tender_id: str, user: CurrentUser) -> dict:
+    """Award and regret letters, one per bidder, each filtered for its own recipient.
+
+    The financial gate applies here too: these letters state an accepted price, so they cannot
+    be produced before the technical lock any more than the result page can.
+    """
+    from .award import build_letters
+
+    ev = _tender_or_404(tender_id, user)
+    if not gates.financial_readable(ev.get("technical_locked_at")):
+        raise ApiError(409, "FINANCIAL_SEALED",
+                       "financial envelopes are sealed until technical scores are locked")
+    return ok(build_letters(tender_id, user.authority_id))
+
+
+# ── authoring a tender (F22–F26) ───────────────────────────────────────────────
+class DraftIn(BaseModel):
+    title: str = Field(min_length=3, max_length=500)
+    tender_number: str | None = Field(default=None, max_length=120)
+    category: Literal["goods", "works", "services"] = "goods"
+    scope: str | None = Field(default=None, max_length=8000)
+    estimated_value: float | None = None
+    estimated_annual_value: float | None = None
+    submission_window_days: int | None = Field(default=None, ge=0, le=365)
+    bid_structure: Literal["single", "two_envelope"] = "two_envelope"
+    emd_amount: float | None = None
+    emd_exemption_stated: bool = False
+    pre_bid_meeting_at: str | None = None
+    pre_bid_days_before_deadline: int | None = Field(default=None, ge=0, le=365)
+    technical_weight: int = Field(default=70, ge=0, le=100)
+    financial_weight: int = Field(default=30, ge=0, le=100)
+    qualifying_marks: int | None = Field(default=None, ge=0, le=1000)
+    quorum: int = Field(default=3, ge=1, le=15)
+
+
+@router.get("/api/drafts")
+def list_drafts(user: CurrentUser) -> dict:
+    return ok({"drafts": db.drafts(user.authority_id)})
+
+
+@router.post("/api/drafts")
+def create_draft(body: DraftIn, user: CurrentUser) -> dict:
+    require_write(user)
+    if not user.is_officer:
+        raise ApiError(403, "NOT_OFFICER", "only an officer may draft a tender")
+    if body.technical_weight + body.financial_weight != 100:
+        raise ApiError(422, "WEIGHTS_INVALID", "technical and financial weights must total 100")
+    row = db.create_draft(user.authority_id, {**body.model_dump(), "created_by": user.user_id})
+    return ok({"draft": row})
+
+
+@router.get("/api/drafts/{draft_id}")
+def get_draft(draft_id: str, user: CurrentUser) -> dict:
+    from .drafts import draft_state
+
+    return ok(draft_state(draft_id, user.authority_id))
+
+
+@router.put("/api/drafts/{draft_id}")
+def update_draft(draft_id: str, body: DraftIn, user: CurrentUser) -> dict:
+    from .drafts import draft_state, invalidate_signoffs
+
+    require_write(user)
+    d = db.draft(draft_id, user.authority_id)
+    if not d:
+        raise ApiError(404, "DRAFT_NOT_FOUND", "draft not found in your authority")
+    if d["state"] == "published":
+        raise ApiError(409, "DRAFT_PUBLISHED",
+                       "a published draft is what bidders received and cannot be edited")
+    if body.technical_weight + body.financial_weight != 100:
+        raise ApiError(422, "WEIGHTS_INVALID", "technical and financial weights must total 100")
+
+    db.update_draft(draft_id, user.authority_id, body.model_dump())
+    invalidate_signoffs(draft_id, user.authority_id)
+    return ok(draft_state(draft_id, user.authority_id))
+
+
+class DraftCriterionIn(BaseModel):
+    kind: Literal["pq", "technical"] = "pq"
+    text: str = Field(min_length=3, max_length=4000)
+    max_marks: int = Field(default=0, ge=0, le=1000)
+    evaluation_method: str | None = Field(default=None, max_length=2000)
+    compare_kind: Literal["numeric", "date", "boolean", "qualitative"] = "qualitative"
+    compare_op: str | None = Field(default=None, max_length=10)
+    compare_value: str | None = Field(default=None, max_length=200)
+    compare_field: str | None = Field(default=None, max_length=60)
+
+
+class DraftCriteriaIn(BaseModel):
+    criteria: list[DraftCriterionIn]
+
+
+@router.put("/api/drafts/{draft_id}/criteria")
+def set_draft_criteria(draft_id: str, body: DraftCriteriaIn, user: CurrentUser) -> dict:
+    from .drafts import draft_state, invalidate_signoffs
+
+    require_write(user)
+    d = db.draft(draft_id, user.authority_id)
+    if not d:
+        raise ApiError(404, "DRAFT_NOT_FOUND", "draft not found in your authority")
+    if d["state"] == "published":
+        raise ApiError(409, "DRAFT_PUBLISHED", "a published draft cannot be edited")
+
+    rows = [{**c.model_dump(), "order_index": i + 1} for i, c in enumerate(body.criteria)]
+    db.replace_draft_criteria(user.authority_id, draft_id, rows)
+    invalidate_signoffs(draft_id, user.authority_id)
+    return ok(draft_state(draft_id, user.authority_id))
+
+
+class ReviewerIn(BaseModel):
+    reviewer_role: Literal["legal", "finance", "technical", "procurement"]
+    reviewer_id: str | None = None
+    comment: str | None = Field(default=None, max_length=4000)
+
+
+@router.post("/api/drafts/{draft_id}/review")
+def add_reviewer(draft_id: str, body: ReviewerIn, user: CurrentUser) -> dict:
+    """Reviewers are added together and see the draft at the same time — sequential routing is
+    why the legal cell reviews late."""
+    from .drafts import draft_state
+
+    require_write(user)
+    if not db.draft(draft_id, user.authority_id):
+        raise ApiError(404, "DRAFT_NOT_FOUND", "draft not found in your authority")
+    db.upsert_draft_review(user.authority_id, {
+        "draft_id": draft_id, "reviewer_role": body.reviewer_role,
+        "reviewer_id": body.reviewer_id, "comment": body.comment})
+    db.update_draft(draft_id, user.authority_id, {"state": "in_review"})
+    return ok(draft_state(draft_id, user.authority_id))
+
+
+@router.post("/api/drafts/{draft_id}/review/{reviewer_role}/signoff")
+def sign_off(draft_id: str, reviewer_role: str, user: CurrentUser) -> dict:
+    from .drafts import draft_state
+
+    require_write(user)
+    if not db.draft(draft_id, user.authority_id):
+        raise ApiError(404, "DRAFT_NOT_FOUND", "draft not found in your authority")
+    db.upsert_draft_review(user.authority_id, {
+        "draft_id": draft_id, "reviewer_role": reviewer_role,
+        "reviewer_id": user.user_id, "signed_off_at": "now()", "invalidated_at": None})
+    db.audit(user.authority_id, None, user.user_id, "draft_signed_off", "draft", draft_id,
+             {"role": reviewer_role})
+    return ok(draft_state(draft_id, user.authority_id))
+
+
+class DismissIn(BaseModel):
+    rule_id: str = Field(min_length=1, max_length=20)
+    target_id: str | None = None
+    reason: str = Field(min_length=5, max_length=2000)
+
+
+@router.post("/api/drafts/{draft_id}/checks/dismiss")
+def dismiss_finding(draft_id: str, body: DismissIn, user: CurrentUser) -> dict:
+    """Advisory findings only. A blocking rule is not dismissible (D13) — if it could be
+    waived by whoever is in a hurry, it was never a gate."""
+    from .drafts import draft_state
+
+    require_write(user)
+    state = draft_state(draft_id, user.authority_id)
+    match = next((f for f in state["findings"]
+                  if f["rule_id"] == body.rule_id and f["target_id"] == body.target_id), None)
+    if match is None:
+        raise ApiError(404, "FINDING_NOT_FOUND", "no such open finding on this draft")
+    if match["severity"] == "blocking":
+        raise ApiError(409, "FINDING_BLOCKING",
+                       "a blocking finding must be fixed, not dismissed")
+
+    db.dismiss_finding(user.authority_id, {
+        "draft_id": draft_id, "rule_id": body.rule_id, "target_id": body.target_id,
+        "reason": body.reason.strip(), "dismissed_by": user.user_id})
+    db.audit(user.authority_id, None, user.user_id, "finding_dismissed", "draft", draft_id,
+             {"rule_id": body.rule_id, "reason": body.reason.strip()})
+    return ok(draft_state(draft_id, user.authority_id))
+
+
+@router.post("/api/drafts/{draft_id}/publish")
+def publish_draft(draft_id: str, user: CurrentUser) -> dict:
+    """Creates the tender WITH its framework. The criteria are never re-keyed."""
+    from .drafts import publish
+
+    require_write(user)
+    if not user.is_officer:
+        raise ApiError(403, "NOT_OFFICER", "only an officer may publish a tender")
+    return ok(publish(draft_id, user.authority_id, user.user_id))

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { BulkIntake, type IntakeState } from "@/components/BulkIntake";
+
 type Cell = { criterion_id: string; verdict: string; stated: string | null; anchor_page: number | null };
 type Bid = { bid_id: string; bidder_name: string; responsive: boolean | null; cells: Cell[] };
 type Crit = { id: string; text: string; compare_op: string | null; compare_value: string | null };
@@ -16,10 +18,10 @@ const VERDICT: Record<string, { label: string; cls: string }> = {
 };
 
 export function BidIntake({
-  tenderId, frameworkLocked, technicalLocked, criteria, bids,
+  tenderId, frameworkLocked, technicalLocked, criteria, bids, intake,
 }: {
   tenderId: string; frameworkLocked: boolean; technicalLocked: boolean;
-  criteria: Crit[]; bids: Bid[];
+  criteria: Crit[]; bids: Bid[]; intake: IntakeState;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -70,19 +72,25 @@ export function BidIntake({
     <main className="mx-auto max-w-5xl px-page py-6">
       <h1 className="font-heading text-xl font-semibold text-ink">Bids received</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted">
-        Upload each bidder&rsquo;s submission. Their answer to every published criterion is
+        Everything received against this tender. Answers to each published criterion are
         located and cited to a page; you confirm it before responsiveness is decided.
       </p>
 
+      {!technicalLocked && <BulkIntake tenderId={tenderId} state={intake} />}
+
       {!technicalLocked && (
         <section className="mt-6 rounded-card border border-border bg-surface p-card">
-          <h2 className="font-heading text-base font-medium text-ink">Upload a submission</h2>
+          <h2 className="font-heading text-base font-medium text-ink">Add one bid by hand</h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted">
+            For a submission that arrived outside the portal download, or when you would rather
+            state the bidder and price yourself than have them read off the document.
+          </p>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium text-ink">
               Bidder name
               <input
                 value={name} onChange={(e) => setName(e.target.value)} disabled={busy}
-                placeholder="Meridian Infotech Pvt Ltd"
+                placeholder="Kaveri Networks Pvt Ltd"
                 className="mt-1.5 block min-h-11 w-full rounded border border-border bg-surface-alt px-3.5 text-sm text-ink outline-none placeholder:text-muted focus:border-primary focus:bg-surface"
               />
             </label>

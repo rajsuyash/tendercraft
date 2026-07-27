@@ -7,6 +7,7 @@ fallback. For the score proposer that fallback is NO PROPOSAL, never a guessed m
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -25,12 +26,23 @@ class ModelError(Exception):
     """Raised after the retry cap, or on schema-invalid output."""
 
 
-def generate_json(prompt: str, schema: dict, *, temperature: float = 0.0) -> dict:
+def generate_json(prompt: str, schema: dict, *, temperature: float = 0.0,
+                  image_png: bytes | None = None) -> dict:
+    """Structured generation. `image_png` adds a page image for the OCR fallback (F16).
+
+    Same credential, same retry cap, same schema constraint whether or not an image is
+    attached — the OCR path is not a second model client, because a second model client is how
+    the retry cap and the cost log quietly stop applying to half the calls.
+    """
     key = os.environ.get("EVAL_MODEL_API_KEY")
     if not key:
         raise ModelError("EVAL_MODEL_API_KEY not configured")
+    parts: list[dict] = [{"text": prompt}]
+    if image_png is not None:
+        parts.append({"inlineData": {"mimeType": "image/png",
+                                     "data": base64.b64encode(image_png).decode("ascii")}})
     body = {
-        "contents": [{"parts": [{"text": prompt}]}],
+        "contents": [{"parts": parts}],
         "generationConfig": {"temperature": temperature,
                              "responseMimeType": "application/json",
                              "responseSchema": schema},

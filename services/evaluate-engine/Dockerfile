@@ -7,6 +7,9 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY evaluate ./evaluate
 COPY prompts ./prompts
+# The regulatory rulepack is DATA the draft workspace refuses to start without (F23-ERR1).
+# Without this line the container builds fine and every draft request 500s.
+COPY rulepacks ./rulepacks
 RUN uv sync --frozen --no-dev
 RUN useradd --create-home --uid 10001 svc && chown -R svc:svc /app
 USER svc

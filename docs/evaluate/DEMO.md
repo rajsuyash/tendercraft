@@ -26,6 +26,76 @@ criterion that no person has vouched for cannot govern a public tender), then **
 each published criterion is located and cited to a page. The screening matrix computes
 responsiveness arithmetically from those values.
 
+## The throughput features (new — milestones N1–N5)
+
+These answer the officer pain points TP6, TP11, TP17 and TP40. Demo them in this order; each
+one is a screen you can point at.
+
+**0. Write the tender in the first place (TP1 — Drafts, in the sidebar).** This is the step
+*before* everything else, and it is the one procurement officers rank as their worst pain: RFPs
+get written in Word from a reused template, emailed round, and reviewed by the legal cell after
+the ambiguity is already baked in.
+
+*New draft* → title, number, category. Then enter the money and the criteria and **watch the
+right-hand panel**. The checks run against GFR 2017 and the 2022 Procurement Manuals as you
+type. A good live demo is to type a deliberately bad tender:
+
+| Enter this | What fires |
+|---|---|
+| Turnover bar of ₹20 Cr on a ₹5 Cr tender | **R1** — at most ₹10,00,00,000 (2× the estimated value) |
+| Submission window of 10 days | **R2** — at least 21 days |
+| Single envelope | **R3** — two-envelope required above the threshold |
+| “Core switches shall be Cisco Catalyst 9300” | **R4** — names a brand with no “or equivalent” |
+| EMD of 8%, no exemption clause | **R6** — twice: outside the 1–3% band, and no MSE/startup exemption |
+| A technical criterion with no marking scheme | **R9** — state how it will be evaluated |
+
+Each finding names **what would satisfy it**, not just what is wrong. Fix them and the panel
+empties. Three things to land while you are here:
+- **Publish stays disabled** until every blocking finding is cleared *and* legal, finance and
+  technical have signed off. Reviewers all see it at once — sequential email review is exactly
+  why the legal cell reviews late.
+- **Edit anything after a sign-off and the sign-off is revoked.** Approval of wording that then
+  changed is not approval. Demo it: sign off all three, change a field, watch them reset.
+- **Publishing creates the tender with the criteria already in it** — zero retyping. You land on
+  the framework page of a real tender. That is the join between this module and everything the
+  product already did, and it is why the published document and the scoring framework cannot
+  drift apart.
+
+Checks that cannot run (because a figure has not been entered yet) are listed separately and
+**never** count as passes. A draft must not acquire a clean bill of health it did not earn.
+
+**1. Drop the whole folder (TP6 — Bids tab).** Drag the entire portal download, or one ZIP, at
+the dropzone. It unpacks, reads PDFs, scans and spreadsheets alike, works out which bidder sent
+each file from the letterhead — not the filename, because portal downloads are all called
+`bid_1.pdf` — and files each as technical or financial. Point out three things:
+- the **evidence quote** next to each guess, with its page. That is what lets an officer catch
+  the trap where an OEM authorisation names the manufacturer, not the bidder.
+- anything it is not sure about goes to **triage**, never a guess.
+- **screening refuses to open** while triage is non-empty. A matrix built on a partial set of
+  files looks finished and is not, and a bidder can be excluded off it.
+
+**2. Triage (Bids → the amber banner).** One card per unmatched file with the evidence and the
+candidate bidders. Settling them drops the count to zero and screening unlocks.
+
+**3. Mandatory documents (TP11 — Documents tab).** *Build it from the published criteria* turns
+the officer's printed EMD/affidavit/certificate checklist into a matrix of bidders × documents.
+Say plainly: **"Received" means a document of the right type is on file — not that it is
+correct.** That judgement stays human. And note that nothing is ever marked *not received* while
+any file is still unmatched: a bidder must never be failed on our unfinished reading.
+
+**4. Technical compliance (TP17 — Compliance tab).** Every technical requirement against what
+each bid actually offers, with the page it was read from. The counter is the point: `3/5
+answered · 2 need you` turns "read four hundred pages" into "read these two things". Stress that
+this screen is **evidence, not a verdict** — "not found" is a statement about our reading of the
+document, never a finding against the bidder.
+
+**5. Outcome letters (TP40 — Outcome tab, concluded tender only).** Award and regret letters
+written from the evaluation record, no figure retyped. The line to land: each letter is
+assembled from **only what that recipient may see** — their own marks and rank, plus the
+winner's name and accepted price. The footer names how many internal fields the disclosure
+filter withheld. Try the Outcome tab on the *unconcluded* tender to show it refuses: the letters
+state an accepted price, so they cannot exist before the technical lock.
+
 Sample PDFs for a live demo are in `.playwright-mcp/fx/` (one RFP, two bids — one qualifying,
 one that fails on turnover, an expired certificate and project count).
 
@@ -105,3 +175,20 @@ that can be quietly deleted is not an audit trail.
 psql "$CONN" -f services/evaluate-engine/migrations/0002_seed.sql
 ```
 Then re-run the member/score seed. Evaluation 2's lock is applied through the API.
+
+## Running it locally
+
+Production has everything it needs. For a local run the engine also wants a model credential,
+which is not in `.env` by default:
+
+```
+EVAL_MODEL_API_KEY=<same value as GEMINI_API_KEY>
+EVAL_WALL_ALLOW_SHARED_KEY=1
+```
+
+The second line is not optional: `tools/check-wall.sh` compares the two keys and **fails by
+default**, so the shared-credential waiver (F13-AC3) stays visible in every CI run instead of
+quietly becoming permanent. Retire both before the first production authority.
+
+Without the key nothing breaks — attribution simply returns "no proposal", which is the designed
+degradation, and every uploaded file waits in triage for a human.

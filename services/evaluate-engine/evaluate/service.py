@@ -193,3 +193,65 @@ def dashboard(authority_id: str) -> list[dict]:
             "scored": scored,
         })
     return out
+
+
+def compliance_matrix(tender_id: str, authority_id: str) -> dict:
+    """What each bid offers against every technical requirement (F19–F21).
+
+    Reuses the answers `pipeline/responder` already extracted at intake — the model work was
+    done when the bid was read, so this is arithmetic and a render. Deliberately no new
+    extraction pass: a second one would cost money and could disagree with the first.
+
+    v1 scopes "requirement" to the published TECHNICAL criteria, which are already extracted,
+    already anchored to a clause, and already what the bid will be scored on. Shredding the
+    full technical specification into finer requirements is a real extension of this and is not
+    needed to remove the reading time TP17 describes.
+    """
+    from .deterministic.coverage import (
+        Coverage,
+        OfferRef,
+        RequirementRef,
+        addressed_count,
+        cover_bid,
+        denominator,
+        needs_attention,
+    )
+
+    crits = [c for c in db.criteria(tender_id, authority_id) if c["kind"] == "technical"]
+    reqs = [RequirementRef(c["id"], c["text"], c.get("max_marks") or 0) for c in crits]
+    all_bids = db.bids(tender_id, authority_id)
+
+    by_bid: dict[str, list[OfferRef]] = {}
+    for r in db.responses(tender_id, authority_id):
+        by_bid.setdefault(r["bid_id"], []).append(OfferRef(
+            criterion_id=r["criterion_id"], stated_value=r.get("stated_value"),
+            excerpt=r.get("excerpt"), anchor_page=r.get("anchor_page")))
+
+    total = denominator(reqs)
+    rows = []
+    for b in all_bids:
+        cells = cover_bid(reqs, by_bid.get(b["id"], []))
+        rows.append({
+            "bid_id": b["id"], "bidder_name": b["bidder_name"],
+            "responsive": b.get("responsive"),
+            "addressed": addressed_count(cells),
+            # One denominator, from one function, shared by every row and the header.
+            "total": total,
+            "needs_attention": list(needs_attention(cells)),
+            "cells": [{
+                "requirement_id": c.requirement_id, "coverage": str(c.coverage),
+                "stated_value": c.stated_value, "excerpt": c.excerpt,
+                "anchor_page": c.anchor_page,
+            } for c in cells],
+        })
+
+    return {
+        "requirements": [{
+            "id": c["id"], "text": c["text"], "max_marks": c.get("max_marks") or 0,
+            "anchor_page": c.get("anchor_page"), "anchor_clause": c.get("anchor_clause"),
+        } for c in crits],
+        "total": total,
+        "bids": rows,
+        # Named here so the UI cannot invent its own vocabulary for these states.
+        "legend": {str(c): c.value for c in Coverage},
+    }

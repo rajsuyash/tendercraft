@@ -39,6 +39,21 @@ jobs:
       - name: discovery guardrails (G-8..G-10)
         run: ./tools/check-discovery-guardrails.sh
 
+  throughput-guardrails:
+    name: T-1/T-2/T-3 throughput guardrails (CI-blocking)
+    runs-on: ubuntu-latest
+    # Ships before F14–F28 and skips cleanly until the code exists — same reasoning as the two
+    # jobs above. Covers only what nothing else does: a money-valued column outside
+    # bid_financials (bulk intake is the widest new surface on the sealed-bid gate, and no
+    # existing test can see a migration), the disclosure filter running before generation rather
+    # than after, and the regulatory rulepack being present, parseable data. Model imports in
+    # evaluate/deterministic/ and its 100% branch coverage are already enforced by the
+    # evaluate-engine job — deliberately not duplicated here.
+    steps:
+      - uses: actions/checkout@v4
+      - name: throughput guardrails (T-1..T-3)
+        run: ./tools/check-throughput-guardrails.sh
+
   engine:
     name: engine (unit + gates)
     runs-on: ubuntu-latest

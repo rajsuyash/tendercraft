@@ -13,6 +13,9 @@ dependencies = [
     "pydantic>=2.10",
     "python-multipart>=0.0.18",
     "pypdf>=5.1",
+    "openpyxl>=3.1.5",
+    "pypdfium2>=5.12.1",
+    "pillow>=12.3.0",
 ]
 
 [dependency-groups]

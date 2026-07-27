@@ -46,9 +46,23 @@ export default async function TenderLayout({
       state: bids.length > 0 ? "done" : "current",
     },
     {
+      // Sits between intake and screening because that is the order the work happens in:
+      // what arrived, then whether it satisfies the checklist, then whether the bid qualifies.
+      href: `${base}/documents`,
+      label: "Documents",
+      state: bids.length > 0 ? "current" : "none",
+    },
+    {
       href: `${base}/screening`,
       label: "Screening",
       state: bids.length > 0 && screened === bids.length ? "done" : "current",
+    },
+    {
+      // Read before scoring: it is what turns "read every bid end to end" into "read the
+      // requirements that need you".
+      href: `${base}/compliance`,
+      label: "Compliance",
+      state: bids.length > 0 ? "current" : "none",
     },
     {
       href: `${base}/technical`,
@@ -67,6 +81,9 @@ export default async function TenderLayout({
         : undefined,
     },
     { href: `${base}/result`, label: "Result", state: sealed ? "sealed" : "done" },
+    // Sealed alongside Result: an outcome letter states an accepted price, so it cannot exist
+    // any earlier than the price can be read.
+    { href: `${base}/award`, label: "Outcome", state: sealed ? "sealed" : "done" },
     { href: `${base}/audit`, label: "Audit trail", state: "none" },
     { href: `${base}/report`, label: "Report", state: sealed ? "sealed" : "done" },
   ];

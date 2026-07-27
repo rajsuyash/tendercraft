@@ -31,6 +31,30 @@ This file is the execution wrapper: what to build when, and where each verifier 
 | M5 | J1.10 — evaluation report + audit export | F11-AC1..4, F12-AC1..3 |
 | M6 | Hardening — recovery paths, all screen states, isolation suite in CI | All P0 ACs green |
 
+### Throughput extension (N-series)
+
+Product truth: [`../../tendercraft-evaluate-throughput-PRD.md`](../../tendercraft-evaluate-throughput-PRD.md)
+— features F14–F28, entities E14–E26, journey J3, ENV-9..15, FIX-9..17. It extends this product;
+it does not replace it. Two of the seven source pain points (TP32 committee silos, TP36 report
+drafting) are **already covered by F7/F8/F11/F12 — build nothing for them.**
+
+| M | Scope | Exit criteria |
+|---|---|---|
+| N1 | TP6 — bulk/ZIP intake, format normalisation, vision OCR fallback, attribution + triage | F14-AC1..4, F15-AC1..4, F16-AC1..3, **J1-AC6..8** |
+| N2 | TP11 — required-document register + deterministic presence gate | F17-AC1..3, F18-AC1..4 |
+| N3 | TP17 — offer extraction, requirement↔offer mapping, compliance matrix | F19-AC1..3, F20-AC1..4, F21-AC1..3 |
+| N4 | TP1 — draft workspace, clause library, rulepack, past-tender signal, review + sign-off, publish | F22..F26 ACs, **J3-AC1..4** |
+| N5 | TP40 — award/regret/debrief behind the disclosure gate | F27-AC1..3, F28-AC1..4, **J1-AC9** |
+
+N1 ships triage in the same milestone as bulk upload: bulk intake without triage produces
+silently mis-attributed files, which is worse than the Excel tracker it replaces.
+
+New deterministic modules (100% branch coverage, no model in the path, import-checked in CI):
+`evaluate/deterministic/presence.py`, `rulepack.py`, `disclosure.py`.
+
+**Blocking human input before N4:** a procurement-legal read of rules R1–R10's citations and
+severities (throughput PRD §12 TODO). Rules are data (`EVAL_RULEPACK_PATH`), not code.
+
 ## §6 Routes
 
 Canonical list in PRD §2.5; API surface in PRD §6.1. Web `apps/evaluate` → `/verify-eval`;

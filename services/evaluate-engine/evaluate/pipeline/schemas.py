@@ -38,3 +38,30 @@ RESPONSE_SCHEMA = {
     },
     "required": ["found"],
 }
+
+ATTRIBUTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "bidder_name": {"type": "string"},
+        "document_type": {
+            "type": "string",
+            "enum": ["technical_bid", "financial_bid", "emd", "certificate", "affidavit",
+                     "form", "authorisation", "experience_certificate", "financial_statement",
+                     "covering_letter", "other"],
+        },
+        "envelope": {"type": "string", "enum": ["technical", "financial", "unknown"]},
+        "confidence": {"type": "number"},
+        "evidence_text": {"type": "string"},
+        "anchor_page": {"type": "number"},
+    },
+    "required": ["confidence", "envelope"],
+}
+
+OCR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "page_text": {"type": "string"},
+        "legible": {"type": "boolean"},
+    },
+    "required": ["legible"],
+}

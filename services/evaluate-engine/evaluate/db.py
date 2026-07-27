@@ -228,3 +228,169 @@ def insert_financial(authority_id: str, bid_id: str, amount) -> None:
     rest("POST", "bid_financials", params={"on_conflict": "bid_id"},
          json={"authority_id": authority_id, "bid_id": bid_id, "amount_inr": amount},
          prefer="resolution=merge-duplicates,return=minimal")
+
+
+# ── bulk intake (F14/F15) ──────────────────────────────────────────────────────
+def bid_files(tender_id: str, authority_id: str) -> list[dict]:
+    return rest("GET", "bid_files", params={
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
+        "select": "*", "order": "created_at.asc"}) or []
+
+
+def file_by_hash(tender_id: str, authority_id: str, sha256: str) -> dict | None:
+    """The idempotency lookup behind F14-AC3. Content, not filename."""
+    return one(rest("GET", "bid_files", params={
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
+        "sha256": f"eq.{sha256}", "select": "*", "limit": "1"}))
+
+
+def insert_bid_file(authority_id: str, tender_id: str, row: dict) -> dict | None:
+    return one(rest("POST", "bid_files",
+                    json={**row, "authority_id": authority_id, "tender_id": tender_id}))
+
+
+def update_bid_file(file_id: str, authority_id: str, patch: dict) -> None:
+    rest("PATCH", "bid_files",
+         params={"id": f"eq.{file_id}", "authority_id": f"eq.{authority_id}"}, json=patch)
+
+
+def attributions(tender_id: str, authority_id: str) -> list[dict]:
+    """Joined through bid_files so the tender filter is enforced in the query, not in Python."""
+    return rest("GET", "file_attributions", params={
+        "authority_id": f"eq.{authority_id}",
+        "select": "*,bid_files!inner(tender_id,filename,status)",
+        "bid_files.tender_id": f"eq.{tender_id}"}) or []
+
+
+def upsert_attribution(authority_id: str, row: dict) -> None:
+    rest("POST", "file_attributions", params={"on_conflict": "file_id"},
+         json={**row, "authority_id": authority_id},
+         prefer="resolution=merge-duplicates,return=minimal")
+
+
+def bid_by_name(tender_id: str, authority_id: str, bidder_name: str) -> dict | None:
+    return one(rest("GET", "bids", params={
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
+        "bidder_name": f"eq.{bidder_name}", "select": "*", "limit": "1"}))
+
+
+def get_bid(bid_id: str, tender_id: str, authority_id: str) -> dict | None:
+    """Ownership check before any write binding a caller-supplied bid id.
+
+    The bidder product paid for this one: binding a caller-supplied id to a row without
+    checking it belongs to the caller's tenant AND tender is a cross-tenant write.
+    """
+    return one(rest("GET", "bids", params={
+        "id": f"eq.{bid_id}", "tender_id": f"eq.{tender_id}",
+        "authority_id": f"eq.{authority_id}", "select": "*", "limit": "1"}))
+
+
+# ── required documents (F17/F18) ───────────────────────────────────────────────
+def required_documents(tender_id: str, authority_id: str) -> list[dict]:
+    return rest("GET", "required_documents", params={
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
+        "select": "*", "order": "order_index.asc"}) or []
+
+
+def replace_required_documents(authority_id: str, tender_id: str, rows: list[dict]) -> list[dict]:
+    """Replace the register wholesale. Only reachable before the register freezes (F17-AC2)."""
+    rest("DELETE", "required_documents",
+         params={"tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}"},
+         prefer="return=minimal")
+    if not rows:
+        return []
+    payload = [{**r, "authority_id": authority_id, "tender_id": tender_id} for r in rows]
+    return rest("POST", "required_documents", json=payload) or []
+
+
+def document_presence(tender_id: str, authority_id: str) -> list[dict]:
+    """Human overrides only. The computed verdict is never stored — see documents.py."""
+    return rest("GET", "document_presence", params={
+        "authority_id": f"eq.{authority_id}",
+        "select": "*,required_documents!inner(tender_id)",
+        "required_documents.tender_id": f"eq.{tender_id}"}) or []
+
+
+def upsert_document_override(authority_id: str, row: dict) -> None:
+    rest("POST", "document_presence", params={"on_conflict": "requirement_id,bid_id"},
+         json={**row, "authority_id": authority_id},
+         prefer="resolution=merge-duplicates,return=minimal")
+
+
+def get_requirement(requirement_id: str, tender_id: str, authority_id: str) -> dict | None:
+    """Ownership check before binding a caller-supplied requirement id to a write."""
+    return one(rest("GET", "required_documents", params={
+        "id": f"eq.{requirement_id}", "tender_id": f"eq.{tender_id}",
+        "authority_id": f"eq.{authority_id}", "select": "*", "limit": "1"}))
+
+
+# ── drafts (F22–F26) ───────────────────────────────────────────────────────────
+def drafts(authority_id: str) -> list[dict]:
+    return rest("GET", "drafts", params={
+        "authority_id": f"eq.{authority_id}", "select": "*",
+        "order": "created_at.desc"}) or []
+
+
+def draft(draft_id: str, authority_id: str) -> dict | None:
+    return one(rest("GET", "drafts", params={
+        "id": f"eq.{draft_id}", "authority_id": f"eq.{authority_id}",
+        "select": "*", "limit": "1"}))
+
+
+def create_draft(authority_id: str, row: dict) -> dict | None:
+    return one(rest("POST", "drafts", json={**row, "authority_id": authority_id}))
+
+
+def update_draft(draft_id: str, authority_id: str, patch: dict) -> None:
+    rest("PATCH", "drafts",
+         params={"id": f"eq.{draft_id}", "authority_id": f"eq.{authority_id}"}, json=patch)
+
+
+def draft_criteria(draft_id: str, authority_id: str) -> list[dict]:
+    return rest("GET", "draft_criteria", params={
+        "draft_id": f"eq.{draft_id}", "authority_id": f"eq.{authority_id}",
+        "select": "*", "order": "order_index.asc"}) or []
+
+
+def replace_draft_criteria(authority_id: str, draft_id: str, rows: list[dict]) -> list[dict]:
+    rest("DELETE", "draft_criteria",
+         params={"draft_id": f"eq.{draft_id}", "authority_id": f"eq.{authority_id}"},
+         prefer="return=minimal")
+    if not rows:
+        return []
+    return rest("POST", "draft_criteria",
+                json=[{**r, "authority_id": authority_id, "draft_id": draft_id}
+                      for r in rows]) or []
+
+
+def draft_reviews(draft_id: str, authority_id: str) -> list[dict]:
+    return rest("GET", "draft_reviews", params={
+        "draft_id": f"eq.{draft_id}", "authority_id": f"eq.{authority_id}",
+        "select": "*", "order": "reviewer_role.asc"}) or []
+
+
+def upsert_draft_review(authority_id: str, row: dict) -> None:
+    rest("POST", "draft_reviews", params={"on_conflict": "draft_id,reviewer_role"},
+         json={**row, "authority_id": authority_id},
+         prefer="resolution=merge-duplicates,return=minimal")
+
+
+def invalidate_draft_signoffs(draft_id: str, authority_id: str) -> None:
+    """A sign-off on a document that then changed is not a sign-off (F25-AC4)."""
+    rest("PATCH", "draft_reviews", params={
+        "draft_id": f"eq.{draft_id}", "authority_id": f"eq.{authority_id}",
+        "signed_off_at": "not.is.null", "invalidated_at": "is.null",
+    }, json={"invalidated_at": "now()"}, prefer="return=minimal")
+
+
+def draft_dismissals(draft_id: str, authority_id: str) -> list[dict]:
+    return rest("GET", "draft_finding_dismissals", params={
+        "draft_id": f"eq.{draft_id}", "authority_id": f"eq.{authority_id}",
+        "select": "*"}) or []
+
+
+def dismiss_finding(authority_id: str, row: dict) -> None:
+    rest("POST", "draft_finding_dismissals",
+         params={"on_conflict": "draft_id,rule_id,target_id"},
+         json={**row, "authority_id": authority_id},
+         prefer="resolution=merge-duplicates,return=minimal")

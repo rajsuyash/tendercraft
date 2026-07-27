@@ -91,3 +91,62 @@ most of it is seeded from PRD §6.2 before the bugs exist rather than after.
 - A tender cannot be deleted once anything is audited — `audit_events` is append-only and the
   cascade is refused even to the service role. `state='archived'` plus a `neq.archived` filter
   in `db.tenders()` is the only removal this product has, and that is deliberate.
+
+## Throughput extension (F14–F28) — anticipated, not yet paid for
+
+These have not bitten us yet. They are written from the PRD's §6.2 before the code exists,
+because every one of them is silent: none produces an error message, and several corrupt an
+evaluation while every screen still looks correct. Append the real ones as they arrive.
+
+- **A confident wrong attribution has no feedback signal.** Binding one firm's document to
+  another firm's bid produces no error anywhere, and the screening matrix renders as complete.
+  This is why `EVAL_ATTRIBUTION_THRESHOLD` biases toward triage and why the eval gate on
+  attribution is **precision, not recall** — an over-cautious model costs a click, an
+  over-confident one costs an evaluation.
+- **The prominent name on a page is often not the bidder.** OEM authorisations name the
+  manufacturer, completion certificates name the client who issued them, consortium agreements
+  name everyone. Attribution reads the letterhead and the signature block, and the evidence
+  string exists so a human can catch it when it reads the wrong one.
+- **Never attribute from a filename.** Portal downloads arrive as `bid_1.pdf` twelve times.
+- **`MISSING` on a document whose file is still in triage is a wrongful disqualification.**
+  Presence returns `NEEDS_REVIEW` whenever the bidder has any unattributed file — the same
+  reasoning that made `NOT_STATED` its own verdict in `screening.py`. An extraction miss is not
+  a bidder's defect.
+- **"Present" is not "valid".** Presence checking answers whether a document arrived. Whether
+  the EMD is correctly executed is a human judgement; a UI that implies otherwise reintroduces
+  the uneven-rejection problem it was built to remove.
+- **A screening or presence matrix computed while files are unattributed reads as complete and
+  is not.** Both endpoints return `409 TRIAGE_PENDING` until the pile is empty.
+- **A ZIP is untrusted input.** Zip bombs, `../` traversal entries and symlinks. Bounded by
+  `EVAL_ARCHIVE_MAX_BYTES` / `EVAL_ARCHIVE_MAX_FILES` and entry-name validation — the same
+  posture the base product already takes toward bid PDFs.
+- **Bulk intake multiplies every chance to mis-split an envelope.** The split runs per file, not
+  per upload. One financial page written into a technical artifact defeats the gate that is the
+  product.
+- **OCR fanned across every page of every file will exhaust the model budget.** Only pages
+  `ingest.split_legible` already reports illegible are sent, capped by
+  `EVAL_OCR_MAX_PAGES_PER_TENDER`. Assert the call count, not the intent.
+- **A transcribed amount becomes a compared amount.** OCR that drops a digit separator turns
+  ₹1,20,00,000 into something `screening.py` will happily compare. The existing money-units
+  pitfall applies to the OCR path verbatim.
+- **The compliance matrix is evidence, never a verdict.** `NOT_FOUND` must never render as
+  non-compliance, and nothing in F19–F21 writes to `responsiveness_decisions`, `scores` or
+  `consensus_marks`. The bidder side has a good compliance matrix; the wall forbids importing
+  it — copy it by hand and say so in the docstring, as `ingest.py` does.
+- **Four counters describing one denominator will disagree.** One function computes the
+  requirement count and its breakdown. The bidder side learned this on submission counts.
+- **Abbreviation-blind sentence splitting shreds requirements wrongly.** Already fixed once on
+  the bidder side; the same splitter behaviour is needed here.
+- **A missing rulepack must fail fast at startup.** A draft workspace that silently runs with no
+  rules looks like it is checking and is not — the worst degradation available in the authoring
+  module. Rules are data (`EVAL_RULEPACK_PATH`), never code and never a prompt.
+- **A model must not author a number in a tender or a letter.** In drafting it invents a
+  threshold that reads exactly like one the officer chose. In a debrief it invents a figure in a
+  legal document. Both prompts forbid it; values are transcluded from stored data.
+- **An unfilled template marker publishes with provenance attached.** `[Insert Designation]`
+  copied from a past tender looks *checked* because a citation is on it. Detect template markers
+  on clause import — the bidder side hit exactly this with library documents.
+- **Redacting after generation is not a disclosure gate.** The filter runs before the prompt is
+  built, and it denies unknown fields by default. An allowlist that fails open is not one.
+- **A sign-off that survives a later edit is not a sign-off.** Substantive edits invalidate it
+  and the reviewer is asked again.

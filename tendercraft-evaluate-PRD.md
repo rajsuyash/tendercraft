@@ -209,7 +209,7 @@ by test rather than reached by a user. Every other feature has an entry point.
 | **Portal write-back / auto-award** | Same rule as bidder-side (G-1). Award is a human act on the authority's own system of record. |
 | **AI-decided qualification, responsiveness or rank** | Legally indefensible on public money. Code decides; humans mark. |
 | **Reading any bidder-side TenderCraft data** | The COI wall (F13). Not a feature to be added later. |
-| **Bidder-facing outcome/regret letters** | Outbound legal communication; separate review. Deferred. |
+| ~~**Bidder-facing outcome/regret letters**~~ — **SUPERSEDED 2026-07-27** | Human override in response to TP40. **Generation** is now in scope, gated by a deterministic disclosure filter (F28); **transmission** remains out of scope. See `tendercraft-evaluate-throughput-PRD.md` §3.1. |
 | **L1 / QBS / least-cost methods** | v1 is two-bid QCBS only (§4). |
 | **Reverse auction / negotiation support** | Different statutory process entirely. |
 | **e-signature / DSC integration** | Authorities have existing DSC infrastructure; integrating is a PH2 question. |
