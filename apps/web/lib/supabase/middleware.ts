@@ -6,6 +6,10 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 // /invite is authenticated but pre-workspace — the (app) shell would bounce a user
 // who has no workspace yet, which is exactly who follows an invitation link.
 const PUBLIC_PATHS = ["/login", "/invite"];
+// Exact matches only. "/" must NEVER go in PUBLIC_PATHS above: that list is matched with
+// startsWith, so a "/" entry would make every route in the application public — the entire
+// dashboard, every proposal, every workspace. Separate list, separate comparison.
+const PUBLIC_EXACT = ["/"];
 
 /** Refresh the session cookie and gate app routes behind auth. */
 export async function updateSession(request: NextRequest) {
@@ -35,7 +39,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
+  const isPublic = PUBLIC_EXACT.includes(path) || PUBLIC_PATHS.some((p) => path.startsWith(p));
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

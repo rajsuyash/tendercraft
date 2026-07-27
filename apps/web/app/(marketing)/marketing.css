@@ -1,0 +1,158 @@
+/*
+ * Landing-page design language — DELIBERATELY SEPARATE from the product's tokens.
+ *
+ * docs/DESIGN_SPEC.md §G lists marketing pages as a design non-goal, and §C's Apple-HIG
+ * tokens govern the product screens (S1–S18). The designer's landing comp is a different
+ * language on purpose: Geist/Inter/JetBrains Mono, a deeper enterprise blue, a saffron
+ * accent, glassmorphic cards.
+ *
+ * Every value below is scoped under `.marketing`, so none of it can reach an app screen. That
+ * scoping IS the compliance with the design contract — without it, one stray global would
+ * repaint the product with marketing colours and the token rule in docs/conventions.md would
+ * quietly stop being true.
+ *
+ * Values come from the designer's DESIGN.md front-matter.
+ */
+
+.marketing {
+  --m-bg: #faf8ff;
+  --m-surface: #ffffff;
+  --m-surface-low: #f2f3ff;
+  --m-surface-mid: #eaedff;
+  --m-surface-high: #e2e7ff;
+
+  --m-ink: #131b2e;
+  --m-ink-soft: #434654;
+  --m-outline: #c3c6d6;
+
+  --m-primary: #0052cc;
+  --m-primary-deep: #003d9b;
+  --m-on-primary: #ffffff;
+  --m-primary-soft: #dae2ff;
+
+  --m-accent: #ff9933; /* saffron — AI/premium signal only, never a status colour */
+  --m-accent-ink: #8f4e00;
+  --m-accent-soft: #ffdcc2;
+
+  --m-inverse: #283044;
+  --m-on-inverse: #eef0ff;
+
+  --m-radius: 0.5rem;
+  --m-radius-md: 0.75rem;
+  --m-radius-lg: 1rem;
+  --m-radius-xl: 1.5rem;
+
+  /* Ambient shadows: soft, multi-layered, blue-tinted and low opacity. A single hard shadow
+     reads as Material; these read as layers of light, which is what DESIGN.md asks for. */
+  --m-shadow-sm: 0 1px 2px rgba(0, 82, 204, 0.05), 0 2px 8px rgba(0, 82, 204, 0.04);
+  --m-shadow: 0 2px 4px rgba(0, 82, 204, 0.05), 0 12px 32px rgba(0, 82, 204, 0.07);
+  --m-shadow-lg: 0 4px 8px rgba(0, 82, 204, 0.06), 0 24px 56px rgba(0, 82, 204, 0.10);
+
+  background: var(--m-bg);
+  color: var(--m-ink);
+  font-family: var(--font-marketing-body), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.marketing h1,
+.marketing h2,
+.marketing h3,
+.marketing .m-display {
+  font-family: var(--font-marketing-display), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* JetBrains Mono marks system-generated data and micro-labels — the signal that separates
+   machine output from human prose throughout this product. */
+.marketing .m-label {
+  font-family: var(--font-marketing-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.marketing .m-shell {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 1200px;
+  padding-inline: 24px;
+}
+
+@media (max-width: 767px) {
+  .marketing .m-shell {
+    padding-inline: 16px;
+  }
+}
+
+/* Glassmorphic chrome — sticky header only. Frosting a dense content card costs contrast for
+   no gain, the same call the product's own token spec makes. */
+.marketing .m-glass {
+  background: rgba(250, 248, 255, 0.78);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+}
+
+.marketing .m-card {
+  background: var(--m-surface);
+  border: 1px solid var(--m-outline);
+  border-radius: var(--m-radius-xl);
+  box-shadow: var(--m-shadow-sm);
+}
+
+.marketing .m-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--m-radius);
+  padding: 0.75rem 1.5rem;
+  font-size: 15px;
+  font-weight: 600;
+  transition: transform 150ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 150ms cubic-bezier(0.32, 0.72, 0, 1), background-color 150ms ease;
+}
+
+.marketing .m-btn-primary {
+  background: var(--m-primary);
+  color: var(--m-on-primary);
+  box-shadow: var(--m-shadow-sm);
+}
+
+.marketing .m-btn-primary:hover {
+  background: var(--m-primary-deep);
+  box-shadow: var(--m-shadow);
+  transform: translateY(-1px);
+}
+
+.marketing .m-btn-ghost {
+  background: var(--m-surface);
+  color: var(--m-ink);
+  border: 1px solid var(--m-outline);
+}
+
+.marketing .m-btn-ghost:hover {
+  border-color: var(--m-primary);
+  color: var(--m-primary);
+  transform: translateY(-1px);
+}
+
+/* Every interactive element keeps a visible focus ring — the product's accessibility
+   baseline (DESIGN_SPEC §F) applies to the front door too. */
+.marketing a:focus-visible,
+.marketing button:focus-visible {
+  outline: 2px solid var(--m-primary);
+  outline-offset: 2px;
+  border-radius: var(--m-radius);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing *,
+  .marketing *::before,
+  .marketing *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
