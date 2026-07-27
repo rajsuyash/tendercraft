@@ -6,7 +6,7 @@ import { engineFetch } from "@/lib/engine";
  *  own_mark) — this handler must never soften it by supplying a default. */
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
-  const evalId = q.get("evaluation_id");
+  const evalId = q.get("tender_id");
 
   // Forward own_mark ONLY when it is actually present. Sending `own_mark=` made FastAPI fail
   // to parse an empty string as `float | None` and return 422 VALIDATION_ERROR — the gate
@@ -19,6 +19,6 @@ export async function GET(req: NextRequest) {
   const own = q.get("own_mark");
   if (own !== null && own !== "") params.set("own_mark", own);
 
-  const res = await engineFetch(`/api/evaluations/${evalId}/proposal?${params}`);
+  const res = await engineFetch(`/api/tenders/${evalId}/proposal?${params}`);
   return NextResponse.json(await res.json(), { status: res.status });
 }

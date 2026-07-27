@@ -13,7 +13,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 const ROLE_CAN: Record<string, string> = {
-  officer: "Owns evaluations, screens bids, opens financial envelopes",
+  officer: "Owns tenders, screens bids, opens financial envelopes",
   chair: "Scores, records consensus marks, locks technical scores",
   member: "Scores bids independently",
   auditor: "Reads everything, including the audit trail. Cannot modify anything.",

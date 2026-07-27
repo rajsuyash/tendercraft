@@ -49,5 +49,14 @@ Where they differ, this file wins for `apps/evaluate` and `services/evaluate-eng
 ## Naming
 
 `camelCase` TS · `snake_case` Python · `PascalCase` components · `UPPER_SNAKE` constants.
-Currency in Indian format (₹10 Cr, ₹2,40,000); dates DD/MM/YYYY. Use "evaluation", never
-"project" or "tender" — a tender is the thing being evaluated, an evaluation is our object.
+Currency in Indian format (₹10 Cr, ₹2,40,000); dates DD/MM/YYYY.
+
+**Say "tender", not "evaluation".** This file previously mandated the opposite, and it was
+wrong: the officer thinks in tenders, and naming the central object after our internal process
+was a real part of why the product read as badly structured to its first reviewer. A tender is
+the object; an evaluation is something you DO to one. The table is `tenders`, the routes are
+`/tenders/...`, the id is `tender_id`.
+
+**Money is stored and compared in whole rupees.** Both extraction prompts convert lakh and
+crore to rupees, because the criterion and the bid figure are compared arithmetically — if one
+is in crore and the other in rupees, a qualifying bidder is silently failed.

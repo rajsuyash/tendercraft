@@ -22,7 +22,7 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    router.push("/evaluations");
+    router.push("/tenders");
     router.refresh();
   }
 

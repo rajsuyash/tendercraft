@@ -65,50 +65,59 @@ def authority(authority_id: str) -> dict | None:
                     params={"id": f"eq.{authority_id}", "select": "*", "limit": "1"}))
 
 
-# ── evaluations ────────────────────────────────────────────────────────────────
-def evaluations(authority_id: str) -> list[dict]:
-    return rest("GET", "evaluations", params={
-        "authority_id": f"eq.{authority_id}", "select": "*", "order": "created_at.desc"}) or []
+# ── tenders ────────────────────────────────────────────────────────────────
+def tenders(authority_id: str, include_archived: bool = False) -> list[dict]:
+    """Active tenders by default.
+
+    Archived is the only removal this product has: audit_events is append-only, so a tender
+    that has been audited can never be deleted — the cascade is refused even to the service
+    role. Filtering here is what keeps a concluded or abandoned tender out of the officer's
+    dashboard without pretending it is gone."""
+    params = {"authority_id": f"eq.{authority_id}", "select": "*", "order": "created_at.desc"}
+    if not include_archived:
+        params["state"] = "neq.archived"
+    return rest("GET", "tenders", params=params) or []
 
 
-def evaluation(eval_id: str, authority_id: str) -> dict | None:
-    return one(rest("GET", "evaluations", params={
-        "id": f"eq.{eval_id}", "authority_id": f"eq.{authority_id}", "select": "*", "limit": "1"}))
+def tender(tender_id: str, authority_id: str) -> dict | None:
+    return one(rest("GET", "tenders", params={
+        "id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
+        "select": "*", "limit": "1"}))
 
 
-def update_evaluation(eval_id: str, authority_id: str, patch: dict) -> None:
-    rest("PATCH", "evaluations",
-         params={"id": f"eq.{eval_id}", "authority_id": f"eq.{authority_id}"}, json=patch)
+def update_tender(tender_id: str, authority_id: str, patch: dict) -> None:
+    rest("PATCH", "tenders",
+         params={"id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}"}, json=patch)
 
 
-def criteria(eval_id: str, authority_id: str) -> list[dict]:
+def criteria(tender_id: str, authority_id: str) -> list[dict]:
     return rest("GET", "criteria", params={
-        "evaluation_id": f"eq.{eval_id}", "authority_id": f"eq.{authority_id}",
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
         "select": "*", "order": "order_index.asc"}) or []
 
 
-def bids(eval_id: str, authority_id: str) -> list[dict]:
+def bids(tender_id: str, authority_id: str) -> list[dict]:
     return rest("GET", "bids", params={
-        "evaluation_id": f"eq.{eval_id}", "authority_id": f"eq.{authority_id}",
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
         "select": "*", "order": "bidder_name.asc"}) or []
 
 
-def responses(eval_id: str, authority_id: str) -> list[dict]:
+def responses(tender_id: str, authority_id: str) -> list[dict]:
     return rest("GET", "bid_responses", params={
         "authority_id": f"eq.{authority_id}",
-        "select": "*,bids!inner(evaluation_id)",
-        "bids.evaluation_id": f"eq.{eval_id}"}) or []
+        "select": "*,bids!inner(tender_id)",
+        "bids.tender_id": f"eq.{tender_id}"}) or []
 
 
-def scores(eval_id: str, authority_id: str) -> list[dict]:
+def scores(tender_id: str, authority_id: str) -> list[dict]:
     return rest("GET", "scores", params={
-        "evaluation_id": f"eq.{eval_id}", "authority_id": f"eq.{authority_id}",
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
         "select": "*"}) or []
 
 
-def consensus(eval_id: str, authority_id: str) -> list[dict]:
+def consensus(tender_id: str, authority_id: str) -> list[dict]:
     return rest("GET", "consensus_marks", params={
-        "evaluation_id": f"eq.{eval_id}", "authority_id": f"eq.{authority_id}",
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
         "select": "*"}) or []
 
 
@@ -117,20 +126,20 @@ def members(authority_id: str) -> list[dict]:
         "authority_id": f"eq.{authority_id}", "select": "*", "order": "role.asc"}) or []
 
 
-def coi(eval_id: str, authority_id: str) -> list[dict]:
+def coi(tender_id: str, authority_id: str) -> list[dict]:
     return rest("GET", "coi_declarations", params={
-        "evaluation_id": f"eq.{eval_id}", "authority_id": f"eq.{authority_id}",
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
         "select": "*"}) or []
 
 
-def financials(eval_id: str, authority_id: str) -> list[dict]:
+def financials(tender_id: str, authority_id: str) -> list[dict]:
     """Reads prices with the SERVICE ROLE, which bypasses the RLS seal. Every caller must
     have already passed gates.financial_readable(); this function is deliberately named so
     that an unguarded call stands out in review."""
     return rest("GET", "bid_financials", params={
         "authority_id": f"eq.{authority_id}",
-        "select": "*,bids!inner(evaluation_id)",
-        "bids.evaluation_id": f"eq.{eval_id}"}) or []
+        "select": "*,bids!inner(tender_id)",
+        "bids.tender_id": f"eq.{tender_id}"}) or []
 
 
 def upsert_score(row: dict) -> None:
@@ -144,7 +153,7 @@ def upsert_consensus(row: dict) -> None:
 
 
 def upsert_coi(row: dict) -> None:
-    rest("POST", "coi_declarations", params={"on_conflict": "evaluation_id,user_id"},
+    rest("POST", "coi_declarations", params={"on_conflict": "tender_id,user_id"},
          json=row, prefer="resolution=merge-duplicates")
 
 
@@ -162,16 +171,60 @@ def insert_tie_break(row: dict) -> None:
     rest("POST", "tie_break_decisions", json=row)
 
 
-def audit(authority_id: str, eval_id: str | None, actor: str | None, action: str,
+def audit(authority_id: str, tender_id: str | None, actor: str | None, action: str,
           entity: str | None = None, entity_id: str | None = None,
           detail: dict | None = None) -> None:
     rest("POST", "audit_events", json={
-        "authority_id": authority_id, "evaluation_id": eval_id, "actor_id": actor,
+        "authority_id": authority_id, "tender_id": tender_id, "actor_id": actor,
         "action": action, "entity": entity, "entity_id": entity_id, "detail": detail,
     }, prefer="return=minimal")
 
 
-def audit_events(eval_id: str, authority_id: str) -> list[dict]:
+def audit_events(tender_id: str, authority_id: str) -> list[dict]:
     return rest("GET", "audit_events", params={
-        "evaluation_id": f"eq.{eval_id}", "authority_id": f"eq.{authority_id}",
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
         "select": "*", "order": "created_at.desc", "limit": "200"}) or []
+
+
+# ── ingestion writes ───────────────────────────────────────────────────────────
+def create_tender(authority_id: str, row: dict) -> dict:
+    return one(rest("POST", "tenders", json={**row, "authority_id": authority_id}))
+
+
+def insert_criteria(authority_id: str, tender_id: str, rows: list[dict]) -> list[dict]:
+    if not rows:
+        return []
+    payload = [{**r, "authority_id": authority_id, "tender_id": tender_id} for r in rows]
+    return rest("POST", "criteria", json=payload) or []
+
+
+def update_criterion(criterion_id: str, authority_id: str, patch: dict) -> None:
+    rest("PATCH", "criteria",
+         params={"id": f"eq.{criterion_id}", "authority_id": f"eq.{authority_id}"}, json=patch)
+
+
+def delete_criterion(criterion_id: str, authority_id: str) -> None:
+    rest("DELETE", "criteria",
+         params={"id": f"eq.{criterion_id}", "authority_id": f"eq.{authority_id}"},
+         prefer="return=minimal")
+
+
+def create_bid(authority_id: str, tender_id: str, bidder_name: str) -> dict:
+    return one(rest("POST", "bids", json={
+        "authority_id": authority_id, "tender_id": tender_id, "bidder_name": bidder_name}))
+
+
+def upsert_responses(authority_id: str, rows: list[dict]) -> None:
+    if not rows:
+        return
+    rest("POST", "bid_responses", params={"on_conflict": "bid_id,criterion_id"},
+         json=[{**r, "authority_id": authority_id} for r in rows],
+         prefer="resolution=merge-duplicates,return=minimal")
+
+
+def insert_financial(authority_id: str, bid_id: str, amount) -> None:
+    """Written at ingest and immediately unreadable — the RLS policy on bid_financials keys on
+    the tender's technical_locked_at, so the row exists long before anyone may see it."""
+    rest("POST", "bid_financials", params={"on_conflict": "bid_id"},
+         json={"authority_id": authority_id, "bid_id": bid_id, "amount_inr": amount},
+         prefer="resolution=merge-duplicates,return=minimal")

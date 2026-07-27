@@ -29,7 +29,7 @@ type Proposal =
  * "accepted the AI mark unchanged in 47 of 47" is visible to an auditor.
  */
 export function ScoreWorkspace({
-  evaluationId,
+  tenderId,
   bidId,
   bidderName,
   criteria,
@@ -37,7 +37,7 @@ export function ScoreWorkspace({
   coiFiled,
   alreadyScored,
 }: {
-  evaluationId: string;
+  tenderId: string;
   bidId: string;
   bidderName: string;
   criteria: Criterion[];
@@ -72,7 +72,7 @@ export function ScoreWorkspace({
             You cannot score any bid in this evaluation until you have recorded whether you have
             an interest in it. It is kept with the evaluation and appears in the final report.
           </p>
-          <Link href={`/evaluations/${evaluationId}`} className="mt-5 inline-block rounded border border-warning px-4 py-2 text-sm font-medium text-warning">
+          <Link href={`/tenders/${tenderId}`} className="mt-5 inline-block rounded border border-warning px-4 py-2 text-sm font-medium text-warning">
             Go to the evaluation
           </Link>
         </div>
@@ -118,7 +118,7 @@ export function ScoreWorkspace({
     setBusy(true);
     setError(null);
     const res = await fetch(
-      `/api/proposal?evaluation_id=${evaluationId}&bid_id=${bidId}` +
+      `/api/proposal?tender_id=${tenderId}&bid_id=${bidId}` +
         `&criterion_id=${c!.id}&own_mark=${numeric}`,
     );
     const body = await res.json();
@@ -134,7 +134,7 @@ export function ScoreWorkspace({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        evaluation_id: evaluationId,
+        tender_id: tenderId,
         bid_id: bidId,
         criterion_id: c!.id,
         pre_reveal_mark: Number(preReveal),

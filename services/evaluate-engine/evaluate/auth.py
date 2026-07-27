@@ -74,4 +74,4 @@ async def get_current_user(
 def require_write(user: AuthedUser) -> None:
     """Auditors are read-only, everywhere (F1-AC3)."""
     if user.is_auditor:
-        raise ApiError(403, "READ_ONLY_ROLE", "auditors cannot modify an evaluation")
+        raise ApiError(403, "READ_ONLY_ROLE", "auditors cannot modify a tender")

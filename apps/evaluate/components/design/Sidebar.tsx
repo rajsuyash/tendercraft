@@ -14,7 +14,7 @@ import { useState } from "react";
 type Role = "officer" | "chair" | "member" | "auditor";
 
 const NAV: { href: string; label: string; roles: Role[] }[] = [
-  { href: "/evaluations", label: "Evaluations", roles: ["officer", "chair", "member", "auditor"] },
+  { href: "/tenders", label: "Tenders", roles: ["officer", "chair", "member", "auditor"] },
   { href: "/my-scoring", label: "My scoring", roles: ["chair", "member"] },
   { href: "/settings", label: "Settings", roles: ["officer", "chair"] },
   { href: "/guide", label: "How evaluation works", roles: ["officer", "chair", "member", "auditor"] },
@@ -82,7 +82,7 @@ export function Sidebar({
           open ? "fixed inset-y-0 left-0 flex" : "hidden"
         }`}
       >
-        <Link href="/evaluations" className="mb-6 flex items-center gap-2.5 px-2">
+        <Link href="/tenders" className="mb-6 flex items-center gap-2.5 px-2">
           <span className="grid h-8 w-8 place-items-center rounded bg-primary text-xs font-bold text-on-primary shadow-sm">
             TE
           </span>

@@ -18,11 +18,11 @@ def _crit(row: dict) -> Criterion:
     )
 
 
-def screening_matrix(eval_id: str, authority_id: str) -> dict:
+def screening_matrix(tender_id: str, authority_id: str) -> dict:
     """The activation surface: every bid against every published PQ criterion."""
-    crits = db.criteria(eval_id, authority_id)
-    all_bids = db.bids(eval_id, authority_id)
-    resp = db.responses(eval_id, authority_id)
+    crits = db.criteria(tender_id, authority_id)
+    all_bids = db.bids(tender_id, authority_id)
+    resp = db.responses(tender_id, authority_id)
     domain = [_crit(c) for c in crits]
     by_bid: dict[str, list[Response]] = {}
     for r in resp:
@@ -50,23 +50,23 @@ def screening_matrix(eval_id: str, authority_id: str) -> dict:
     }
 
 
-def _aggregates(eval_id: str, authority_id: str):
-    crits = [c for c in db.criteria(eval_id, authority_id) if c["kind"] == "technical"]
-    sc = db.scores(eval_id, authority_id)
+def _aggregates(tender_id: str, authority_id: str):
+    crits = [c for c in db.criteria(tender_id, authority_id) if c["kind"] == "technical"]
+    sc = db.scores(tender_id, authority_id)
     cons = {(c["bid_id"], c["criterion_id"]): Decimal(str(c["agreed_mark"]))
-            for c in db.consensus(eval_id, authority_id)}
+            for c in db.consensus(tender_id, authority_id)}
     by: dict[tuple[str, str], list[Decimal]] = {}
     for s in sc:
         by.setdefault((s["bid_id"], s["criterion_id"]), []).append(Decimal(str(s["final_mark"])))
     return crits, by, cons, sc
 
 
-def technical_state(eval_id: str, authority_id: str) -> dict:
+def technical_state(tender_id: str, authority_id: str) -> dict:
     """Aggregates, variance flags and everything blocking the technical lock."""
-    ev = db.evaluation(eval_id, authority_id)
-    crits, by, cons, sc = _aggregates(eval_id, authority_id)
+    ev = db.tender(tender_id, authority_id)
+    crits, by, cons, sc = _aggregates(tender_id, authority_id)
     threshold = get_settings().variance_threshold
-    responsive = [b for b in db.bids(eval_id, authority_id) if b.get("responsive")]
+    responsive = [b for b in db.bids(tender_id, authority_id) if b.get("responsive")]
 
     out_bids, unsettled = [], []
     for b in responsive:
@@ -109,11 +109,11 @@ def technical_state(eval_id: str, authority_id: str) -> dict:
     }
 
 
-def result(eval_id: str, authority_id: str) -> dict:
+def result(tender_id: str, authority_id: str) -> dict:
     """QCBS ranking. Only ever called after the sealed-bid gate has been checked."""
-    ev = db.evaluation(eval_id, authority_id)
-    tech = technical_state(eval_id, authority_id)
-    prices = {f["bid_id"]: f for f in db.financials(eval_id, authority_id)}
+    ev = db.tender(tender_id, authority_id)
+    tech = technical_state(tender_id, authority_id)
+    prices = {f["bid_id"]: f for f in db.financials(tender_id, authority_id)}
 
     payload = [{
         "bid_id": b["bid_id"], "bidder_name": b["bidder_name"],
@@ -127,7 +127,7 @@ def result(eval_id: str, authority_id: str) -> dict:
                        max_technical_marks=tech["max_technical_marks"])
     ties = qcbs.has_unresolved_tie(ranked)
     decided = db.rest("GET", "tie_break_decisions", params={
-        "evaluation_id": f"eq.{eval_id}", "authority_id": f"eq.{authority_id}",
+        "tender_id": f"eq.{tender_id}", "authority_id": f"eq.{authority_id}",
         "select": "*"}) or []
     return {
         "technical_weight": ev["technical_weight"], "financial_weight": ev["financial_weight"],
@@ -145,3 +145,51 @@ def result(eval_id: str, authority_id: str) -> dict:
             "rank": r.rank, "tied_with": list(r.tied_with),
         } for r in ranked],
     }
+
+
+def dashboard(authority_id: str) -> list[dict]:
+    """Per-tender counts for the officer's home screen.
+
+    Built from screening_matrix() and technical_state() rather than fresh queries, so the
+    dashboard and the detail screens cannot disagree — the bidder product already shipped four
+    counters describing one object and none of them matching, and this is that same trap.
+
+    `qualified` is deliberately None until technical scores exist. Rendering "0 qualified" for
+    a tender still in screening would be a number that is not merely unhelpful but false.
+    """
+    out = []
+    for t in db.tenders(authority_id):
+        matrix = screening_matrix(t["id"], authority_id)
+        bids = matrix["bids"]
+        not_stated_cells = sum(
+            1 for b in bids for c in b["cells"] if c["verdict"] == "not_stated")
+        bids_missing_info = sum(
+            1 for b in bids if any(c["verdict"] == "not_stated" for c in b["cells"]))
+
+        scored = None
+        if t.get("framework_locked_at") and any(b["responsive"] for b in bids):
+            tech = technical_state(t["id"], authority_id)
+            if tech["bids"] and any(b["total"] is not None for b in tech["bids"]):
+                scored = {
+                    "qualified": sum(1 for b in tech["bids"] if b["qualified"]),
+                    "not_qualified": sum(
+                        1 for b in tech["bids"] if b["total"] is not None and not b["qualified"]),
+                    "unsettled": sum(1 for b in tech["bids"] if b["total"] is None),
+                }
+
+        out.append({
+            "id": t["id"], "title": t["title"], "tender_number": t.get("tender_number"),
+            "created_at": t.get("created_at"),
+            "framework_locked_at": t.get("framework_locked_at"),
+            "technical_locked_at": t.get("technical_locked_at"),
+            "criteria_total": len(matrix["criteria"]),
+            "bids_received": len(bids),
+            "responsive": sum(1 for b in bids if b["responsive"] is True),
+            "non_responsive": sum(1 for b in bids if b["responsive"] is False),
+            "awaiting_decision": sum(1 for b in bids if b["responsive"] is None),
+            "bids_missing_info": bids_missing_info,
+            "missing_info_cells": not_stated_cells,
+            # None means "not knowable yet", which the UI must render as such rather than 0.
+            "scored": scored,
+        })
+    return out

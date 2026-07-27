@@ -9,17 +9,17 @@ from __future__ import annotations
 from . import db, service
 
 
-def build_report(eval_id: str, authority_id: str) -> dict:
-    ev = db.evaluation(eval_id, authority_id)
+def build_report(tender_id: str, authority_id: str) -> dict:
+    ev = db.tender(tender_id, authority_id)
     auth = db.authority(authority_id)
-    crits = db.criteria(eval_id, authority_id)
+    crits = db.criteria(tender_id, authority_id)
     members = {m["user_id"]: m for m in db.members(authority_id)}
-    coi = db.coi(eval_id, authority_id)
-    scores = db.scores(eval_id, authority_id)
-    consensus = {(c["bid_id"], c["criterion_id"]): c for c in db.consensus(eval_id, authority_id)}
-    screening = service.screening_matrix(eval_id, authority_id)
-    tech = service.technical_state(eval_id, authority_id)
-    res = service.result(eval_id, authority_id)
+    coi = db.coi(tender_id, authority_id)
+    scores = db.scores(tender_id, authority_id)
+    consensus = {(c["bid_id"], c["criterion_id"]): c for c in db.consensus(tender_id, authority_id)}
+    screening = service.screening_matrix(tender_id, authority_id)
+    tech = service.technical_state(tender_id, authority_id)
+    res = service.result(tender_id, authority_id)
 
     crit_by_id = {c["id"]: c for c in crits}
 

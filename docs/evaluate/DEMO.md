@@ -13,6 +13,22 @@
 
 Sign in as the **Procurement Officer** for the main walkthrough.
 
+## Creating a tender from scratch (new)
+
+The officer can now run the whole journey without anyone touching the database:
+
+**Tenders → Open a tender** → enter the title, number, weights and quorum → **upload the RFP
+PDF**. The criteria, marks and thresholds are read out of it, each anchored to the page and
+clause it came from. Confirm each one (the lock stays disabled until you do — an extracted
+criterion that no person has vouched for cannot govern a public tender), then **Lock framework**.
+
+**Bids tab** → enter a bidder name and quoted price → upload their proposal PDF. Their answer to
+each published criterion is located and cited to a page. The screening matrix computes
+responsiveness arithmetically from those values.
+
+Sample PDFs for a live demo are in `.playwright-mcp/fx/` (one RFP, two bids — one qualifying,
+one that fails on turnover, an expired certificate and project count).
+
 ## What is loaded
 
 Two evaluations, deliberately at different stages so both halves of the story are visible

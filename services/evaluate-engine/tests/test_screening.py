@@ -110,3 +110,31 @@ def test_unsupported_operator_raises_rather_than_guessing():
 
     with pytest.raises(ValueError, match="unsupported comparison operator"):
         _cmp("~=", 1, 2)
+
+
+class TestPresentOperator:
+    """`present` asks whether a value exists at all. It reached _cmp and raised ValueError,
+    which would 500 the screening request for any RFP saying 'shall furnish'."""
+
+    def test_present_with_a_value_meets(self):
+        c = crit(compare_op="present", compare_value=None)
+        assert evaluate_criterion(c, Response("c1", "BG no. 0091/2026")).verdict is Verdict.MEETS
+
+    def test_present_without_a_value_is_not_stated(self):
+        c = crit(compare_op="present", compare_value=None)
+        assert evaluate_criterion(c, Response("c1", "")).verdict is Verdict.NOT_STATED
+
+    def test_present_on_a_date_criterion_does_not_raise(self):
+        c = crit(compare_kind=CompareKind.DATE, compare_op="present", compare_value=None)
+        assert evaluate_criterion(c, Response("c1", "2027-01-01")).verdict is Verdict.MEETS
+
+
+def test_present_is_coerced_away_from_date_criteria_by_the_extractor():
+    """Guards the coercion in pipeline/extractor.py from the screening side: a date criterion
+    carrying `present` accepts an EXPIRED certificate, which is why the extractor rewrites it
+    to `>=`. If someone ever removes that coercion, this is what it costs."""
+    expired = crit(compare_kind=CompareKind.DATE, compare_op="present", compare_value="2026-07-20")
+    assert evaluate_criterion(expired, Response("c1", "2026-02-14")).verdict is Verdict.MEETS
+
+    corrected = crit(compare_kind=CompareKind.DATE, compare_op=">=", compare_value="2026-07-20")
+    assert evaluate_criterion(corrected, Response("c1", "2026-02-14")).verdict is Verdict.FAILS

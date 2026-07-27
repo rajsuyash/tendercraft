@@ -93,6 +93,20 @@ if [ -n "${SUPABASE_SERVICE_JWT:-}" ] && [ -n "${EVAL_SUPABASE_SERVICE_JWT:-}" ]
   fi
 fi
 
+# F13-AC3 wants a separate MODEL credential so usage and telemetry never commingle. The demo
+# currently waives that deliberately (see PRD §12). The waiver is checked rather than assumed:
+# it fails by default and requires EVAL_WALL_ALLOW_SHARED_KEY=1 to pass, so it stays visible in
+# every CI run instead of quietly becoming permanent. Retire it before production.
+if [ -n "${GEMINI_API_KEY:-}" ] && [ -n "${EVAL_MODEL_API_KEY:-}" ]; then
+  if [ "$GEMINI_API_KEY" = "$EVAL_MODEL_API_KEY" ]; then
+    if [ "${EVAL_WALL_ALLOW_SHARED_KEY:-}" = "1" ]; then
+      echo "wall: WAIVED — evaluate shares the bidder's model credential (F13-AC3, demo only)"
+    else
+      err "evaluate shares the bidder's model credential (F13-AC3). Set EVAL_WALL_ALLOW_SHARED_KEY=1 to waive."
+    fi
+  fi
+fi
+
 echo "── F13-AC3: no bidder data reaches the evaluation model ────────────"
 
 # Prompts and eval fixtures are the quiet path: a golden case copied from bidder-side data

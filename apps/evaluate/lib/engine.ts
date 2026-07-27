@@ -45,8 +45,8 @@ export type Me = { user_id: string; authority_id: string; authority_name: string
 
 export const getMe = cache(() => engineJson<Me>("/api/me"));
 
-export type EvaluationDetail = {
-  evaluation: {
+export type TenderDetail = {
+  tender: {
     id: string;
     title: string;
     tender_number: string | null;
@@ -61,6 +61,8 @@ export type EvaluationDetail = {
   criteria: {
     id: string; kind: string; text: string; max_marks: number;
     anchor_page: number | null; anchor_clause: string | null;
+    compare_kind: string; compare_op: string | null; compare_value: string | null;
+    confidence: number; confirmed: boolean;
   }[];
   unconfirmed: number;
   bids: { id: string; bidder_name: string; responsive: boolean | null }[];
@@ -68,8 +70,8 @@ export type EvaluationDetail = {
   coi: { user_id: string }[];
 };
 
-export const getEvaluation = cache((id: string) =>
-  engineJson<EvaluationDetail>(`/api/evaluations/${id}`),
+export const getTender = cache((id: string) =>
+  engineJson<TenderDetail>(`/api/tenders/${id}`),
 );
 
 export type TechnicalState = {
@@ -91,5 +93,5 @@ export type TechnicalState = {
 };
 
 export const getTechnical = cache((id: string) =>
-  engineJson<TechnicalState>(`/api/evaluations/${id}/technical`),
+  engineJson<TechnicalState>(`/api/tenders/${id}/technical`),
 );

@@ -14,3 +14,4 @@ playwright-report/
 .claude/dev-server.log
 .gstack/
 apps/*/.env
+.playwright-mcp/fx/

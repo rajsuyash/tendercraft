@@ -32,6 +32,9 @@ def _date(v: str) -> date | None:
 
 
 def _cmp(op: str, left, right) -> bool:
+    # `present` is handled before this function is reached — it asks whether a value exists at
+    # all, which is answered without comparing anything. It used to fall through to the raise
+    # below and 500 the request whenever an RFP said "shall furnish".
     if op == ">=":
         return left >= right
     if op == "<=":
@@ -55,6 +58,11 @@ def evaluate_criterion(criterion: Criterion, response: Response | None) -> Scree
 
     op = criterion.compare_op or "="
     required = criterion.compare_value
+
+    # "present" asks only whether the bidder stated anything. Reaching here means they did
+    # (the empty case returned NOT_STATED above), so it passes without a comparison.
+    if op == "present":
+        return ScreeningCell(criterion.id, Verdict.MEETS, required, stated, page)
 
     if criterion.compare_kind is CompareKind.BOOLEAN:
         s = str(stated).strip().lower()

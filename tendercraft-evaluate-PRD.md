@@ -782,7 +782,8 @@ doubles as a live tenant-isolation fixture.
 
 | Term | Meaning here |
 |---|---|
-| **Evaluation** | One tender being assessed. The top-level object. Not a "project". |
+| **Tender** | The RFP/NIT being evaluated. The top-level object — table `tenders`, routes `/tenders/...`. |
+| **Evaluation** | The *process* applied to a tender, not an object. Do not name things after it. |
 | **Framework** | The published criteria, marks, weights and threshold. Immutable after lock. |
 | **Envelope** | Technical or financial portion of a bid. Sealed until its stage opens. |
 | **Responsive** | Bid meets mandatory PQ criteria and may proceed to technical scoring. |
@@ -822,3 +823,15 @@ doubles as a live tenant-isolation fixture.
 
 **Remaining `TODO:` for a human:** draft the documented erasure-exception process (§8.3) before
 the first production authority.
+
+### Live waiver — F13-AC3 model credential (opened 2026-07-27)
+
+The demo shares the bidder product's Gemini key rather than using a separate one, because
+extraction is the headline feature and there was no separate credential to hand.
+
+What is NOT affected: separate database, separate auth pool, no shared data-access module, and
+no bidder data reaching the evaluation model. What is waived: usage/telemetry separation only.
+
+The waiver is enforced rather than assumed — `tools/check-wall.sh` compares the two keys and
+**fails by default**; passing requires `EVAL_WALL_ALLOW_SHARED_KEY=1`, so it is visible in every
+CI run instead of quietly becoming permanent. **Retire before the first production authority.**
