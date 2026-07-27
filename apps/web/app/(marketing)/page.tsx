@@ -1,6 +1,6 @@
 import {
   Closing, Features, Footer, Header, Hero, PipelineVisual, PortalTicker, Pricing, Problems,
-  Sectors, Workflow,
+  ProductShot, Sectors, Workflow,
 } from "@/components/marketing/Sections";
 import { createClient } from "@/lib/supabase/server";
 
@@ -25,6 +25,7 @@ export default async function LandingPage() {
         <PipelineVisual />
         <PortalTicker />
         <Problems />
+        <ProductShot />
         <Features />
         <Workflow />
         <Sectors />

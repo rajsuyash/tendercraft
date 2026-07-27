@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import {
@@ -9,20 +10,10 @@ import { Marquee, Odometer, Reveal, Spotlight } from "./Motion";
 /** Portals the product reads. Concrete and verifiable — the honest substitute for the
  *  customer-logo carousel this pattern normally opens with, which we cannot populate. */
 const PORTALS = [
-  "GeM — Government e-Marketplace", "CPPP / eProcure", "Maharashtra Mahatenders",
+  "GeM Government e-Marketplace", "CPPP / eProcure", "Maharashtra Mahatenders",
   "Karnataka e-Procurement", "Gujarat nProcure", "Tamil Nadu Tenders",
   "Rajasthan SPPP", "Kerala e-Tenders", "PSU & Corporate RFPs",
 ] as const;
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="m-label flex items-center justify-center gap-2" style={{ color: "var(--m-primary)" }}>
-      <span className="inline-block h-px w-6" style={{ background: "var(--m-primary)" }} />
-      {children}
-      <span className="inline-block h-px w-6" style={{ background: "var(--m-primary)" }} />
-    </p>
-  );
-}
 
 export function Header({ signedIn }: { signedIn: boolean }) {
   return (
@@ -91,10 +82,9 @@ export function Hero() {
           <span
             className="m-label inline-flex items-center gap-2 rounded-full border px-3.5 py-2"
             style={{
-              background: "rgba(255,255,255,0.7)",
+              background: "var(--m-surface)",
               borderColor: "var(--m-primary-soft)",
               color: "var(--m-primary-deep)",
-              backdropFilter: "blur(8px)",
             }}
           >
             <Icon name="spark" size={13} />
@@ -105,24 +95,7 @@ export function Hero() {
         <Reveal delay={80}>
           <h1 className="mx-auto mt-7 max-w-4xl text-[2.6rem] font-bold md:text-[4.25rem]">
             {HERO.titleLead}{" "}
-            <span className="relative inline-block">
-              <em
-                className="not-italic"
-                /* Kept inside the blue family. Running it out to saffron put a desaturated
-                   grey through the middle of the two most important words on the page, which
-                   reads as a broken font rather than a gradient — and the design system's
-                   anti-pattern list rules out the multi-hue "AI gradient" anyway. Saffron
-                   stays where it means something: premium and AI-generated markers. */
-                style={{
-                  background: "linear-gradient(96deg, var(--m-primary-deep), var(--m-primary) 45%, #4f8dff)",
-                  WebkitBackgroundClip: "text",
-                  backgroundClip: "text",
-                  color: "transparent",
-                }}
-              >
-                {HERO.titleAccent}
-              </em>
-            </span>
+            <span style={{ color: "var(--m-primary)" }}>{HERO.titleAccent}</span>
           </h1>
         </Reveal>
 
@@ -150,7 +123,7 @@ export function Hero() {
 
         <Reveal delay={320}>
           <p className="mt-5 text-sm" style={{ color: "var(--m-ink-soft)" }}>
-            Every generated line traced to your own documents — or flagged, never invented.
+            Every generated line traced to a document you own, or flagged. Never invented.
           </p>
         </Reveal>
       </div>
@@ -209,13 +182,73 @@ export function PortalTicker() {
   );
 }
 
+/**
+ * The product itself, photographed.
+ *
+ * The page had no imagery at all, which for a brand surface is a bug rather than restraint:
+ * typography was carrying the entire visual weight. The right image here is not stock, it is
+ * the actual compliance matrix for a real 81-page NABARD tender, with the real numbers on it.
+ * A buyer who has shredded an RFP by hand knows immediately whether this is real.
+ */
+export function ProductShot() {
+  return (
+    <section className="m-shell py-24">
+      <div className="grid items-center gap-12 lg:grid-cols-[5fr_7fr]">
+        <Reveal>
+          <div>
+            <h2 className="text-[2rem] font-semibold md:text-[2.5rem]">
+              Proof that nothing was dropped
+            </h2>
+            <p className="m-measure mt-5 text-[15px]" style={{ color: "var(--m-ink-soft)" }}>
+              A hand-built compliance matrix has no denominator, so &ldquo;we covered
+              everything&rdquo; is an assertion. TenderCraft counts every obligation sentence in
+              the document, maps each one to a row, and shows you the ones nothing covers yet.
+            </p>
+            <dl className="mt-8 space-y-4">
+              {[
+                ["81 pages", "read and shredded in about a minute"],
+                ["192 requirements", "each with its page and clause reference"],
+                ["57 sentences", "carrying an obligation that no requirement covered"],
+              ].map(([k, v]) => (
+                <div key={k} className="flex gap-4 border-t pt-4" style={{ borderColor: "var(--m-hairline)" }}>
+                  <dt className="w-36 shrink-0 font-semibold">{k}</dt>
+                  <dd className="text-[15px]" style={{ color: "var(--m-ink-soft)" }}>{v}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-6 text-xs" style={{ color: "var(--m-ink-soft)" }}>
+              Screenshot from a live run against a published NABARD tender.
+            </p>
+          </div>
+        </Reveal>
+
+        <Reveal delay={120}>
+          <div
+            className="overflow-hidden rounded-[var(--m-radius-lg)] border"
+            style={{ borderColor: "var(--m-hairline)", boxShadow: "var(--m-shadow-lg)" }}
+          >
+            <Image
+              src="/product-compliance-matrix.png"
+              alt="TenderCraft compliance matrix for a NABARD tender, showing 192 requirements and 57 obligation sentences with no matching row"
+              width={1440}
+              height={900}
+              sizes="(max-width: 1024px) 100vw, 60vw"
+              className="h-auto w-full"
+              priority={false}
+            />
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
 export function Problems() {
   return (
     <section className="py-24" style={{ background: "var(--m-surface-low)" }}>
       <div className="m-shell">
         <Reveal>
-          <Eyebrow>The problem</Eyebrow>
-          <h2 className="mt-5 text-center text-[2rem] font-semibold md:text-[2.75rem]">
+          <h2 className="text-center text-[2rem] font-semibold md:text-[2.75rem]">
             {PROBLEMS.title}
           </h2>
           <p
@@ -253,8 +286,7 @@ export function Features() {
   return (
     <section id="features" className="m-shell py-24">
       <Reveal>
-        <Eyebrow>Capabilities</Eyebrow>
-        <h2 className="mt-5 text-center text-[2rem] font-semibold md:text-[2.75rem]">
+        <h2 className="text-center text-[2rem] font-semibold md:text-[2.75rem]">
           {FEATURES.title}
         </h2>
       </Reveal>
@@ -373,10 +405,7 @@ export function Workflow() {
       />
       <div className="m-shell relative">
         <Reveal>
-          <p className="m-label text-center" style={{ color: "var(--m-accent)" }}>
-            End to end
-          </p>
-          <h2 className="mt-5 text-center text-[2rem] font-semibold md:text-[2.75rem]">
+          <h2 className="text-center text-[2rem] font-semibold md:text-[2.75rem]">
             {WORKFLOW.title}
           </h2>
         </Reveal>
@@ -419,7 +448,7 @@ export function Sectors() {
   return (
     <section id="sectors" className="m-shell py-24 text-center">
       <Reveal>
-        <Eyebrow>{SECTORS.eyebrow}</Eyebrow>
+        <h2 className="text-2xl font-semibold md:text-3xl">{SECTORS.eyebrow}</h2>
       </Reveal>
 
       <Reveal delay={80}>
@@ -484,8 +513,7 @@ export function Pricing() {
     <section id="pricing" className="py-24" style={{ background: "var(--m-surface-low)" }}>
       <div className="m-shell">
         <Reveal>
-          <Eyebrow>Pricing</Eyebrow>
-          <h2 className="mt-5 text-center text-[2rem] font-semibold md:text-[2.75rem]">
+          <h2 className="text-center text-[2rem] font-semibold md:text-[2.75rem]">
             {PRICING.title}
           </h2>
           <p className="mt-4 text-center" style={{ color: "var(--m-ink-soft)" }}>

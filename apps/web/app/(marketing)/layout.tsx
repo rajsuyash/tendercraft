@@ -30,12 +30,12 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TenderCraft AI — Win More Government Tenders with Precision AI",
+  title: "TenderCraft AI: Win More Government Tenders with Precision AI",
   description:
     "Automate the bid lifecycle for Indian government tenders: RFP analysis, compliance " +
     "matrices and cited technical writing, with every claim traced to your own documents.",
   openGraph: {
-    title: "TenderCraft AI — Win More Government Tenders with Precision AI",
+    title: "TenderCraft AI: Win More Government Tenders with Precision AI",
     description:
       "RFP analysis, compliance matrices and cited technical writing for GeM, CPPP and " +
       "state tenders.",

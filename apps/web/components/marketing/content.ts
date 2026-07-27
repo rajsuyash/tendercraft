@@ -34,14 +34,14 @@ export const NAV = [
 ] as const;
 
 export const HERO = {
-  badge: "Next-Gen AI for Public Procurement",
+  badge: "Built for GeM, CPPP and state tenders",
   titleLead: "Win More Government Tenders with",
   titleAccent: "Precision AI",
   // Reworded from "in 80% less time": the comp stated a measured outcome; this states the
   // ambition without asserting a result nobody has measured.
   subtitle:
-    "Automate your entire bid lifecycle — from RFP analysis to compliance matrices and " +
-    "technical writing. Built to cut the weeks that complex government bids consume today.",
+    "Read a 300-page tender, find out whether you qualify before you spend a rupee, and "
+    + "draft the response with every claim traced to a document you already own.",
   primaryCta: "Book a Demo",
   secondaryCta: "Watch Product Tour",
 } as const;
@@ -63,22 +63,22 @@ export const PROBLEMS = {
       icon: "alert",
       title: "Manual Compliance Checks",
       body:
-        "Hours spent reading 500-page RFPs just to check eligibility. Don't let a missed " +
-        "'Appendix C' disqualify you.",
+        "Hours spent reading 500-page RFPs just to check eligibility. One missed Appendix C "
+        + "disqualifies the bid before anyone reads it.",
     },
     {
       icon: "timer",
       title: "Tight Deadlines",
       body:
-        "Struggling to find technical experts and legal teams in time for a midnight " +
-        "submission? We automate the grind.",
+        "Technical experts and legal review, both needed before a midnight portal cutoff, "
+        + "both booked solid.",
     },
     {
       icon: "hidden",
       title: "Missed Opportunities",
       body:
-        "Finding relevant tenders across 20+ portals is a nightmare. Our AI agents monitor " +
-        "GeM and CPP portals for you.",
+        "Twenty portals, each with its own search. The tender you would have won is the one "
+        + "nobody opened.",
     },
   ],
 } as const;
@@ -131,7 +131,7 @@ export const WORKFLOW = {
 } as const;
 
 export const SECTORS = {
-  eyebrow: "Empowering Critical Sectors",
+  eyebrow: "Sectors we are built for",
   items: [
     { icon: "chip", label: "IT & Software" },
     { icon: "shield", label: "Defence" },
@@ -145,13 +145,13 @@ export const SECTORS = {
 /** See the header block. Every value here is a promise to a government buyer. */
 export const CLAIMS = {
   stats: [
-    { value: "Hours", label: "Not weeks, per bid" },
+    { value: "Hours", label: "Per bid, not weeks" },
     { value: "1 pass", label: "Every requirement traced" },
     { value: "0", label: "Uncited claims at export" },
     { value: "100%", label: "Human-approved output" },
   ],
   // Was "ISO 27001 Certified". PRD §9 puts ISO 27001 and SOC 2 on the roadmap.
-  badges: ["ISO 27001 — in progress", "Made in India"],
+  badges: ["ISO 27001 in progress", "Built in India"],
   // Was "Join 200+ companies using TenderCraft AI to dominate the public procurement space."
   closingSubtitle:
     "Built with bid teams who live inside GeM, CPPP and state portals every week.",
@@ -210,8 +210,8 @@ export const CLOSING = {
 
 export const FOOTER = {
   blurb:
-    "The intelligent layer for high-stakes government procurement. Designed for precision, " +
-    "built for winning.",
+    "Reads the tender. Checks whether you qualify. Drafts the response, with a source "
+    + "behind every line.",
   columns: [
     {
       title: "Product",

@@ -240,10 +240,9 @@
 }
 
 .marketing .m-btn-ghost {
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--m-surface);
   color: var(--m-ink);
   border: 1px solid var(--m-outline);
-  backdrop-filter: blur(8px);
 }
 .marketing .m-btn-ghost:hover {
   border-color: var(--m-primary);
