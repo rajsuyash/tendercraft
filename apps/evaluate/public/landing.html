@@ -539,24 +539,177 @@
             © 2024 TenderEvaluate AI. All rights reserved. Built for institutional precision.
         </div>
 </footer>
+<style id="motion-layer">
+/* ── Motion layer ────────────────────────────────────────────────────────────
+   Added on top of the design system. It introduces no colour, spacing or type
+   value of its own — only movement. Every rule is scoped to a data- attribute
+   applied at runtime, so the design markup stays exactly as exported.        */
+
+[data-rise]{opacity:0; transform:translateY(22px);
+  transition:opacity .8s cubic-bezier(.16,1,.3,1), transform .8s cubic-bezier(.16,1,.3,1)}
+[data-rise].is-in{opacity:1; transform:none}
+
+/* cards lift and warm under the cursor */
+[data-lift]{transition:transform .45s cubic-bezier(.32,.72,0,1),
+  box-shadow .45s cubic-bezier(.32,.72,0,1)}
+[data-lift]:hover{transform:translateY(-4px);
+  box-shadow:0 18px 40px -22px rgba(0,32,69,.28)}
+
+[data-spot]{position:relative; isolation:isolate}
+[data-spot]::after{content:''; position:absolute; inset:0; border-radius:inherit;
+  pointer-events:none; z-index:-1; opacity:0; transition:opacity .45s ease;
+  background:radial-gradient(circle 220px at var(--sx,50%) var(--sy,50%),
+    rgba(254,152,50,.13), transparent 68%)}
+[data-spot]:hover::after{opacity:1}
+
+/* the workflow rail arrives in sequence, and the AI node keeps a soft pulse */
+[data-node]{opacity:0; transform:translateY(14px) scale(.94);
+  transition:opacity .6s cubic-bezier(.16,1,.3,1), transform .6s cubic-bezier(.16,1,.3,1)}
+[data-node].is-in{opacity:1; transform:none}
+[data-pulse]{position:relative}
+[data-pulse]::before{content:''; position:absolute; inset:-6px; border-radius:9999px;
+  border:1.5px solid rgba(254,152,50,.5); animation:tc-ring 2.8s cubic-bezier(.32,.72,0,1) infinite}
+@keyframes tc-ring{
+  0%{transform:scale(.9); opacity:.75}
+  70%{transform:scale(1.35); opacity:0}
+  100%{transform:scale(1.35); opacity:0}}
+
+/* nav condenses once you leave the hero */
+header{transition:height .45s cubic-bezier(.32,.72,0,1),
+  box-shadow .45s cubic-bezier(.32,.72,0,1), background-color .45s ease}
+header.is-tucked{box-shadow:0 10px 32px -20px rgba(0,32,69,.5)}
+header.is-tucked nav{height:64px}
+header nav{transition:height .45s cubic-bezier(.32,.72,0,1)}
+
+/* counters hold their box so nothing reflows while they run */
+[data-count]{font-variant-numeric:tabular-nums}
+
+@media (prefers-reduced-motion:reduce){
+  [data-rise],[data-node]{opacity:1!important; transform:none!important}
+  [data-pulse]::before{animation:none}
+  *{transition-duration:.01ms!important}
+}
+</style>
+
 <script>
-        // Simple scroll reveal interaction
-        const observerOptions = {
-            threshold: 0.1
-        };
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $$ = function(sel, root){ return [].slice.call((root||document).querySelectorAll(sel)); };
 
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    entry.target.classList.add('opacity-100', 'translate-y-0');
-                    entry.target.classList.remove('opacity-0', 'translate-y-8');
-                }
-            });
-        }, observerOptions);
+  /* ── 1 · reveal ─────────────────────────────────────────────────────────
+     The exported script set opacity-0 on every glass card and revealed them
+     on intersect — so a stalled script left ten blank cards. This reveals by
+     attribute instead, uses threshold 0 (a fast flick can carry an element
+     through the viewport between callbacks), and sweeps anything already
+     level with the fold. Content appearing always beats the animation.      */
+  var targets = $$('section > div > div > h2, section > div > h2')
+    .concat($$('.glass-card'))
+    .concat($$('section .grid > div'))
+    .concat($$('details'));
+  targets = targets.filter(function(el, i, a){ return a.indexOf(el) === i; });
 
-        document.querySelectorAll('.glass-card').forEach(el => {
-            el.classList.add('transition-all', 'duration-700', 'opacity-0', 'translate-y-8');
-            observer.observe(el);
+  if (reduce || !('IntersectionObserver' in window)) {
+    targets.forEach(function(el){ el.setAttribute('data-rise',''); el.classList.add('is-in'); });
+  } else {
+    targets.forEach(function(el){ el.setAttribute('data-rise',''); });
+    var io = new IntersectionObserver(function(en){
+      en.forEach(function(e, i){
+        if (!e.isIntersecting) return;
+        var el = e.target;
+        setTimeout(function(){ el.classList.add('is-in'); }, Math.min(i, 6) * 70);
+        io.unobserve(el);
+      });
+    }, { threshold: 0, rootMargin: '0px 0px -5% 0px' });
+    targets.forEach(function(el){ io.observe(el); });
+
+    var t;
+    function sweep(){
+      targets.forEach(function(el){
+        if (el.classList.contains('is-in')) return;
+        if (el.getBoundingClientRect().top < innerHeight * 0.95){
+          el.classList.add('is-in'); io.unobserve(el);
+        }
+      });
+    }
+    addEventListener('scroll', function(){ clearTimeout(t); t = setTimeout(sweep, 110); },
+      { passive:true });
+    addEventListener('load', sweep);
+    sweep();
+  }
+
+  /* ── 2 · lift + cursor spotlight on cards ───────────────────────────── */
+  if (!reduce) {
+    var cards = $$('.glass-card').concat($$('.ai-accent-card'))
+      .concat($$('section .grid > div.rounded-2xl'));
+    cards.filter(function(el, i, a){ return a.indexOf(el) === i; })
+      .forEach(function(c){
+        c.setAttribute('data-lift',''); c.setAttribute('data-spot','');
+        c.addEventListener('pointermove', function(e){
+          var r = c.getBoundingClientRect();
+          c.style.setProperty('--sx', (e.clientX - r.left) + 'px');
+          c.style.setProperty('--sy', (e.clientY - r.top) + 'px');
         });
-    </script>
+      });
+  }
+
+  /* ── 3 · workflow rail arrives in sequence ──────────────────────────── */
+  var rail = $$('.w-12.h-12.rounded-full').map(function(d){ return d.parentElement; })
+    .filter(function(el, i, a){ return el && a.indexOf(el) === i; });
+  if (rail.length){
+    if (reduce || !('IntersectionObserver' in window)){
+      rail.forEach(function(el){ el.setAttribute('data-node',''); el.classList.add('is-in'); });
+    } else {
+      rail.forEach(function(el){ el.setAttribute('data-node',''); });
+      var rio = new IntersectionObserver(function(en){
+        en.forEach(function(e){
+          if (!e.isIntersecting) return;
+          rail.forEach(function(el, i){
+            setTimeout(function(){ el.classList.add('is-in'); }, i * 90);
+          });
+          rio.disconnect();
+        });
+      }, { threshold: 0, rootMargin: '0px 0px -10% 0px' });
+      rio.observe(rail[0]);
+      setTimeout(function(){ rail.forEach(function(el){ el.classList.add('is-in'); }); }, 2600);
+    }
+    // the highlighted AI node keeps a slow ring
+    var key = document.querySelector('.bg-primary-container.ring-4');
+    if (key) key.setAttribute('data-pulse','');
+  }
+
+  /* ── 4 · stat counters roll up when the band is reached ─────────────── */
+  var stats = $$('.text-4xl.font-bold.text-secondary-container');
+  stats.forEach(function(el){
+    var raw = el.textContent.trim();
+    var m = raw.match(/^(\d+)(.*)$/);
+    if (!m) return;                       // non-numeric stat, leave it alone
+    var target = parseInt(m[1], 10), suffix = m[2] || '';
+    el.setAttribute('data-count','');
+    if (reduce || !('IntersectionObserver' in window)) return;
+    el.textContent = '0' + suffix;
+    var seen = false;
+    var sio = new IntersectionObserver(function(en){
+      en.forEach(function(e){
+        if (!e.isIntersecting || seen) return;
+        seen = true; sio.disconnect();
+        var t0 = performance.now(), dur = 1100 + target * 3;
+        (function step(now){
+          var k = Math.min(1, (now - t0) / dur);
+          var eased = 1 - Math.pow(1 - k, 3);          // ease-out cubic
+          el.textContent = Math.round(target * eased) + suffix;
+          if (k < 1) requestAnimationFrame(step);
+          else el.textContent = target + suffix;        // land exactly on the real figure
+        })(t0);
+      });
+    }, { threshold: .6 });
+    sio.observe(el);
+  });
+
+  /* ── 5 · nav condenses past the hero ────────────────────────────────── */
+  var hdr = document.querySelector('header');
+  if (hdr) addEventListener('scroll', function(){
+    hdr.classList.toggle('is-tucked', scrollY > 60);
+  }, { passive:true });
+})();
+</script>
 </body></html>
