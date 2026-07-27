@@ -2,16 +2,22 @@
  * Landing-page design language — DELIBERATELY SEPARATE from the product's tokens.
  *
  * docs/DESIGN_SPEC.md §G lists marketing pages as a design non-goal, and §C's Apple-HIG
- * tokens govern the product screens (S1–S18). The designer's landing comp is a different
- * language on purpose: Geist/Inter/JetBrains Mono, a deeper enterprise blue, a saffron
- * accent, glassmorphic cards.
+ * tokens govern the product screens (S1–S18). Everything below is scoped under `.marketing`,
+ * so none of it can reach an app screen — that scoping IS the compliance with the design
+ * contract. One stray global would repaint the product with marketing colours and the token
+ * rule in docs/conventions.md would quietly stop being true.
  *
- * Every value below is scoped under `.marketing`, so none of it can reach an app screen. That
- * scoping IS the compliance with the design contract — without it, one stray global would
- * repaint the product with marketing colours and the token rule in docs/conventions.md would
- * quietly stop being true.
+ * Design system: "Enterprise Gateway" pattern / "Trust & Authority" style. Trust blue with a
+ * saffron accent used sparingly for AI + premium signals. Explicitly avoided per that
+ * system's anti-patterns: playful shapes, and the purple/pink "AI gradient" every other tool
+ * in this category uses.
  *
- * Values come from the designer's DESIGN.md front-matter.
+ * MOTION POLICY. Animation is here to direct attention, not to perform. Guidelines applied:
+ * one or two animated elements per viewport (never everything at once), ease-out for
+ * entrances, 150–300ms for micro-interactions, transform/opacity only (never width/height or
+ * top/left, which force layout on every frame), and every single effect collapses under
+ * `prefers-reduced-motion` at the bottom of this file. No scroll-jacking and no parallax:
+ * both cause motion sickness, and this audience reads long documents for a living.
  */
 
 .marketing {
@@ -24,34 +30,39 @@
   --m-ink: #131b2e;
   --m-ink-soft: #434654;
   --m-outline: #c3c6d6;
+  --m-hairline: #e6e8f5;
 
   --m-primary: #0052cc;
   --m-primary-deep: #003d9b;
   --m-on-primary: #ffffff;
   --m-primary-soft: #dae2ff;
 
-  --m-accent: #ff9933; /* saffron — AI/premium signal only, never a status colour */
+  --m-accent: #ff9933;
   --m-accent-ink: #8f4e00;
   --m-accent-soft: #ffdcc2;
 
-  --m-inverse: #283044;
+  --m-inverse: #101728;
   --m-on-inverse: #eef0ff;
 
-  --m-radius: 0.5rem;
-  --m-radius-md: 0.75rem;
-  --m-radius-lg: 1rem;
-  --m-radius-xl: 1.5rem;
+  --m-radius: 0.625rem;
+  --m-radius-md: 0.875rem;
+  --m-radius-lg: 1.25rem;
+  --m-radius-xl: 1.75rem;
 
-  /* Ambient shadows: soft, multi-layered, blue-tinted and low opacity. A single hard shadow
-     reads as Material; these read as layers of light, which is what DESIGN.md asks for. */
+  /* Ambient shadows — soft, layered, blue-tinted, low opacity. A single hard shadow reads as
+     Material; these read as layers of light. */
   --m-shadow-sm: 0 1px 2px rgba(0, 82, 204, 0.05), 0 2px 8px rgba(0, 82, 204, 0.04);
   --m-shadow: 0 2px 4px rgba(0, 82, 204, 0.05), 0 12px 32px rgba(0, 82, 204, 0.07);
-  --m-shadow-lg: 0 4px 8px rgba(0, 82, 204, 0.06), 0 24px 56px rgba(0, 82, 204, 0.10);
+  --m-shadow-lg: 0 4px 8px rgba(0, 82, 204, 0.06), 0 28px 64px rgba(0, 82, 204, 0.12);
+
+  --m-ease: cubic-bezier(0.16, 1, 0.3, 1);
 
   background: var(--m-bg);
   color: var(--m-ink);
   font-family: var(--font-marketing-body), ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px; /* 16px floor on mobile — smaller body text triggers iOS zoom on focus */
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
 }
 
 .marketing h1,
@@ -59,92 +70,236 @@
 .marketing h3,
 .marketing .m-display {
   font-family: var(--font-marketing-display), ui-sans-serif, system-ui, sans-serif;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
 }
 
-/* JetBrains Mono marks system-generated data and micro-labels — the signal that separates
-   machine output from human prose throughout this product. */
+.marketing p {
+  line-height: 1.65; /* 1.5–1.75 for body */
+}
+
 .marketing .m-label {
   font-family: var(--font-marketing-mono), ui-monospace, monospace;
   font-size: 11px;
   font-weight: 500;
-  line-height: 14px;
-  letter-spacing: 0.06em;
+  line-height: 1.3;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .marketing .m-shell {
   margin-inline: auto;
   width: 100%;
-  max-width: 1200px;
+  max-width: 1180px;
   padding-inline: 24px;
 }
 
 @media (max-width: 767px) {
-  .marketing .m-shell {
-    padding-inline: 16px;
-  }
+  .marketing .m-shell { padding-inline: 20px; }
 }
 
-/* Glassmorphic chrome — sticky header only. Frosting a dense content card costs contrast for
-   no gain, the same call the product's own token spec makes. */
+/* Measure control: 65–75ch keeps long paragraphs readable. */
+.marketing .m-measure { max-width: 62ch; }
+
+/* ─── Aurora field ────────────────────────────────────────────────────────────────────
+   Three slow, overlapping radial washes. Pure CSS on a fixed-size layer, animated with
+   transform only, so it composites on the GPU and never triggers layout. A canvas mesh
+   would look similar and cost a rAF loop for the life of the page. */
+.marketing .m-aurora {
+  position: absolute;
+  inset: -30% -10% auto -10%;
+  height: 90vh;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(72px);
+  opacity: 0.55;
+}
+
+.marketing .m-aurora span {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+.marketing .m-aurora span:nth-child(1) {
+  width: 46vw; height: 46vw; left: 8%; top: 12%;
+  background: radial-gradient(circle, rgba(0, 82, 204, 0.5), transparent 68%);
+  animation: m-drift-a 22s var(--m-ease) infinite alternate;
+}
+.marketing .m-aurora span:nth-child(2) {
+  width: 38vw; height: 38vw; right: 6%; top: 4%;
+  background: radial-gradient(circle, rgba(255, 153, 51, 0.32), transparent 68%);
+  animation: m-drift-b 26s var(--m-ease) infinite alternate;
+}
+.marketing .m-aurora span:nth-child(3) {
+  width: 42vw; height: 42vw; left: 34%; top: 30%;
+  background: radial-gradient(circle, rgba(122, 156, 255, 0.42), transparent 70%);
+  animation: m-drift-c 30s var(--m-ease) infinite alternate;
+}
+
+@keyframes m-drift-a { to { transform: translate3d(6%, 8%, 0) scale(1.12); } }
+@keyframes m-drift-b { to { transform: translate3d(-8%, 6%, 0) scale(1.08); } }
+@keyframes m-drift-c { to { transform: translate3d(4%, -7%, 0) scale(0.92); } }
+
+/* Faint engineering grid — signals "precision instrument" without decoration. */
+.marketing .m-grid-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(19, 27, 46, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(19, 27, 46, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 78%);
+}
+
+/* ─── Scroll reveal ───────────────────────────────────────────────────────────────────
+   Opacity + a 14px lift. The element is visible by default and the JS adds `is-hidden`
+   only after confirming IntersectionObserver support — so with JS disabled or broken the
+   content still renders, rather than staying invisible forever. */
+.marketing .m-reveal {
+  transition: opacity 700ms var(--m-ease), transform 700ms var(--m-ease);
+  transition-delay: var(--m-delay, 0ms);
+}
+.marketing .m-reveal.is-hidden {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+}
+
+/* ─── Chrome ─────────────────────────────────────────────────────────────────────────── */
 .marketing .m-glass {
-  background: rgba(250, 248, 255, 0.78);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background: rgba(250, 248, 255, 0.72);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
 }
 
 .marketing .m-card {
+  position: relative;
   background: var(--m-surface);
-  border: 1px solid var(--m-outline);
-  border-radius: var(--m-radius-xl);
+  border: 1px solid var(--m-hairline);
+  border-radius: var(--m-radius-lg);
   box-shadow: var(--m-shadow-sm);
+  transition: transform 220ms var(--m-ease), box-shadow 220ms var(--m-ease),
+    border-color 220ms var(--m-ease);
 }
 
+/* Lift on hover — transform only, so neighbours never reflow and nothing shifts under the
+   cursor mid-click. */
+.marketing .m-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--m-shadow-lg);
+  border-color: var(--m-primary-soft);
+}
+
+/* Spotlight: a radial highlight tracking the pointer, driven by two CSS variables the JS
+   sets. Cheap — no re-render, no layout, one composited paint. */
+.marketing .m-spot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle 240px at var(--mx, 50%) var(--my, 50%),
+    rgba(0, 82, 204, 0.07),
+    transparent 65%
+  );
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+.marketing .m-spot:hover::before { opacity: 1; }
+
+/* ─── Buttons ────────────────────────────────────────────────────────────────────────── */
 .marketing .m-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  min-height: 44px; /* 44px minimum touch target */
   border-radius: var(--m-radius);
   padding: 0.75rem 1.5rem;
   font-size: 15px;
   font-weight: 600;
-  transition: transform 150ms cubic-bezier(0.32, 0.72, 0, 1),
-    box-shadow 150ms cubic-bezier(0.32, 0.72, 0, 1), background-color 150ms ease;
+  cursor: pointer;
+  transition: transform 180ms var(--m-ease), box-shadow 180ms var(--m-ease),
+    background-color 180ms ease, color 180ms ease, border-color 180ms ease;
 }
 
 .marketing .m-btn-primary {
   background: var(--m-primary);
   color: var(--m-on-primary);
-  box-shadow: var(--m-shadow-sm);
+  box-shadow: 0 1px 2px rgba(0, 61, 155, 0.28), 0 8px 24px rgba(0, 82, 204, 0.24);
 }
-
 .marketing .m-btn-primary:hover {
   background: var(--m-primary-deep);
-  box-shadow: var(--m-shadow);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(0, 61, 155, 0.3), 0 14px 34px rgba(0, 82, 204, 0.3);
 }
 
 .marketing .m-btn-ghost {
-  background: var(--m-surface);
+  background: rgba(255, 255, 255, 0.7);
   color: var(--m-ink);
   border: 1px solid var(--m-outline);
+  backdrop-filter: blur(8px);
 }
-
 .marketing .m-btn-ghost:hover {
   border-color: var(--m-primary);
   color: var(--m-primary);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
-/* Every interactive element keeps a visible focus ring — the product's accessibility
-   baseline (DESIGN_SPEC §F) applies to the front door too. */
+/* ─── Marquee ────────────────────────────────────────────────────────────────────────
+   Constant speed, duplicated track, translateX only. The reference component varied speed
+   with scroll velocity; that needs a scroll listener running every frame and it fights the
+   user's own scrolling. Not worth it on a page people came here to read. */
+.marketing .m-marquee { overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+.marketing .m-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: m-scroll 38s linear infinite;
+  will-change: transform;
+}
+.marketing .m-marquee:hover .m-marquee-track { animation-play-state: paused; }
+@keyframes m-scroll { to { transform: translate3d(-50%, 0, 0); } }
+
+/* ─── Odometer ───────────────────────────────────────────────────────────────────────
+   A vertical strip of 0–9 per digit, translated to the target. Ported from the reference
+   component off GSAP onto a CSS transition + IntersectionObserver: same effect, no
+   animation dependency added to the bundle. */
+.marketing .m-odo { display: inline-flex; align-items: stretch; overflow: hidden; height: 1.06em; line-height: 1.06; }
+/* Non-digit characters (%, +, spaces, "pass") must share the digit strip's exact box height,
+   or they sit on a different baseline and the number looks broken — "1" floating above
+   "pass". Same height, same line-height, one row. */
+.marketing .m-odo-char { display: block; height: 1.06em; line-height: 1.06; white-space: pre; }
+.marketing .m-odo-digit { display: block; overflow: hidden; height: 1.06em; }
+.marketing .m-odo-strip {
+  display: flex;
+  flex-direction: column;
+  transform: translateY(0);
+  transition: transform 1400ms var(--m-ease);
+  transition-delay: var(--m-delay, 0ms);
+}
+.marketing .m-odo-strip span { display: block; height: 1.06em; line-height: 1.06; }
+
+/* ─── Focus ──────────────────────────────────────────────────────────────────────────
+   Visible ring on every interactive element (DESIGN_SPEC §F applies to the front door too). */
 .marketing a:focus-visible,
 .marketing button:focus-visible {
   outline: 2px solid var(--m-primary);
-  outline-offset: 2px;
+  outline-offset: 3px;
   border-radius: var(--m-radius);
+}
+
+/* ─── Reduced motion ─────────────────────────────────────────────────────────────────
+   Everything above collapses. Reveals resolve to their final state rather than staying
+   hidden — a reduced-motion user must never lose content. */
+/* Print must never lose content to an animation that has not run. */
+@media print {
+  .marketing .m-reveal.is-hidden { opacity: 1 !important; transform: none !important; }
+  .marketing .m-aurora { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -152,7 +307,11 @@
   .marketing *::before,
   .marketing *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  .marketing .m-reveal.is-hidden { opacity: 1; transform: none; }
+  .marketing .m-aurora { animation: none; }
+  .marketing .m-marquee-track { animation: none; }
 }
