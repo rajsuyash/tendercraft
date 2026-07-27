@@ -1,0 +1,17 @@
+{
+  "name": "tendercraft-video",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Remotion source for the TenderCraft product demo. Deliberately OUTSIDE the pnpm workspace: the video toolchain (React 19 + Remotion + a headless Chrome for rendering) has no business in the web app's dependency graph or its production build.",
+  "scripts": {
+    "dev": "remotion studio",
+    "render": "remotion render Demo ../apps/web/public/tendercraft-demo.mp4 --codec h264"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.410",
+    "remotion": "4.0.410",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": { "typescript": "5.9.3", "@types/react": "19.2.2" }
+}

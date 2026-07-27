@@ -114,7 +114,7 @@ export function Hero() {
               {HERO.primaryCta}
               <Icon name="arrow" size={17} />
             </Link>
-            <Link href="#workflow" className="m-btn m-btn-ghost">
+            <Link href="#tour" className="m-btn m-btn-ghost">
               <Icon name="play" size={18} />
               {HERO.secondaryCta}
             </Link>
@@ -239,6 +239,54 @@ export function ProductShot() {
           </div>
         </Reveal>
       </div>
+    </section>
+  );
+}
+
+/**
+ * The product tour.
+ *
+ * `preload="none"` is the load-bearing attribute: the file is 2.6 MB, and most visitors will
+ * never press play. Preloading it would spend their bandwidth and hurt the page's largest
+ * contentful paint to serve a minority. The poster frame is a 97 kB still, so the section
+ * looks finished before a single byte of video moves.
+ *
+ * Native <video controls> rather than a custom player: keyboard control, captions, picture-in
+ * -picture, and playback speed all come free and correct, and no one has ever thanked a
+ * marketing site for its bespoke scrubber.
+ */
+export function Tour() {
+  return (
+    <section id="tour" className="m-shell scroll-mt-24 py-24">
+      <Reveal>
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="text-[2rem] font-semibold md:text-[2.5rem]">Watch it read a real tender</h2>
+          <p className="mt-4 text-[15px]" style={{ color: "var(--m-ink-soft)" }}>
+            Fifty-five seconds, on a published NABARD tender. No mockups.
+          </p>
+        </div>
+      </Reveal>
+
+      <Reveal delay={100}>
+        <div
+          className="mt-10 overflow-hidden rounded-[var(--m-radius-lg)] border"
+          style={{ borderColor: "var(--m-hairline)", boxShadow: "var(--m-shadow-lg)" }}
+        >
+          <video
+            className="block h-auto w-full"
+            controls
+            preload="none"
+            playsInline
+            poster="/tendercraft-demo-poster.jpg"
+            width={1600}
+            height={900}
+          >
+            <source src="/tendercraft-demo.mp4" type="video/mp4" />
+            Your browser cannot play this video.{" "}
+            <a href="/tendercraft-demo.mp4">Download it instead.</a>
+          </video>
+        </div>
+      </Reveal>
     </section>
   );
 }
