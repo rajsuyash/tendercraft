@@ -2,6 +2,8 @@
 
 The **product PRD is [`../tendercraft-PRD.md`](../tendercraft-PRD.md)** — read it for modules A–E, ACs, guardrails, edge cases. It is sha-pinned by `docs/DESIGN_SPEC.md` §I and must never be edited by an agent (propose edits to the human).
 
+**Extension PRD:** [`../tendercraft-discovery-PRD.md`](../tendercraft-discovery-PRD.md) — modules F (opportunity discovery/monitoring) and G (requirement traceability + answer reuse), plus the Module C triage delta. Extends the base PRD; does not replace it. Not yet scheduled into §5 below (its own build sequence is PH4a–e).
+
 This file supplies the execution-layer sections a prd-builder v3 PRD would carry. Stubs marked `TODO:` need human input — recommend running **prd-builder in Upgrade mode** to fill them properly.
 
 ## §0 Agent contract

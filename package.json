@@ -15,6 +15,7 @@
     "lint:evaluate": "pnpm --filter @tendercraft/evaluate lint",
     "test:evaluate": "pnpm --filter @tendercraft/evaluate test",
     "seed:evaluate": "pnpm --filter @tendercraft/evaluate seed",
-    "wall": "./tools/check-wall.sh"
+    "wall": "./tools/check-wall.sh",
+    "guardrails": "./tools/check-discovery-guardrails.sh"
   }
 }

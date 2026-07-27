@@ -26,6 +26,19 @@ jobs:
       - name: wall check (F13-AC1..3)
         run: ./tools/check-wall.sh
 
+  discovery-guardrails:
+    name: G-8/G-9/G-10 discovery guardrails (CI-blocking)
+    runs-on: ubuntu-latest
+    # Ships before the first source adapter and skips cleanly until app/discovery exists —
+    # same reasoning as the wall job above. Module F is the only part of this product that
+    # reaches systems we do not own, so its failure mode is legal rather than functional:
+    # a login added "just to unblock pagination" turns a public-page reader into a
+    # credentialed scraper. Verified against nine planted breaches before being trusted.
+    steps:
+      - uses: actions/checkout@v4
+      - name: discovery guardrails (G-8..G-10)
+        run: ./tools/check-discovery-guardrails.sh
+
   engine:
     name: engine (unit + gates)
     runs-on: ubuntu-latest

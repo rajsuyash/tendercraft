@@ -14,6 +14,14 @@ AI-native SaaS for Indian procurement: converts tender documents (GeM/CPPP/state
 The evaluate subtrees carry their own `CLAUDE.md`, which loads automatically when you work in
 them and **overrides this file where they differ**. Its docs live in `docs/evaluate/`.
 
+**Modules F and G (discovery, triage, traceability) are NOT a third product.** They extend the
+bidder surfaces above — `apps/web` + `services/engine`, same database, no new CLAUDE.md. Product
+truth: `tendercraft-discovery-PRD.md`; execution layer and docs: `docs/discovery/`; verifier:
+`/verify-discovery`. Module F reaches third-party portals, so `./tools/check-discovery-guardrails.sh`
+(`pnpm guardrails`) is CI-blocking on every push and ships before the first adapter: **no
+authenticated acquisition (G-8), no model-driven exclusion from the feed (G-9), no unguarded
+fetch (G-10)**. It skips cleanly until `services/engine/app/discovery/` exists.
+
 **The wall (F13).** We sell a tool that helps bidders win and a tool that scores those bids for
 the buyer. They may share design tokens, CI patterns and container patterns. They share **no
 data, no database, no credential, and no data-access code** — that separation is the product's
