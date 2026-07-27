@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+
+<html class="scroll-smooth" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TenderEvaluate AI | Precision Procurement Intelligence</title>
+<meta content="Revolutionizing government tender evaluation with AI-driven compliance, scoring, and analysis." name="description"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Geist:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+        }
+        .ai-accent-card {
+            border-left: 4px solid #fe9832;
+            background: linear-gradient(to right, rgba(255, 153, 51, 0.05), transparent);
+        }
+        .hero-gradient {
+            background: radial-gradient(circle at 50% -20%, #d6e3ff 0%, #f7f9fb 60%);
+        }
+        .step-line::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 100%;
+            width: 2rem;
+            height: 2px;
+            background: #cbd5e1;
+            display: none;
+        }
+        @media (min-width: 768px) {
+            .step-line::after { display: block; }
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-fixed-variant": "#2d476f",
+                        "surface-container": "#eceef0",
+                        "on-error": "#ffffff",
+                        "surface-container-high": "#e6e8ea",
+                        "outline": "#74777f",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#d6e3ff",
+                        "on-secondary-fixed": "#2e1500",
+                        "secondary-fixed": "#ffdcc2",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-fixed-variant": "#38485d",
+                        "on-primary-container": "#86a0cd",
+                        "primary-container": "#1a365d",
+                        "secondary-fixed-dim": "#ffb77a",
+                        "on-error-container": "#93000a",
+                        "surface": "#f7f9fb",
+                        "inverse-on-surface": "#eff1f3",
+                        "on-secondary": "#ffffff",
+                        "surface-container-highest": "#e0e3e5",
+                        "tertiary": "#112235",
+                        "surface-variant": "#e0e3e5",
+                        "on-secondary-container": "#683700",
+                        "inverse-primary": "#adc7f7",
+                        "surface-bright": "#f7f9fb",
+                        "error": "#ba1a1a",
+                        "on-surface-variant": "#43474e",
+                        "surface-dim": "#d8dadc",
+                        "on-secondary-fixed-variant": "#6d3a00",
+                        "primary-fixed-dim": "#adc7f7",
+                        "secondary-container": "#fe9832",
+                        "on-background": "#191c1e",
+                        "on-tertiary-fixed": "#0b1c30",
+                        "secondary": "#8f4e00",
+                        "surface-container-low": "#f2f4f6",
+                        "on-tertiary-container": "#90a0b9",
+                        "surface-tint": "#455f88",
+                        "primary": "#002045",
+                        "on-tertiary": "#ffffff",
+                        "outline-variant": "#c4c6cf",
+                        "tertiary-fixed": "#d3e4fe",
+                        "on-primary-fixed": "#001b3c",
+                        "inverse-surface": "#2d3133",
+                        "on-surface": "#191c1e",
+                        "tertiary-fixed-dim": "#b7c8e1",
+                        "error-container": "#ffdad6",
+                        "background": "#f7f9fb",
+                        "tertiary-container": "#27374b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-desktop": "48px",
+                        "unit-md": "16px",
+                        "gutter": "24px",
+                        "margin-mobile": "16px",
+                        "unit-lg": "24px",
+                        "unit-xs": "4px",
+                        "container-max": "1440px",
+                        "unit-sm": "8px",
+                        "unit-xl": "48px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Geist"],
+                        "body-lg": ["Inter"],
+                        "headline-xl": ["Geist"],
+                        "headline-lg-mobile": ["Geist"],
+                        "code-sm": ["Geist"],
+                        "body-md": ["Inter"],
+                        "label-md": ["Geist"],
+                        "headline-lg": ["Geist"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["20px", {"lineHeight": "1.4", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-lg": ["16px", {"lineHeight": "1.6", "letterSpacing": "0.01em", "fontWeight": "400"}],
+                        "headline-xl": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "700"}],
+                        "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "code-sm": ["13px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0.01em", "fontWeight": "400"}],
+                        "label-md": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "headline-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.03em", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background font-body-md text-on-surface">
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full z-50 backdrop-blur-xl border-b border-outline-variant/20 bg-surface/70 shadow-sm">
+<nav class="flex justify-between items-center max-w-container-max mx-auto px-margin-desktop h-20">
+<div class="font-headline-md text-headline-md font-bold text-primary">TenderEvaluate AI</div>
+<div class="hidden md:flex gap-unit-xl items-center">
+<a class="text-primary border-b-2 border-secondary-container pb-1 font-body-md" href="#">Solutions</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#">Industries</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#">Resources</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors font-body-md" href="#">Pricing</a>
+</div>
+<div class="flex gap-unit-md items-center">
+<a href="/login" class="px-unit-lg py-2 rounded-lg text-primary font-semibold hover:bg-surface-container-low transition-all inline-flex items-center">Sign In</a>
+<a href="/login" class="px-unit-lg py-3 rounded-lg bg-primary text-white font-bold shadow-lg hover:scale-105 active:scale-95 transition-all inline-flex items-center">Get Started</a>
+</div>
+</nav>
+</header>
+<main class="pt-20 overflow-x-hidden">
+<!-- Hero Section -->
+<section class="relative hero-gradient pt-unit-xl pb-24 overflow-hidden">
+<div class="max-w-container-max mx-auto px-margin-desktop text-center">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary-container/10 border border-secondary-container/20 text-secondary mb-unit-lg animate-pulse">
+<span class="material-symbols-outlined text-[16px]">bolt</span>
+<span class="text-label-md font-semibold">NEW: GEN-AI POWERED EVALUATION V2.0</span>
+</div>
+<h1 class="font-headline-xl text-headline-xl text-primary max-w-4xl mx-auto mb-unit-md">
+                    Transform Government Tender Evaluation with AI
+                </h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto mb-unit-xl">
+                    Read hundreds of complex bids in minutes. Compliance is computed in code, every mark belongs to a named evaluator, and financial envelopes stay sealed until technical scores are locked.
+                </p>
+<div class="flex flex-col sm:flex-row gap-unit-md justify-center mb-24">
+<a href="mailto:hello@tendercraft.in?subject=TenderCraft%20Evaluate%20pilot" class="px-10 py-4 rounded-xl bg-primary text-white font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all inline-flex items-center justify-center">Request Demo</a>
+<a href="#workflow" class="px-10 py-4 rounded-xl glass-card text-primary font-bold text-lg hover:bg-white transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">play_circle</span> See the workflow
+                    </a>
+</div>
+<!-- Workflow Visual -->
+<div class="relative max-w-6xl mx-auto">
+<div class="grid grid-cols-2 md:grid-cols-7 gap-unit-md">
+<div class="flex flex-col items-center gap-2 group">
+<div class="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined">publish</span>
+</div>
+<span class="text-label-md text-on-surface-variant">Publication</span>
+</div>
+<div class="flex flex-col items-center gap-2 group">
+<div class="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined">description</span>
+</div>
+<span class="text-label-md text-on-surface-variant">Bid Submission</span>
+</div>
+<div class="flex flex-col items-center gap-2 group">
+<div class="w-12 h-12 rounded-full bg-primary-container text-white shadow-lg flex items-center justify-center group-hover:scale-110 transition-transform ring-4 ring-primary-fixed">
+<span class="material-symbols-outlined">psychology</span>
+</div>
+<span class="text-label-md font-bold text-primary">AI Analysis</span>
+</div>
+<div class="flex flex-col items-center gap-2 group">
+<div class="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined">verified</span>
+</div>
+<span class="text-label-md text-on-surface-variant">Compliance</span>
+</div>
+<div class="flex flex-col items-center gap-2 group">
+<div class="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined">analytics</span>
+</div>
+<span class="text-label-md text-on-surface-variant">Scoring</span>
+</div>
+<div class="flex flex-col items-center gap-2 group">
+<div class="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined">groups</span>
+</div>
+<span class="text-label-md text-on-surface-variant">Committee</span>
+</div>
+<div class="flex flex-col items-center gap-2 group">
+<div class="w-12 h-12 rounded-full bg-secondary-container text-white shadow-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined">check_circle</span>
+</div>
+<span class="text-label-md text-on-surface-variant">Approval</span>
+</div>
+</div>
+<div class="absolute top-6 left-0 right-0 h-[2px] bg-outline-variant/30 -z-10 hidden md:block"></div>
+</div>
+</div>
+</section>
+<!-- Problem Section -->
+<section class="py-24 bg-white">
+<div class="max-w-container-max mx-auto px-margin-desktop">
+<div class="text-center mb-16">
+<h2 class="font-headline-lg text-headline-lg text-primary mb-4">The Status Quo is Costing You</h2>
+<p class="font-body-lg text-on-surface-variant">Traditional evaluation methods are manual, slow, and prone to error.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-unit-md">
+<div class="p-unit-lg rounded-xl glass-card hover:border-error/30 transition-all group">
+<span class="material-symbols-outlined text-error mb-4 group-hover:scale-110 transition-transform">folder_open</span>
+<h3 class="font-headline-md text-headline-md mb-2">Hundreds of documents</h3>
+<p class="text-body-md text-on-surface-variant">Sifting through thousands of pages across multiple bids is physically exhausting.</p>
+</div>
+<div class="p-unit-lg rounded-xl glass-card hover:border-error/30 transition-all group">
+<span class="material-symbols-outlined text-error mb-4 group-hover:scale-110 transition-transform">assignment_late</span>
+<h3 class="font-headline-md text-headline-md mb-2">Manual compliance</h3>
+<p class="text-body-md text-on-surface-variant">Missing a single mandatory document leads to legal disputes and re-tendering.</p>
+</div>
+<div class="p-unit-lg rounded-xl glass-card hover:border-error/30 transition-all group">
+<span class="material-symbols-outlined text-error mb-4 group-hover:scale-110 transition-transform">timer</span>
+<h3 class="font-headline-md text-headline-md mb-2">Lengthy evaluations</h3>
+<p class="text-body-md text-on-surface-variant">Technical reviews take months, delaying critical national infrastructure projects.</p>
+</div>
+<div class="p-unit-lg rounded-xl glass-card hover:border-error/30 transition-all group">
+<span class="material-symbols-outlined text-error mb-4 group-hover:scale-110 transition-transform">balance</span>
+<h3 class="font-headline-md text-headline-md mb-2">Inconsistent scoring</h3>
+<p class="text-body-md text-on-surface-variant">Subjective bias among different reviewers leads to unfair award recommendations.</p>
+</div>
+<div class="p-unit-lg rounded-xl glass-card hover:border-error/30 transition-all group">
+<span class="material-symbols-outlined text-error mb-4 group-hover:scale-110 transition-transform">history_edu</span>
+<h3 class="font-headline-md text-headline-md mb-2">Audit challenges</h3>
+<p class="text-body-md text-on-surface-variant">Difficulty in tracing the rationale behind every point awarded during audits.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Solution Section -->
+<section id="workflow" class="py-24 bg-surface relative overflow-hidden">
+
+<div class="max-w-container-max mx-auto px-margin-desktop relative z-10">
+<div class="flex flex-col lg:flex-row items-center gap-unit-xl">
+<div class="lg:w-1/2">
+<h2 class="font-headline-lg text-headline-lg text-primary mb-6">AI-Powered Precision Workflow</h2>
+<div class="space-y-unit-lg">
+<div class="flex gap-4 p-4 rounded-xl hover:bg-white transition-colors cursor-default border border-transparent hover:border-outline-variant/30">
+<div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center shrink-0">1</div>
+<div>
+<h4 class="font-headline-md">Upload &amp; Ingest</h4>
+<p class="text-on-surface-variant">Securely upload tender and bid documents in any format (PDF, Excel, Docx).</p>
+</div>
+</div>
+<div class="flex gap-4 p-4 rounded-xl bg-white shadow-sm border border-secondary-container/20 cursor-default">
+<div class="w-10 h-10 rounded-full bg-secondary-container text-white flex items-center justify-center shrink-0">2</div>
+<div>
+<h4 class="font-headline-md text-secondary">AI Extraction</h4>
+<p class="text-on-surface-variant">RAG-powered analysis extracts key technical specs, financial figures, and compliance clauses.</p>
+</div>
+</div>
+<div class="flex gap-4 p-4 rounded-xl hover:bg-white transition-colors cursor-default border border-transparent hover:border-outline-variant/30">
+<div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center shrink-0">3</div>
+<div>
+<h4 class="font-headline-md">Compute, then confirm</h4>
+<p class="text-on-surface-variant">Numeric, date and yes/no criteria are decided by comparison in code. Qualitative marks are recorded by named evaluators, blind first.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="lg:w-1/2">
+<div class="rounded-2xl overflow-hidden shadow-2xl glass-card p-4">
+<img class="w-full rounded-lg" data-alt="A clean, high-fidelity UI dashboard showing an AI evaluation process for a government tender. The screen features split views with bid documents on the left and a structured AI analysis matrix on the right. Colors are professional navy and saffron. High-quality lighting and 3D depth effects." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDorNOHOvEyef1QuTjy9YfhjEr3Riv39AHcHGwvgT4wfIs7OVEb4tL_HYqsETTrDkrG4JTCK-yHRlnQ_wwxhrANW_BVRGqi45ZekGVFJ-5KKpkD1rvmYQzJUexvsE3anAwaEcKHm9to8-C1KPnXFf718cMhkVlbzt0-9ajQ9Hjuy1LYRVnPLlLv77mZHo8yIdHsSZMkhSVsZlltlclj-s-7fr_va4yVuKionaqTxrnkz9uxQ5Kx-EHWN5iSWcHUf5fYdhdcsohdi5w"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Feature Grid (Bento) -->
+<section class="py-24 bg-white">
+<div class="max-w-container-max mx-auto px-margin-desktop">
+<h2 class="font-headline-lg text-headline-lg text-primary text-center mb-16">Enterprise Features for Institutional Precision</h2>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- Feature 1 -->
+<div class="md:col-span-8 p-unit-lg rounded-2xl glass-card hover:shadow-xl transition-all relative overflow-hidden group">
+<div class="relative z-10">
+<span class="material-symbols-outlined text-primary text-4xl mb-4">analytics</span>
+<h3 class="font-headline-lg text-headline-lg mb-4">AI Proposal Analysis</h3>
+<p class="text-body-lg text-on-surface-variant max-w-lg">Advanced LLMs read through 500+ page proposals to cross-verify claims against technical specifications automatically.</p>
+</div>
+<div class="absolute bottom-0 right-0 w-1/2 h-full opacity-10 group-hover:scale-110 transition-transform">
+
+</div>
+</div>
+<!-- Feature 2 -->
+<div class="md:col-span-4 p-unit-lg rounded-2xl bg-primary text-white hover:shadow-xl transition-all flex flex-col justify-between">
+<div>
+<span class="material-symbols-outlined text-4xl mb-4 text-secondary-container">rule</span>
+<h3 class="font-headline-md text-headline-md mb-2">Compliance Matrix</h3>
+<p class="text-sm opacity-80">Mandatory documents mapped across every bidder — never marked missing while a file is still unmatched.</p>
+</div>
+<div class="mt-8 border-t border-white/20 pt-4 flex justify-between items-center">
+<span class="text-label-md">Computed, not scored</span>
+<span class="material-symbols-outlined">arrow_forward</span>
+</div>
+</div>
+<!-- Feature 3 -->
+<div class="md:col-span-4 p-unit-lg rounded-2xl border border-outline-variant/30 hover:border-primary transition-all group">
+<span class="material-symbols-outlined text-primary mb-4">score</span>
+<h3 class="font-headline-md text-headline-md mb-2">Blind-first scoring</h3>
+<p class="text-body-md text-on-surface-variant">Each member records their own mark before any AI second opinion is revealed. Both are retained, and the deference rate is reported.</p>
+</div>
+<!-- Feature 4 -->
+<div class="md:col-span-4 p-unit-lg rounded-2xl ai-accent-card shadow-sm hover:shadow-md transition-all">
+<span class="material-symbols-outlined text-secondary mb-4">gpp_maybe</span>
+<h3 class="font-headline-md text-headline-md mb-2">Variance, surfaced</h3>
+<p class="text-body-md text-on-surface-variant">Where members disagree beyond the threshold the mean does not stand. The chair records an agreed mark and the reason for it.</p>
+</div>
+<!-- Feature 5 -->
+<div class="md:col-span-4 p-unit-lg rounded-2xl border border-outline-variant/30 hover:border-primary transition-all">
+<span class="material-symbols-outlined text-primary mb-4">forum</span>
+<h3 class="font-headline-md text-headline-md mb-2">Committee Workspace</h3>
+<p class="text-body-md text-on-surface-variant">A unified dashboard for the technical committee to review, comment, and finalize scores.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- AI Capabilities & Security (Dark Integration) -->
+<section class="py-24 bg-primary text-white overflow-hidden relative">
+
+<div class="max-w-container-max mx-auto px-margin-desktop relative z-10">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-unit-xl items-center">
+<div>
+<h2 class="font-headline-xl text-headline-xl mb-unit-lg">Built for Indian Institutional Security</h2>
+<div class="space-y-6">
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-secondary-container">verified_user</span>
+<div>
+<h4 class="font-headline-md">Sealed bids, actually sealed</h4>
+<p class="text-sm opacity-70">Prices are unreachable until technical lock — enforced by the database policy, the API and a test. Single-tenant deployment available.</p>
+</div>
+</div>
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-secondary-container">account_tree</span>
+<div>
+<h4 class="font-headline-md">Explainable AI (XAI)</h4>
+<p class="text-sm opacity-70">Most verdicts are not model output at all — they are comparisons in code. Where AI contributes, it cites the page it read.</p>
+</div>
+</div>
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-secondary-container">shield_with_heart</span>
+<div>
+<h4 class="font-headline-md">Human-in-the-loop</h4>
+<p class="text-sm opacity-70">AI suggests, humans decide. Final approval authority always rests with the committee.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="p-6 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 text-center">
+<div class="text-4xl font-bold text-secondary-container mb-2">100%</div>
+<div class="text-sm">Branch coverage on deciding code</div>
+</div>
+<div class="p-6 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 text-center">
+<div class="text-4xl font-bold text-secondary-container mb-2">0</div>
+<div class="text-sm">Model calls in any verdict path</div>
+</div>
+<div class="p-6 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 text-center">
+<div class="text-4xl font-bold text-secondary-container mb-2">3</div>
+<div class="text-sm">Layers enforcing the seal</div>
+</div>
+<div class="p-6 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 text-center">
+<div class="text-4xl font-bold text-secondary-container mb-2">1</div>
+<div class="text-sm">Named human behind every mark</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Industries -->
+<section class="py-24 bg-white">
+<div class="max-w-container-max mx-auto px-margin-desktop text-center">
+<h2 class="font-headline-lg text-headline-lg text-primary mb-16">Sector-Specific Evaluation Intelligence</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-unit-md">
+<div class="group cursor-pointer">
+<div class="relative h-64 rounded-2xl overflow-hidden mb-4">
+<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" data-alt="A high-tech defense infrastructure control room with large glowing maps and data visualization screens. The atmosphere is professional, modern, and high-security, using a palette of deep blues and oranges." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB6b4CJXFLt9AE9oJM2LyodDNbB_noWREb4QVZ8OZ8MArM-VSu2xxrdfXvQVUOIFSf9GaIqdoUKYVSYE0K4NpgtRplxAZnQX5N9_fLs4lvM3SO0PkuQmit7ugM6SbhMZUkPNuZre9IX4PG8l3YQfbieIHeRHDNGw2KwWWjJF_zNGYSseIGbRulUBgmD5F-2vaCS_qIFLFWtIY3LXt7c1nuCPXEMLhGSKTQBNpz0GerhNGlrgH3tSVT1x0QSEaqdZswfCN4Pyne_764')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent"></div>
+<div class="absolute bottom-4 left-4 text-white text-left">
+<h4 class="font-headline-md">Defense</h4>
+</div>
+</div>
+</div>
+<div class="group cursor-pointer">
+<div class="relative h-64 rounded-2xl overflow-hidden mb-4">
+<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" data-alt="A futuristic railway station design with streamlined trains and glass architecture. The lighting is bright and airy, suggesting a smart city infrastructure project, captured in a clean architectural photography style." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD81ctXf00MKteZd5nVFazr3P_sZPWQgud8WkNirNVTikhGjJOsiHAuNEj3UsFHXKGSHMLaCfBFQYNE3HiOp1_jyt5z6x9oWPRPQK7Bggx81b1qhiBd4a3MAu76QE8TIF2-3K-2TlssWOb7AZdp5iuZVgVIln6AfjWj5x73vU38O39lFqHWVPQ-C9aeAdoqiXXfLjBecV-gRaI1qA8uVpGUKwIO4dZIOjTxk9hbSlWq26gK7typGsXQ5_CdRHaFrCANdad46M5J81E')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent"></div>
+<div class="absolute bottom-4 left-4 text-white text-left">
+<h4 class="font-headline-md">Railways</h4>
+</div>
+</div>
+</div>
+<div class="group cursor-pointer">
+<div class="relative h-64 rounded-2xl overflow-hidden mb-4">
+<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" data-alt="A high-altitude aerial view of a smart city at dusk. Glowing fiber-optic-like light patterns connect buildings, representing data flow and connectivity. The colors are vibrant blues and golds." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD6auwjqDK7-rBV-zjaHk2t5OXAAJPC5XxBqcjos6WR0V0rVw98ozgt9qEmA-q1P6Vj8uVsnDP9fT7BB0Rne_HhnlR_wdIfnT_Ra0-2jixedkut_xQ04RcsTFv0oaQbEeaFEoNu4Z5RYeSUHhN1q91NucpT_BLEKqLJrGsW6Sdw91nUOagS2K_E0MiggBlWEV7XNyV85pjyKY9EuBEhNbszqt3d8UW57GidMZci8-3XwHjguNLMpeGgj48WRFiaYcDGqPYiP_aHzKg')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent"></div>
+<div class="absolute bottom-4 left-4 text-white text-left">
+<h4 class="font-headline-md">Smart Cities</h4>
+</div>
+</div>
+</div>
+<div class="group cursor-pointer">
+<div class="relative h-64 rounded-2xl overflow-hidden mb-4">
+<div class="absolute inset-0 bg-cover bg-center group-hover:scale-110 transition-transform duration-500" data-alt="A modern medical diagnostic center featuring advanced MRI machines and digital medical record screens. The style is clean, clinical, and reassuring, using soft whites and professional blue accents." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDJzlcQZgfj2_f2q3hL1LrA4sOEoXoVqb4n5l2s7Mhtzt-k3sjwmNL1Zgx8ASkLhe0RKbNLVr_5oS8wCUJI8LYIuj1Yh-ufTdK0wlGsK6yWTXnhrbWsqkvhCPVOmY2b9j1BbWPx_6eyesBDsTxgTtLyVLuLEWWd84pt05IfmuTBE2Hfy9zMF5wWMHeqA3a-gjM0BUK9PPZOzWVkqMcmfWIzvDCQHMknZ2IIQuf4Pthuz8OgHO4_fkFa8G78dn5BM5Tcn445UdzzWa8')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent"></div>
+<div class="absolute bottom-4 left-4 text-white text-left">
+<h4 class="font-headline-md">Healthcare</h4>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- FAQ Section -->
+<section class="py-24 bg-surface">
+<div class="max-w-3xl mx-auto px-margin-desktop">
+<h2 class="font-headline-lg text-headline-lg text-primary text-center mb-12">Frequently Asked Questions</h2>
+<div class="space-y-4">
+<details class="group p-6 rounded-xl bg-white border border-outline-variant/30 cursor-pointer">
+<summary class="flex justify-between items-center font-headline-md list-none">
+                            Does AI replace the Evaluation Committee?
+                            <span class="material-symbols-outlined group-open:rotate-180 transition-transform">expand_more</span>
+</summary>
+<p class="mt-4 text-on-surface-variant leading-relaxed">
+                            No. Our AI acts as a "Senior Technical Analyst" that performs all the heavy lifting—reading thousands of pages, checking compliance, and drafting scores. The final decision and score approval always remain with the human committee members.
+                        </p>
+</details>
+<details class="group p-6 rounded-xl bg-white border border-outline-variant/30 cursor-pointer">
+<summary class="flex justify-between items-center font-headline-md list-none">
+                            How are scores generated?
+                            <span class="material-symbols-outlined group-open:rotate-180 transition-transform">expand_more</span>
+</summary>
+<p class="mt-4 text-on-surface-variant leading-relaxed">
+                            Each member scores independently. Only once their own mark is recorded is an AI second opinion revealed, with the passage it relied on — they may keep their mark or amend it, and both are retained. Responsiveness, qualification and rank are computed in code, with no model in the path.
+                        </p>
+</details>
+<details class="group p-6 rounded-xl bg-white border border-outline-variant/30 cursor-pointer">
+<summary class="flex justify-between items-center font-headline-md list-none">
+                            Is it compliant with GFR and Indian Procurement Rules?
+                            <span class="material-symbols-outlined group-open:rotate-180 transition-transform">expand_more</span>
+</summary>
+<p class="mt-4 text-on-surface-variant leading-relaxed">
+                            Yes. The platform is designed specifically to mirror the processes outlined in the General Financial Rules (GFR) and the Manual for Procurement of Goods/Services. It ensures every step is documented for CAG audits.
+                        </p>
+</details>
+</div>
+</div>
+</section>
+<!-- Final CTA -->
+<section class="py-24 bg-white">
+<div class="max-w-container-max mx-auto px-margin-desktop">
+<div class="rounded-3xl bg-primary text-white p-12 lg:p-24 text-center relative overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-r from-secondary-container/20 to-transparent"></div>
+<div class="relative z-10">
+<h2 class="font-headline-xl text-headline-xl mb-6">Make Tender Evaluation Faster, Fairer and Fully Transparent</h2>
+<p class="font-body-lg text-lg opacity-80 mb-10 max-w-2xl mx-auto">Bring a tender you have already concluded and see whether the software reaches your committee's conclusion — and whether it can show you why.</p>
+<div class="flex flex-col sm:flex-row gap-4 justify-center">
+<a href="mailto:hello@tendercraft.in?subject=TenderCraft%20Evaluate%20pilot" class="px-10 py-4 rounded-xl bg-secondary-container text-primary font-bold text-lg hover:bg-secondary-fixed transition-all inline-flex items-center justify-center">Schedule a Government Pilot</a>
+<a href="mailto:hello@tendercraft.in?subject=TenderCraft%20Evaluate%20pilot" class="px-10 py-4 rounded-xl border border-white/30 text-white font-bold text-lg hover:bg-white/10 transition-all inline-flex items-center justify-center">Contact Sales</a>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest py-unit-xl border-t border-outline-variant/30">
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-gutter max-w-container-max mx-auto px-margin-desktop">
+<div class="col-span-2">
+<div class="font-headline-md text-headline-md font-bold text-primary mb-4">TenderEvaluate AI</div>
+<p class="text-on-surface-variant mb-6 max-w-xs">AI-driven institutional precision for the future of government procurement.</p>
+<div class="flex gap-4">
+<span class="p-2 rounded-lg bg-surface-container hover:bg-outline-variant/20 transition-colors cursor-pointer material-symbols-outlined">public</span>
+<span class="p-2 rounded-lg bg-surface-container hover:bg-outline-variant/20 transition-colors cursor-pointer material-symbols-outlined">alternate_email</span>
+</div>
+</div>
+<div>
+<h5 class="font-bold mb-4">Product</h5>
+<ul class="space-y-2 text-on-surface-variant">
+<li class="hover:text-secondary cursor-pointer transition-colors">Solutions</li>
+<li class="hover:text-secondary cursor-pointer transition-colors">Pricing</li>
+<li class="hover:text-secondary cursor-pointer transition-colors">Security</li>
+</ul>
+</div>
+<div>
+<h5 class="font-bold mb-4">Resources</h5>
+<ul class="space-y-2 text-on-surface-variant">
+<li class="hover:text-secondary cursor-pointer transition-colors">Case Studies</li>
+<li class="hover:text-secondary cursor-pointer transition-colors">Documentation</li>
+<li class="hover:text-secondary cursor-pointer transition-colors">API Reference</li>
+</ul>
+</div>
+<div>
+<h5 class="font-bold mb-4">Company</h5>
+<ul class="space-y-2 text-on-surface-variant">
+<li class="hover:text-secondary cursor-pointer transition-colors">About Us</li>
+<li class="hover:text-secondary cursor-pointer transition-colors">Contact</li>
+<li class="hover:text-secondary cursor-pointer transition-colors">Careers</li>
+</ul>
+</div>
+<div>
+<h5 class="font-bold mb-4">Legal</h5>
+<ul class="space-y-2 text-on-surface-variant">
+<li class="hover:text-secondary cursor-pointer transition-colors">Privacy</li>
+<li class="hover:text-secondary cursor-pointer transition-colors">Terms</li>
+</ul>
+</div>
+</div>
+<div class="max-w-container-max mx-auto px-margin-desktop mt-12 pt-8 border-t border-outline-variant/20 text-center text-sm text-on-surface-variant">
+            © 2024 TenderEvaluate AI. All rights reserved. Built for institutional precision.
+        </div>
+</footer>
+<script>
+        // Simple scroll reveal interaction
+        const observerOptions = {
+            threshold: 0.1
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('opacity-100', 'translate-y-0');
+                    entry.target.classList.remove('opacity-0', 'translate-y-8');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.glass-card').forEach(el => {
+            el.classList.add('transition-all', 'duration-700', 'opacity-0', 'translate-y-8');
+            observer.observe(el);
+        });
+    </script>
+</body></html>

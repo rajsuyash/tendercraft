@@ -27,8 +27,11 @@ FROM node:22-slim AS runtime
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=8080
 WORKDIR /app
 # standalone does not carry public/ or .next/static — copy them or every asset 404s.
+# public/ holds landing.html, which the `/` rewrite in next.config.mjs serves as the home page.
+# Miss this line and the site's front door 404s in production while working perfectly locally.
 COPY --from=build /repo/apps/evaluate/.next/standalone ./
 COPY --from=build /repo/apps/evaluate/.next/static ./apps/evaluate/.next/static
+COPY --from=build /repo/apps/evaluate/public ./apps/evaluate/public
 RUN useradd --create-home --uid 10001 web && chown -R web:web /app
 USER web
 EXPOSE 8080
