@@ -1,0 +1,9 @@
+A five crore tender attracts twelve bids. Two hundred pages each. Three officers with day jobs, a statutory window, and a decision that has to survive scrutiny.
+
+TenderCraft Evaluate enforces the two-bid sequence in code. The financial envelope stays sealed until technical scores are locked. Not as policy. The system refuses.
+
+Each evaluator records their own mark and their reasoning first. Only then does the AI proposal appear. That order matters. It removes the anchoring that would otherwise make the model the real decider, while the audit trail claims a human decided.
+
+Every mark carries a named evaluator, a written rationale, and the page it came from. The report assembles itself from that record, not from memory, weeks later.
+
+TenderCraft Evaluate. Built to be challenged.

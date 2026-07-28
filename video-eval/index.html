@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TenderCraft Evaluate — intro</title>
+  </head>
+  <body>
+    <div data-composition-id="root" data-width="1920" data-height="1080" data-start="0" data-duration="52.8">
+      <!-- Scene boundaries are the paragraph gaps ffmpeg silencedetect found in this exact
+           voiceover, so every cut lands in a pause instead of over a word. -->
+      <audio id="vo" data-start="0" data-duration="52.8" data-track-index="0" src="voiceover.mp3" data-volume="1"></audio>
+
+      <!-- S1 · 0 – 10.2 · the pile -->
+      <div id="s1" class="clip scene" data-start="0" data-duration="9.75" data-track-index="1">
+        <div class="vign"></div>
+        <div class="ledger"></div>
+        <div class="stack" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="scene-content">
+          <div class="label">Technical Evaluation Committee</div>
+          <h1 class="display">Twelve bids.<br />Two hundred pages each.</h1>
+          <div class="rule"></div>
+          <p class="body">Three officers with day jobs, a statutory window, and a decision that has to survive scrutiny.</p>
+        </div>
+        <div class="seq">01 / 05</div>
+      </div>
+
+      <!-- S2 · 9.7 – 21.7 · the sequence refuses -->
+      <div id="s2" class="clip scene" data-start="9.7" data-duration="11.55" data-track-index="2">
+        <div class="vign"></div>
+        <div class="ledger"></div>
+        <div class="scene-content">
+          <div class="label">Statutory sequence</div>
+          <h2 class="display">The envelope stays sealed.</h2>
+          <div class="rule"></div>
+          <div class="seqrow">
+            <div class="step done"><span class="stepnum">1</span><span class="steplab">Screening</span></div>
+            <div class="steplink"></div>
+            <div class="step done"><span class="stepnum">2</span><span class="steplab">Technical scoring</span></div>
+            <div class="steplink"></div>
+            <div class="step lockstep"><span class="stepnum">3</span><span class="steplab">Technical lock</span></div>
+            <div class="steplink"></div>
+            <div class="step sealed"><span class="stepnum">4</span><span class="steplab">Financial opening</span></div>
+          </div>
+          <div class="sealcard">
+            <span class="sealtag">SEALED</span>
+            <span class="sealtext">Financial envelope is unreadable until technical scores are locked. Not as policy. The system refuses.</span>
+          </div>
+        </div>
+        <div class="seq">02 / 05</div>
+      </div>
+
+      <!-- S3 · 21.2 – 37.6 · blind first -->
+      <div id="s3" class="clip scene" data-start="21.2" data-duration="15.95" data-track-index="1">
+        <div class="vign"></div>
+        <div class="ledger"></div>
+        <div class="scene-content">
+          <div class="label">Blind-first scoring</div>
+          <h2 class="display s3-head">The evaluator marks first.</h2>
+          <div class="rule"></div>
+          <div class="twoup">
+            <div class="panel own">
+              <div class="ptag">STEP 1 · EVALUATOR</div>
+              <div class="pmark" id="own-mark">14</div>
+              <div class="pof">of 20</div>
+              <p class="prat">"Methodology is sound but the phasing plan omits the pilot district."</p>
+            </div>
+            <div class="revealwrap">
+              <div class="panel ai">
+                <div class="ptag ptag-brass">STEP 2 · AI PROPOSAL, REVEALED AFTER</div>
+                <div class="pmark pmark-ai" id="ai-mark">16</div>
+                <div class="pof">of 20</div>
+                <p class="prat">Cites p.42, Cl. 6.3 — phasing table present, pilot district named in annexure.</p>
+              </div>
+            </div>
+          </div>
+          <p class="body s3-body">The order removes the anchoring that would otherwise make the model the real decider.</p>
+        </div>
+        <div class="seq">03 / 05</div>
+      </div>
+
+      <!-- S4 · 37.1 – 48.8 · the record -->
+      <div id="s4" class="clip scene" data-start="37.1" data-duration="11.25" data-track-index="2">
+        <div class="vign"></div>
+        <div class="ledger"></div>
+        <div class="scene-content">
+          <div class="label">Audit trail</div>
+          <h2 class="display s4-head">Every mark is attributable.</h2>
+          <div class="rule"></div>
+          <ul class="records">
+            <li class="rec"><span class="mono who">R. Iyer · TEC-2</span><span class="recmark">14 / 20</span><span class="recwhy">Phasing plan omits the pilot district</span><span class="mono where">p.42 · Cl. 6.3</span></li>
+            <li class="rec"><span class="mono who">S. Nair · TEC-1</span><span class="recmark">16 / 20</span><span class="recwhy">Methodology and team both evidenced</span><span class="mono where">p.41 · Cl. 6.2</span></li>
+            <li class="rec"><span class="mono who">A. Menon · Chair</span><span class="recmark">15 / 20</span><span class="recwhy">Variance reconciled in committee</span><span class="mono where">p.42 · Cl. 6.3</span></li>
+          </ul>
+          <p class="body s4-body">The report assembles from that record, not from memory weeks later.</p>
+        </div>
+        <div class="seq">04 / 05</div>
+      </div>
+
+      <!-- S5 · 48.3 – 52.8 · close -->
+      <div id="s5" class="clip scene" data-start="48.3" data-duration="4.5" data-track-index="1">
+        <div class="vign"></div>
+        <div class="stampring" aria-hidden="true"></div>
+        <div class="scene-content close">
+          <div class="wordmark">TenderCraft <span class="wm-e">Evaluate</span></div>
+          <div class="rule rule-close"></div>
+          <p class="body closeline">Built to be challenged.</p>
+        </div>
+      </div>
+
+      <div id="wipe" class="clip wipe" data-start="0" data-duration="52.8" data-track-index="3"></div>
+
+      <style>
+        @font-face { font-family: 'Geist'; src: url('fonts/geist.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Geist Mono'; src: url('fonts/geist-mono.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+
+        [data-composition-id="root"] { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #0e1420; }
+        [data-composition-id="root"] * { box-sizing: border-box; margin: 0; }
+
+        .scene { position: absolute; inset: 0; overflow: hidden; background: #0e1420; color: #eef1f7; }
+        .scene-content {
+          position: relative; z-index: 3;
+          display: flex; flex-direction: column; justify-content: center;
+          width: 100%; height: 100%; padding: 104px 132px; gap: 28px;
+        }
+
+        /* ── texture: a ruled minute book, not a gradient ── */
+        .ledger {
+          position: absolute; inset: 0; z-index: 1; opacity: 0.5;
+          background-image: repeating-linear-gradient(to bottom, rgba(167,176,196,0.13) 0 3px, transparent 3px 74px);
+          -webkit-mask-image: linear-gradient(to right, #000 0%, transparent 62%);
+          mask-image: linear-gradient(to right, #000 0%, transparent 62%);
+        }
+        .vign {
+          position: absolute; inset: 0; z-index: 2; pointer-events: none;
+          background: radial-gradient(ellipse 72% 82% at 78% 46%, rgba(212,165,55,0.16), transparent 66%);
+        }
+
+        .stack { position: absolute; right: 116px; top: 50%; transform: translateY(-50%); z-index: 2; display: flex; gap: 13px; align-items: flex-end; }
+        .stack span { display: block; width: 34px; background: #171f30; border: 3px solid #2a3548; border-radius: 4px; }
+        .stack span:nth-child(odd) { height: 300px; }
+        .stack span:nth-child(even) { height: 356px; }
+        .stack span:nth-child(3n) { height: 268px; border-color: #8a6a1c; }
+
+        .stampring {
+          position: absolute; right: 150px; top: 50%; transform: translateY(-50%); z-index: 2;
+          width: 460px; height: 460px; border: 6px solid rgba(212,165,55,0.34); border-radius: 50%;
+        }
+        .stampring::after {
+          content: ""; position: absolute; inset: 42px; border: 3px solid rgba(212,165,55,0.2); border-radius: 50%;
+        }
+
+        .seq {
+          position: absolute; right: 60px; bottom: 52px; z-index: 4;
+          font-family: 'Geist Mono', monospace; font-size: 22px; letter-spacing: 0.18em; color: rgba(238,241,247,0.8);
+        }
+
+        /* ── type ── */
+        .label { font-family: 'Geist Mono', monospace; font-size: 23px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: #d4a537; }
+        .display { font-family: Geist, sans-serif; font-weight: 800; font-size: 100px; line-height: 1.05; letter-spacing: -0.035em; color: #eef1f7; max-width: 1400px; text-wrap: balance; }
+        .s3-head, .s4-head { font-size: 82px; }
+        .body { font-family: Geist, sans-serif; font-size: 34px; font-weight: 400; line-height: 1.42; color: #a7b0c4; max-width: 30ch; }
+        .mono { font-family: 'Geist Mono', monospace; font-variant-numeric: tabular-nums; }
+        .rule { width: 176px; height: 4px; background: #8a6a1c; border-radius: 2px; }
+
+        /* ── S2 sequence ── */
+        .seqrow { display: flex; align-items: center; gap: 14px; }
+        .step { display: flex; align-items: center; gap: 15px; background: #171f30; border: 3px solid #2a3548; border-radius: 14px; padding: 18px 26px; }
+        .stepnum { font-family: 'Geist Mono', monospace; font-size: 24px; color: #a7b0c4; }
+        .steplab { font-family: Geist, sans-serif; font-size: 27px; font-weight: 600; color: #eef1f7; white-space: nowrap; }
+        .lockstep { border-color: #d4a537; }
+        .lockstep .stepnum { color: #d4a537; }
+        .sealed { border-color: #b3402f; }
+        .sealed .steplab, .sealed .stepnum { color: #e8917f; }
+        .steplink { width: 34px; height: 3px; background: #2a3548; }
+        .sealcard { display: flex; align-items: center; gap: 26px; background: #171f30; border: 3px solid #b3402f; border-radius: 16px; padding: 26px 32px; max-width: 1280px; }
+        .sealtag { font-family: 'Geist Mono', monospace; font-size: 21px; letter-spacing: 0.16em; color: #0e1420; background: #b3402f; border-radius: 999px; padding: 9px 20px; white-space: nowrap; }
+        .sealtext { font-family: Geist, sans-serif; font-size: 30px; color: #eef1f7; }
+
+        /* ── S3 blind-first ── */
+        .twoup { display: flex; gap: 30px; align-items: stretch; }
+        .panel { background: #171f30; border: 3px solid #2a3548; border-radius: 18px; padding: 28px 32px; width: 560px; }
+        .ai { border-color: #8a6a1c; }
+        .ptag { font-family: 'Geist Mono', monospace; font-size: 19px; letter-spacing: 0.13em; color: #a7b0c4; }
+        .ptag-brass { color: #d4a537; }
+        .pmark { font-family: Geist, sans-serif; font-weight: 800; font-size: 108px; line-height: 1; letter-spacing: -0.04em; color: #5b9bff; font-variant-numeric: tabular-nums; margin-top: 10px; }
+        .pmark-ai { color: #d4a537; }
+        .pof { font-family: 'Geist Mono', monospace; font-size: 22px; color: #a7b0c4; margin-top: 2px; }
+        .prat { font-family: Geist, sans-serif; font-size: 25px; color: #a7b0c4; line-height: 1.4; margin-top: 16px; }
+        .s3-body { max-width: 46ch; font-size: 30px; }
+
+        /* ── S4 record ── */
+        .records { list-style: none; display: flex; flex-direction: column; gap: 14px; padding: 0; }
+        .rec { display: flex; align-items: center; gap: 26px; background: #171f30; border: 3px solid #2a3548; border-radius: 15px; padding: 22px 28px; }
+        .who { font-size: 23px; color: #d4a537; width: 230px; }
+        .recmark { font-family: Geist, sans-serif; font-weight: 700; font-size: 30px; color: #5b9bff; width: 132px; font-variant-numeric: tabular-nums; }
+        .recwhy { font-family: Geist, sans-serif; font-size: 27px; color: #eef1f7; flex: 1; }
+        .where { font-size: 21px; color: #a7b0c4; white-space: nowrap; }
+        .s4-body { max-width: 48ch; font-size: 30px; }
+
+        /* ── S5 close ── */
+        .close { justify-content: center; gap: 24px; }
+        .wordmark { font-family: Geist, sans-serif; font-weight: 800; font-size: 116px; letter-spacing: -0.04em; color: #eef1f7; }
+        .wm-e { color: #d4a537; }
+        .rule-close { width: 150px; }
+        .closeline { font-size: 36px; color: #a7b0c4; }
+
+        .wipe { position: absolute; inset: 0; z-index: 20; background: #d4a537; transform: scaleX(0); transform-origin: left; }
+      </style>
+
+      <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+      <script>
+        window.__timelines = window.__timelines || {};
+        const tl = gsap.timeline({ paused: true });
+
+        const count = (sel, to, at, dur) => {
+          const o = { v: 0 };
+          tl.to(o, { v: to, duration: dur, ease: "power2.out",
+            onUpdate: () => { const el = document.querySelector(sel); if (el) el.textContent = Math.round(o.v); } }, at);
+        };
+
+        /* ── S1 ── */
+        tl.from("#s1 .label", { y: -22, opacity: 0, duration: 0.5, ease: "power2.out" }, 0.25);
+        tl.from("#s1 .display", { y: 58, opacity: 0, duration: 0.9, ease: "expo.out" }, 0.4);
+        tl.from("#s1 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.55, ease: "power3.inOut" }, 1.05);
+        tl.from("#s1 .body", { y: 30, opacity: 0, duration: 0.7, ease: "power2.out" }, 1.3);
+        // Twelve bids landing one after another: the pile is the point of the scene.
+        tl.from("#s1 .stack span", { scaleY: 0, transformOrigin: "bottom", opacity: 0, duration: 0.5, stagger: 0.11, ease: "power3.out" }, 0.5);
+        tl.from("#s1 .seq", { opacity: 0, duration: 0.5 }, 1.9);
+        tl.to("#s1 .vign", { opacity: 0.62, duration: 5, ease: "sine.inOut", repeat: 1, yoyo: true }, 0);
+
+        /* ── S2 ── */
+        tl.from("#s2 .label", { x: -26, opacity: 0, duration: 0.5, ease: "power2.out" }, 10.1);
+        tl.from("#s2 .display", { y: 48, opacity: 0, duration: 0.85, ease: "expo.out" }, 10.25);
+        tl.from("#s2 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.55, ease: "power3.inOut" }, 10.8);
+        tl.from("#s2 .step", { y: 26, opacity: 0, duration: 0.5, stagger: 0.22, ease: "power3.out" }, 11.2);
+        tl.from("#s2 .steplink", { scaleX: 0, transformOrigin: "left", duration: 0.3, stagger: 0.22, ease: "none" }, 11.45);
+        tl.from("#s2 .sealcard", { y: 34, opacity: 0, duration: 0.7, ease: "power3.out" }, 15.4);
+        // The seal border pulses once on "the system refuses".
+        tl.to("#s2 .sealcard", { borderColor: "#e8917f", duration: 0.45, ease: "power2.inOut", repeat: 3, yoyo: true }, 18.9);
+        tl.from("#s2 .seq", { opacity: 0, duration: 0.5 }, 11.6);
+
+        /* ── S3 ── */
+        tl.from("#s3 .label", { y: -22, opacity: 0, duration: 0.5, ease: "power2.out" }, 21.6);
+        tl.from("#s3 .s3-head", { y: 46, opacity: 0, duration: 0.8, ease: "expo.out" }, 21.75);
+        tl.from("#s3 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.5, ease: "power3.inOut" }, 22.25);
+        tl.from("#s3 .own", { x: -46, opacity: 0, duration: 0.7, ease: "power3.out" }, 22.5);
+        count("#own-mark", 14, 22.9, 1.0);
+        // The AI panel is literally revealed after the evaluator's mark: the sequence is the
+        // product decision, so the animation must not show them arriving together.
+        tl.from("#s3 .revealwrap", { clipPath: "inset(0 100% 0 0)", opacity: 0, duration: 0.9, ease: "power3.inOut" }, 27.9);
+        count("#ai-mark", 16, 28.6, 0.9);
+        tl.from("#s3 .s3-body", { y: 24, opacity: 0, duration: 0.7, ease: "power2.out" }, 30.2);
+        tl.from("#s3 .seq", { opacity: 0, duration: 0.5 }, 22.6);
+
+        /* ── S4 ── */
+        tl.from("#s4 .label", { x: -26, opacity: 0, duration: 0.5, ease: "power2.out" }, 37.5);
+        tl.from("#s4 .s4-head", { y: 46, opacity: 0, duration: 0.8, ease: "expo.out" }, 37.65);
+        tl.from("#s4 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.5, ease: "power3.inOut" }, 38.15);
+        tl.from("#s4 .rec", { x: -38, opacity: 0, duration: 0.6, stagger: 0.7, ease: "power3.out" }, 38.5);
+        tl.from("#s4 .s4-body", { y: 24, opacity: 0, duration: 0.7, ease: "power2.out" }, 44.6);
+        tl.from("#s4 .seq", { opacity: 0, duration: 0.5 }, 38.4);
+
+        /* ── S5 (final scene: the only one that may animate out) ── */
+        tl.from("#s5 .wordmark", { y: 42, opacity: 0, duration: 0.8, ease: "expo.out" }, 48.7);
+        tl.from("#s5 .rule-close", { scaleX: 0, transformOrigin: "left", duration: 0.5, ease: "power3.inOut" }, 49.2);
+        tl.from("#s5 .closeline", { y: 24, opacity: 0, duration: 0.6, ease: "power2.out" }, 49.35);
+        tl.from("#s5 .stampring", { scale: 0.82, opacity: 0, duration: 1.2, ease: "power3.out" }, 48.6);
+        tl.to("#s5 .stampring", { rotation: 18, duration: 3.6, ease: "sine.inOut" }, 49.0);
+        tl.to("#s5 .close", { opacity: 0, duration: 0.45, ease: "power2.in" }, 52.3);
+
+        /* ── transitions: a brass bar sweeps across, like a stamp being drawn ── */
+        [9.7, 21.2, 37.1, 48.3].forEach((t) => {
+          tl.fromTo("#wipe", { scaleX: 0, transformOrigin: "left" },
+            { scaleX: 1, duration: 0.26, ease: "power3.in" }, t - 0.3);
+          tl.to("#wipe", { scaleX: 0, transformOrigin: "right", duration: 0.3, ease: "power3.out" }, t + 0.02);
+        });
+
+        window.__timelines["root"] = tl;
+      </script>
+    </div>
+  </body>
+</html>

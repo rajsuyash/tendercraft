@@ -140,7 +140,7 @@
 <nav class="flex justify-between items-center max-w-container-max mx-auto px-margin-desktop h-20">
 <div class="font-headline-md text-headline-md font-bold text-primary">TenderEvaluate AI</div>
 <div class="hidden md:flex gap-unit-xl items-center">
-<a class="text-primary border-b-2 border-secondary-container font-body-md inline-flex items-center min-h-[44px]" href="#features">Solutions</a>
+<a class="text-primary border-b-2 border-secondary-container font-body-md inline-flex items-center min-h-[44px]" href="#tour">Watch</a><a class="hover:text-primary transition-colors" href="#features">Solutions</a>
 <a class="text-on-surface-variant hover:text-primary transition-colors font-body-md inline-flex items-center min-h-[44px]" href="#sectors">Industries</a>
 <a class="text-on-surface-variant hover:text-primary transition-colors font-body-md inline-flex items-center min-h-[44px]" href="#faq">Resources</a>
 <a class="text-on-surface-variant hover:text-primary transition-colors font-body-md inline-flex items-center min-h-[44px]" href="#contact">Pricing</a>
@@ -158,7 +158,7 @@
 </nav>
 <div id="menu-panel" hidden class="md:hidden border-t border-outline-variant/20 bg-surface/95 backdrop-blur-xl">
 <div class="max-w-container-max mx-auto px-margin-mobile py-unit-md flex flex-col">
-<a class="menu-link py-3 text-on-surface-variant hover:text-primary transition-colors" href="#features">Solutions</a>
+<a class="menu-link py-3 text-on-surface-variant hover:text-primary transition-colors" href="#tour">Watch</a><a class="hover:text-primary transition-colors" href="#features">Solutions</a>
 <a class="menu-link py-3 text-on-surface-variant hover:text-primary transition-colors" href="#sectors">Industries</a>
 <a class="menu-link py-3 text-on-surface-variant hover:text-primary transition-colors" href="#faq">Resources</a>
 <a class="menu-link py-3 text-on-surface-variant hover:text-primary transition-colors" href="#contact">Pricing</a>
@@ -232,6 +232,24 @@
 </div>
 </div>
 <div class="absolute top-6 left-0 right-0 h-[2px] bg-outline-variant/30 -z-10 hidden md:block"></div>
+</div>
+</div>
+</section>
+<!-- Product tour -->
+<!-- preload="none" is load-bearing: the file is 1.4 MB and most visitors never press play.
+     Preloading spends their bandwidth and hurts first paint to serve a minority. The poster
+     is a 55 kB still, so the section looks finished before a byte of video moves. -->
+<section id="tour" class="py-24 bg-white scroll-mt-28">
+<div class="max-w-container-max mx-auto px-margin-desktop">
+<div class="text-center mb-12">
+<h2 class="font-headline-lg text-headline-lg text-primary mb-4">Watch the evaluation run</h2>
+<p class="text-body-lg text-on-surface-variant max-w-2xl mx-auto">Fifty-three seconds: the statutory sequence, blind-first scoring, and the record every mark leaves behind.</p>
+</div>
+<div class="rounded-xl overflow-hidden border border-outline-variant/40 shadow-2xl">
+<video class="block w-full h-auto" controls preload="none" playsinline poster="/evaluate-intro-poster.jpg" width="1600" height="900">
+<source src="/evaluate-intro.mp4" type="video/mp4"/>
+Your browser cannot play this video. <a class="underline" href="/evaluate-intro.mp4">Download it instead.</a>
+</video>
 </div>
 </div>
 </section>
