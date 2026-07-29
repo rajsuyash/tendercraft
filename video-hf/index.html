@@ -5,16 +5,17 @@
     <title>TenderCraft demo</title>
   </head>
   <body>
-    <div data-composition-id="root" data-width="1920" data-height="1080" data-start="0" data-duration="54.3">
-      <!-- Narration. Scene boundaries below are the paragraph gaps ffmpeg silencedetect found
-           in this exact file, so every cut lands in a pause rather than over a word. -->
-      <audio id="vo" data-start="0" data-duration="54.3" data-track-index="0" src="voiceover.mp3" data-volume="1"></audio>
+    <div data-composition-id="root" data-width="1920" data-height="1080" data-start="0" data-duration="59.0">
+      <!-- Narration. Every scene boundary and every animation cue below is taken from the
+           ElevenLabs character-level alignment of THIS voiceover file (align.json), so cuts
+           land in paragraph gaps and each on-screen element arrives on the word that names it. -->
+      <audio id="vo" data-start="0" data-duration="58.28" data-track-index="0" src="voiceover.mp3" data-volume="1"></audio>
 
       <!-- Scenes alternate track index so consecutive clips can overlap by 0.5s. The overlap IS
            the transition: the incoming scene wipes over a still-fully-visible outgoing one. -->
 
-      <!-- S1 · 0 – 8.6 -->
-      <div id="s1" class="clip scene light" data-start="0" data-duration="8.15" data-track-index="1">
+      <!-- S1 · 0 – 8.59 · VO 0.00–8.35 -->
+      <div id="s1" class="clip scene light" data-start="0" data-duration="8.59" data-track-index="1">
         <div class="grid-tex"></div>
         <div class="ghost">300</div>
         <div class="wash wash-a"></div>
@@ -23,19 +24,19 @@
           <h1 class="display">A government tender<br />runs 300 pages.</h1>
           <div class="rule"></div>
           <p class="body">
-            The requirements that decide whether your bid is read are somewhere inside it.
+            The clauses that decide whether your bid is even opened are buried inside it.
           </p>
         </div>
         <div class="pagestack" aria-hidden="true"></div>
         <div class="regmark br">01 / 06</div>
       </div>
 
-      <!-- S2 · 8.1 – 24.6 -->
-      <div id="s2" class="clip scene light" data-start="8.1" data-duration="16.05" data-track-index="2">
+      <!-- S2 · 8.54 – 22.30 · VO 8.73–22.16 -->
+      <div id="s2" class="clip scene light" data-start="8.54" data-duration="13.76" data-track-index="2">
         <div class="grid-tex"></div>
         <div class="wash wash-b"></div>
         <div class="scene-content">
-          <div class="eyebrow">NABARD · NAFIS Third Round</div>
+          <div class="eyebrow">One tender · one pass</div>
           <div class="figrow">
             <div class="fig">
               <div class="fignum" id="s2-pages">0</div>
@@ -51,14 +52,15 @@
           <ul class="anchors">
             <li class="anchor"><span class="mono">p.8 · Cl. 3.1(a)</span><span class="atext">Average annual turnover of not less than Rs. 5 Crore</span></li>
             <li class="anchor"><span class="mono">p.12 · Cl. 4.2</span><span class="atext">Valid ISO 9001:2015 certificate on the date of submission</span></li>
-            <li class="anchor"><span class="mono">p.26 · Cl. 7.1</span><span class="atext">Agency shall indemnify and keep NABARD indemnified</span></li>
+            <li class="anchor"><span class="mono">p.19 · Cl. 5.4</span><span class="atext">Three similar works completed in the last seven years</span></li>
+            <li class="anchor"><span class="mono">p.26 · Cl. 7.1</span><span class="atext">Liquidated damages at 0.5% per week of delay</span></li>
           </ul>
         </div>
         <div class="regmark br">02 / 06</div>
       </div>
 
-      <!-- S3 · 24.1 – 32.3 -->
-      <div id="s3" class="clip scene dark" data-start="24.1" data-duration="7.75" data-track-index="1">
+      <!-- S3 · 22.25 – 35.69 · VO 22.34–35.50 -->
+      <div id="s3" class="clip scene dark" data-start="22.25" data-duration="13.44" data-track-index="1">
         <div class="wash wash-dark"></div>
         <div class="ghost ghost-dark">57</div>
         <div class="scene-content">
@@ -69,12 +71,13 @@
             <div class="claimnum" id="s3-num">0</div>
             <p class="body body-dark">carried an obligation that no requirement covered yet</p>
           </div>
+          <p class="body body-dark s3-kicker">The gaps you would otherwise find after you lost.</p>
         </div>
         <div class="regmark br light-mark">03 / 06</div>
       </div>
 
-      <!-- S4 · 31.8 – 42.5 -->
-      <div id="s4" class="clip scene light" data-start="31.8" data-duration="10.25" data-track-index="2">
+      <!-- S4 · 35.64 – 45.39 · VO 35.78–45.20 -->
+      <div id="s4" class="clip scene light" data-start="35.64" data-duration="9.75" data-track-index="2">
         <div class="grid-tex"></div>
         <div class="wash wash-a"></div>
         <div class="scene-content s4-content">
@@ -89,21 +92,21 @@
               <li class="chip">Re-import</li>
             </ul>
           </div>
-          <div class="shotwrap"><img class="shot" src="matrix.png" alt="" /></div>
+          <div class="shotwrap"><img class="shot" src="matrix-clean.png" alt="" /></div>
         </div>
         <div class="regmark br">04 / 06</div>
       </div>
 
-      <!-- S5 · 42.0 – 51.6 -->
-      <div id="s5" class="clip scene light" data-start="42.0" data-duration="9.15" data-track-index="1">
+      <!-- S5 · 45.34 – 54.97 · VO 45.48–54.86 -->
+      <div id="s5" class="clip scene light" data-start="45.34" data-duration="9.63" data-track-index="1">
         <div class="grid-tex"></div>
         <div class="wash wash-b"></div>
         <div class="scene-content">
           <div class="eyebrow">Cite or flag</div>
           <h2 class="display s5-head">Every claim points at<br />a document you own.</h2>
           <ul class="rows">
-            <li class="row"><span class="tag ok">CITED</span><span class="rtext">Meridian has completed 4 water metering projects above Rs. 1 Cr.</span><span class="mono src">completion-certs.pdf · p.3</span></li>
-            <li class="row"><span class="tag ok">CITED</span><span class="rtext">Average annual turnover of Rs. 8.2 Cr across FY23 to FY25.</span><span class="mono src">ca-certificate.pdf · p.1</span></li>
+            <li class="row cited"><span class="tag ok">CITED</span><span class="rtext">Four water metering projects completed above Rs. 1 Cr.</span><span class="mono src">completion-certs.pdf · p.3</span></li>
+            <li class="row cited"><span class="tag ok">CITED</span><span class="rtext">Average annual turnover of Rs. 8.2 Cr across FY23 to FY25.</span><span class="mono src">ca-certificate.pdf · p.1</span></li>
             <li class="row flagged"><span class="tag flag">FLAGGED</span><span class="rtext">ISO 9001:2015 certification valid on the submission date.</span><span class="mono src">expired 03/2026 · no source</span></li>
           </ul>
           <p class="body kicker">What it cannot source, it flags. It never invents.</p>
@@ -111,8 +114,8 @@
         <div class="regmark br">05 / 06</div>
       </div>
 
-      <!-- S6 · 51.1 – 55.4 -->
-      <div id="s6" class="clip scene dark" data-start="51.1" data-duration="3.2" data-track-index="2">
+      <!-- S6 · 54.92 – 59.0 · VO 54.98–58.28 -->
+      <div id="s6" class="clip scene dark" data-start="54.92" data-duration="4.08" data-track-index="2">
         <div class="wash wash-dark"></div>
         <div class="ghost ghost-dark ghost-close">TC</div>
         <div class="scene-content close-content">
@@ -124,7 +127,7 @@
       </div>
 
       <!-- Wipe panel used as the transition between every scene pair. -->
-      <div id="wipe" class="clip wipe" data-start="0" data-duration="54.3" data-track-index="3"></div>
+      <div id="wipe" class="clip wipe" data-start="0" data-duration="59.0" data-track-index="3"></div>
 
       <style>
         @font-face { font-family: 'Geist'; src: url('fonts/geist.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
@@ -205,14 +208,15 @@
         .fignum { font-family: Geist, Inter, sans-serif; font-weight: 800; font-size: 168px; line-height: 0.94; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; color: #131b2e; }
         .accentnum { color: #0052cc; }
         .figlabel { font-family: Inter, sans-serif; font-size: 30px; color: #434654; margin-top: 12px; }
-        .anchors { list-style: none; display: flex; flex-direction: column; gap: 16px; padding: 0; }
+        .anchors { list-style: none; display: flex; flex-direction: column; gap: 14px; padding: 0; }
         .anchor { display: flex; align-items: center; gap: 30px; }
-        .anchor .mono { font-size: 25px; color: #0052cc; width: 260px; }
+        .anchor .mono { font-size: 25px; color: #0052cc; width: 260px; flex-shrink: 0; }
         .atext { font-family: Inter, sans-serif; font-size: 30px; color: #434654; }
 
         /* ── S3 claim ────────────────────────────────────────────── */
         .claimrow { display: flex; align-items: center; gap: 44px; }
         .claimnum { font-family: Geist, Inter, sans-serif; font-weight: 800; font-size: 230px; line-height: 0.9; letter-spacing: -0.05em; color: #ff9933; font-variant-numeric: tabular-nums; }
+        .s3-kicker { max-width: 34ch; font-size: 38px; color: rgba(238,240,255,0.72); }
 
         /* ── S4 artifact ─────────────────────────────────────────── */
         .s4-content { flex-direction: row; align-items: center; gap: 70px; padding: 100px 120px; }
@@ -267,69 +271,83 @@
           }, at);
         };
 
-        /* ── S1 ── */
-        tl.from("#s1 .eyebrow", { y: -24, opacity: 0, duration: 0.5, ease: "power2.out" }, 0.25);
-        tl.from("#s1 .display", { y: 64, opacity: 0, duration: 0.9, ease: "expo.out" }, 0.4);
-        tl.from("#s1 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.6, ease: "power3.inOut" }, 1.0);
-        tl.from("#s1 .body", { y: 34, opacity: 0, duration: 0.7, ease: "power2.out" }, 1.25);
-        tl.from("#s1 .pagestack", { scaleY: 0, transformOrigin: "top", opacity: 0, duration: 1.5, ease: "power3.out" }, 0.5);
-        tl.from("#s1 .ghost", { x: 90, opacity: 0, duration: 1.4, ease: "power2.out" }, 0.6);
-        tl.from("#s1 .regmark", { opacity: 0, duration: 0.5 }, 1.6);
-        // ambient drift, finite repeats only
-        tl.to("#s1 .wash-a", { x: -60, y: 40, duration: 4, ease: "sine.inOut", repeat: 1, yoyo: true }, 0);
+        /* ── S1 · "A government tender runs three hundred pages" 0.00–2.87 ·
+                   "Buried inside…" 3.37 ── */
+        tl.from("#s1 .eyebrow", { y: -24, opacity: 0, duration: 0.5, ease: "power2.out" }, 0.2);
+        tl.from("#s1 .display", { y: 64, opacity: 0, duration: 0.9, ease: "expo.out" }, 0.35);
+        tl.from("#s1 .pagestack", { scaleY: 0, transformOrigin: "top", opacity: 0, duration: 1.5, ease: "power3.out" }, 0.45);
+        tl.from("#s1 .ghost", { x: 90, opacity: 0, duration: 1.4, ease: "power2.out" }, 0.55);
+        tl.from("#s1 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.6, ease: "power3.inOut" }, 2.9);
+        tl.from("#s1 .body", { y: 34, opacity: 0, duration: 0.7, ease: "power2.out" }, 3.25);
+        tl.from("#s1 .regmark", { opacity: 0, duration: 0.5 }, 3.8);
+        tl.to("#s1 .wash-a", { x: -60, y: 40, duration: 4.2, ease: "sine.inOut" }, 0);
 
-        /* ── S2 ── */
-        tl.from("#s2 .eyebrow", { x: -30, opacity: 0, duration: 0.5, ease: "power2.out" }, 8.5);
-        tl.from("#s2 .fig", { y: 46, opacity: 0, duration: 0.7, stagger: 0.16, ease: "back.out(1.1)" }, 8.7);
-        tl.from("#s2 .figdiv", { scaleY: 0, opacity: 0, duration: 0.5, ease: "power3.out" }, 9.0);
-        count("#s2-pages", 81, 8.9, 1.5);
-        count("#s2-req", 192, 9.5, 2.6);
-        tl.from("#s2 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.6, ease: "power3.inOut" }, 13.2);
-        tl.from("#s2 .anchor", { x: -44, opacity: 0, duration: 0.6, stagger: 0.55, ease: "power3.out" }, 13.8);
-        tl.from("#s2 .regmark", { opacity: 0, duration: 0.5 }, 9.4);
-        tl.to("#s2 .wash-b", { x: 50, y: -40, duration: 6, ease: "sine.inOut", repeat: 1, yoyo: true }, 8.2);
+        /* ── S2 · "It reads every page" 10.75 · "pulls out every requirement" 12.65 ·
+                   "turnover, certificates, experience, penalties" 14.91–18.55 ·
+                   "each one anchored…" 18.91 ── */
+        tl.from("#s2 .eyebrow", { x: -30, opacity: 0, duration: 0.5, ease: "power2.out" }, 8.8);
+        tl.from("#s2 .fig", { y: 46, opacity: 0, duration: 0.7, stagger: 0.16, ease: "back.out(1.1)" }, 10.45);
+        tl.from("#s2 .figdiv", { scaleY: 0, opacity: 0, duration: 0.5, ease: "power3.out" }, 10.7);
+        count("#s2-pages", 81, 10.75, 1.5);
+        count("#s2-req", 192, 12.65, 1.8);
+        tl.from("#s2 .regmark", { opacity: 0, duration: 0.5 }, 11.2);
+        tl.from("#s2 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.6, ease: "power3.inOut" }, 14.55);
+        // one anchor per spoken category
+        tl.from("#s2 .anchor", { x: -44, opacity: 0, duration: 0.6, stagger: 0.9, ease: "power3.out" }, 14.85);
+        // "each one anchored to the page and clause it came from" — the codes answer back
+        tl.fromTo("#s2 .anchor .mono", { scale: 1 },
+          { scale: 1.07, duration: 0.2, yoyo: true, repeat: 1, stagger: 0.13, ease: "power2.inOut" }, 18.9);
+        tl.to("#s2 .wash-b", { x: 50, y: -40, duration: 6.5, ease: "sine.inOut" }, 8.8);
 
-        /* ── S3 ── */
-        tl.from("#s3 .eyebrow", { y: -22, opacity: 0, duration: 0.5, ease: "power2.out" }, 24.5);
-        tl.from("#s3 .display", { y: 54, opacity: 0, duration: 0.85, ease: "expo.out" }, 24.65);
-        tl.from("#s3 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.55, ease: "power3.inOut" }, 25.2);
-        tl.from("#s3 .claimnum", { scale: 0.7, opacity: 0, duration: 0.8, ease: "power4.out" }, 25.5);
-        count("#s3-num", 57, 25.6, 1.7);
-        tl.from("#s3 .body", { x: 40, opacity: 0, duration: 0.7, ease: "power2.out" }, 26.1);
-        tl.from("#s3 .ghost", { scale: 0.86, opacity: 0, duration: 1.3, ease: "power2.out" }, 24.8);
-        tl.from("#s3 .regmark", { opacity: 0, duration: 0.5 }, 26.4);
-        tl.to("#s3 .wash-dark", { scale: 1.14, duration: 5, ease: "sine.inOut", repeat: 0 }, 24.2);
+        /* ── S3 · "Then it does the part a spreadsheet cannot" 22.34–24.88 ·
+                   "It counts every obligation sentence" 25.17 ·
+                   "shows you the ones no requirement covers yet" 28.69 ·
+                   "The gaps you would otherwise find after you lost" 31.96 ── */
+        tl.from("#s3 .eyebrow", { y: -22, opacity: 0, duration: 0.5, ease: "power2.out" }, 22.45);
+        tl.from("#s3 .display", { y: 54, opacity: 0, duration: 0.85, ease: "expo.out" }, 22.6);
+        tl.from("#s3 .ghost", { scale: 0.86, opacity: 0, duration: 1.3, ease: "power2.out" }, 22.8);
+        tl.from("#s3 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.55, ease: "power3.inOut" }, 25.0);
+        tl.from("#s3 .claimnum", { scale: 0.7, opacity: 0, duration: 0.8, ease: "power4.out" }, 25.15);
+        count("#s3-num", 57, 25.2, 2.2);
+        tl.from("#s3 .regmark", { opacity: 0, duration: 0.5 }, 25.8);
+        tl.from("#s3 .claimrow .body", { x: 40, opacity: 0, duration: 0.7, ease: "power2.out" }, 28.6);
+        tl.from("#s3 .s3-kicker", { y: 28, opacity: 0, duration: 0.75, ease: "power2.out" }, 31.9);
+        tl.to("#s3 .wash-dark", { scale: 1.14, duration: 9, ease: "sine.inOut" }, 22.4);
 
-        /* ── S4 ── */
-        tl.from("#s4 .eyebrow", { y: -22, opacity: 0, duration: 0.5, ease: "power2.out" }, 32.2);
-        tl.from("#s4 .s4-head", { y: 46, opacity: 0, duration: 0.8, ease: "expo.out" }, 32.35);
-        tl.from("#s4 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.55, ease: "power3.inOut" }, 32.9);
-        tl.from("#s4 .shotwrap", { x: 120, opacity: 0, duration: 1.0, ease: "power3.out" }, 32.5);
-        tl.from("#s4 .chip", { y: 26, opacity: 0, duration: 0.5, stagger: 0.14, ease: "back.out(1.2)" }, 34.6);
-        tl.from("#s4 .regmark", { opacity: 0, duration: 0.5 }, 33.4);
+        /* ── S4 · "You get a compliance matrix" 35.78–37.30 ·
+                   "Assign it, track it, export it to Excel" 38.66–41.69 ── */
+        tl.from("#s4 .eyebrow", { y: -22, opacity: 0, duration: 0.5, ease: "power2.out" }, 35.8);
+        tl.from("#s4 .s4-head", { y: 46, opacity: 0, duration: 0.8, ease: "expo.out" }, 35.95);
+        tl.from("#s4 .shotwrap", { x: 120, opacity: 0, duration: 1.0, ease: "power3.out" }, 36.15);
+        tl.from("#s4 .rule", { scaleX: 0, transformOrigin: "left", duration: 0.55, ease: "power3.inOut" }, 37.4);
+        tl.from("#s4 .regmark", { opacity: 0, duration: 0.5 }, 36.9);
+        tl.from("#s4 .chip", { y: 26, opacity: 0, duration: 0.5, stagger: 0.85, ease: "back.out(1.2)" }, 38.6);
         // slow push-in on the screenshot: scale only
-        tl.to("#s4 .shotwrap", { scale: 1.05, duration: 8, ease: "none" }, 33.4);
+        tl.to("#s4 .shotwrap", { scale: 1.05, duration: 8.2, ease: "none" }, 36.8);
 
-        /* ── S5 ── */
-        tl.from("#s5 .eyebrow", { x: -28, opacity: 0, duration: 0.5, ease: "power2.out" }, 42.4);
-        tl.from("#s5 .s5-head", { y: 48, opacity: 0, duration: 0.8, ease: "expo.out" }, 42.55);
-        tl.from("#s5 .row", { y: 34, opacity: 0, duration: 0.6, stagger: 0.65, ease: "power3.out" }, 43.5);
-        tl.from("#s5 .kicker", { opacity: 0, y: 24, duration: 0.7, ease: "power2.out" }, 48.4);
-        tl.from("#s5 .regmark", { opacity: 0, duration: 0.5 }, 43.2);
+        /* ── S5 · "And when it drafts your response" 45.48 ·
+                   "every claim points at a document you already have" 47.62–51.00 ·
+                   "What it cannot source, it flags" 51.18 · "It never invents" 53.59 ── */
+        tl.from("#s5 .eyebrow", { x: -28, opacity: 0, duration: 0.5, ease: "power2.out" }, 45.5);
+        tl.from("#s5 .s5-head", { y: 48, opacity: 0, duration: 0.8, ease: "expo.out" }, 45.65);
+        tl.from("#s5 .regmark", { opacity: 0, duration: 0.5 }, 46.9);
+        tl.from("#s5 .row.cited", { y: 34, opacity: 0, duration: 0.6, stagger: 1.4, ease: "power3.out" }, 47.6);
+        tl.from("#s5 .row.flagged", { y: 34, opacity: 0, duration: 0.6, ease: "power3.out" }, 51.15);
+        tl.from("#s5 .kicker", { opacity: 0, y: 24, duration: 0.7, ease: "power2.out" }, 53.45);
 
-        /* ── S6 (final scene: the only one allowed to animate out) ── */
-        tl.from("#s6 .wordmark", { y: 46, opacity: 0, duration: 0.8, ease: "expo.out" }, 51.5);
-        tl.from("#s6 .rule-close", { scaleX: 0, transformOrigin: "left", duration: 0.5, ease: "power3.inOut" }, 52.0);
-        tl.from("#s6 .body", { y: 26, opacity: 0, duration: 0.6, ease: "power2.out" }, 52.15);
-        tl.from("#s6 .url", { opacity: 0, y: 20, duration: 0.6, ease: "power2.out" }, 52.5);
-        tl.from("#s6 .ghost-close", { opacity: 0, scale: 0.9, duration: 1.2, ease: "power2.out" }, 51.4);
-        tl.to("#s6 .close-content", { opacity: 0, duration: 0.45, ease: "power2.in" }, 53.8);
+        /* ── S6 · "TenderCraft." 54.98 · "Try it on your own tender." ~56.1 ── */
+        tl.from("#s6 .ghost-close", { opacity: 0, scale: 0.9, duration: 1.2, ease: "power2.out" }, 55.15);
+        tl.from("#s6 .wordmark", { y: 46, opacity: 0, duration: 0.8, ease: "expo.out" }, 55.3);
+        tl.from("#s6 .rule-close", { scaleX: 0, transformOrigin: "left", duration: 0.5, ease: "power3.inOut" }, 55.9);
+        tl.from("#s6 .body", { y: 26, opacity: 0, duration: 0.6, ease: "power2.out" }, 56.2);
+        tl.from("#s6 .url", { opacity: 0, y: 20, duration: 0.6, ease: "power2.out" }, 56.9);
+        tl.to("#s6 .close-content", { opacity: 0, duration: 0.45, ease: "power2.in" }, 58.4);
 
         /* ── transitions ──────────────────────────────────────────
            One wipe panel drives every scene change: it sweeps up over the outgoing scene
            (which is still fully visible — no exit animations exist) and sweeps off to reveal
-           the incoming one. */
-        [8.1, 24.1, 31.8, 42.0, 51.1].forEach((t) => {
+           the incoming one. Cut times are the midpoints of the narration paragraph gaps. */
+        [8.54, 22.25, 35.64, 45.34, 54.92].forEach((t) => {
           tl.fromTo("#wipe", { scaleY: 0, transformOrigin: "bottom" },
             { scaleY: 1, duration: 0.26, ease: "power3.in" }, t - 0.3);
           tl.to("#wipe", { scaleY: 0, transformOrigin: "top", duration: 0.3, ease: "power3.out" }, t + 0.02);

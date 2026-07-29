@@ -2,3 +2,4 @@ renders/
 node_modules/
 .hyperframes/
 capture/
+snapshots/

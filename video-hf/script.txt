@@ -1,11 +1,11 @@
-A government tender runs three hundred pages. Somewhere inside are the requirements that decide whether your bid is even read.
+A government tender runs three hundred pages. Buried inside are the clauses that decide whether your bid is even opened.
 
-TenderCraft reads all of it. On this NABARD tender, eighty-one pages, it pulled out one hundred and ninety-two requirements. Every one anchored to the page and clause it came from.
+Point TenderCraft at it. It reads every page and pulls out every requirement — turnover, certificates, experience, penalties — each one anchored to the page and clause it came from.
 
-Then it does the part a spreadsheet cannot. It counts every obligation sentence in the document, and shows you the fifty-seven that no requirement covers yet.
+Then it does the part a spreadsheet cannot. It counts every obligation sentence in the document and shows you the ones no requirement covers yet. The gaps you would otherwise find after you lost.
 
 You get a compliance matrix your team can own. Assign it, track it, export it to Excel and bring it back, without losing a single reference.
 
-And when it drafts, every claim points at a document you already have. What it cannot source, it flags. It never invents.
+And when it drafts your response, every claim points at a document you already have. What it cannot source, it flags. It never invents.
 
 TenderCraft. Try it on your own tender.

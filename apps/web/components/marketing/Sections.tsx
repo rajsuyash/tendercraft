@@ -187,8 +187,13 @@ export function PortalTicker() {
  *
  * The page had no imagery at all, which for a brand surface is a bug rather than restraint:
  * typography was carrying the entire visual weight. The right image here is not stock, it is
- * the actual compliance matrix for a real 81-page NABARD tender, with the real numbers on it.
- * A buyer who has shredded an RFP by hand knows immediately whether this is real.
+ * the actual compliance matrix from a live run on a real 81-page tender. A buyer who has
+ * shredded an RFP by hand knows immediately whether this is real.
+ *
+ * The frame is scrolled to a stretch of the matrix that names no procuring authority: an ad
+ * should not make the viewer wonder which tender this was, and a legible buyer name in a
+ * screenshot does exactly that. The measured figures stay in the <dl> beside it, where a
+ * reader can actually read them.
  */
 export function ProductShot() {
   return (
@@ -217,7 +222,7 @@ export function ProductShot() {
               ))}
             </dl>
             <p className="mt-6 text-xs" style={{ color: "var(--m-ink-soft)" }}>
-              Screenshot from a live run against a published NABARD tender.
+              Screenshot from a live run against a real 81-page government tender.
             </p>
           </div>
         </Reveal>
@@ -229,7 +234,7 @@ export function ProductShot() {
           >
             <Image
               src="/product-compliance-matrix.png"
-              alt="TenderCraft compliance matrix for a NABARD tender, showing 192 requirements and 57 obligation sentences with no matching row"
+              alt="TenderCraft compliance matrix, each requirement row carrying its requirement level, page and clause reference, the evidence it needs, and its drafting status"
               width={1440}
               height={900}
               sizes="(max-width: 1024px) 100vw, 60vw"
@@ -262,7 +267,7 @@ export function Tour() {
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-[2rem] font-semibold md:text-[2.5rem]">Watch it read a real tender</h2>
           <p className="mt-4 text-[15px]" style={{ color: "var(--m-ink-soft)" }}>
-            Fifty-five seconds, on a published NABARD tender. No mockups.
+            Fifty-nine seconds, on a real 81-page government tender. No mockups.
           </p>
         </div>
       </Reveal>
