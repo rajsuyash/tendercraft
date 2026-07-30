@@ -50,6 +50,9 @@ type Opportunity = {
 
 type Match = {
   opportunity_id: string;
+  relevance_band: "high" | "medium" | "low" | null;
+  relevance_reason: string | null;
+  relevance_source: "model" | "keyword" | null;
   state: "in_scope" | "excluded";
   excluded_by_rule: string | null;
   eligibility: "likely_eligible" | "likely_ineligible" | "unknown";
@@ -93,7 +96,46 @@ function unknownLabel(parsed: ParsedEligibility | null): string {
   return parsed.min_avg_annual_turnover_inr == null ? "NO TURNOVER BAR" : "NOT ASSESSED";
 }
 
-type SortKey = "closing" | "verdict" | "turnover" | "value";
+type SortKey = "fit" | "closing" | "verdict" | "turnover" | "value";
+
+const BAND_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+/** Fit is a BAND, never a score. F-FR11 is explicit that a decimal implies a precision this
+ *  signal does not have — a bidder shown 0.62 will reason about the second digit. Three filled
+ *  marks, three empty, and the matched terms underneath doing the actual explaining. */
+function Fit({ band, reason, source }: {
+  band: Match["relevance_band"];
+  reason: string | null;
+  source: Match["relevance_source"];
+}) {
+  const filled = band === "high" ? 3 : band === "medium" ? 2 : band === "low" ? 1 : 0;
+  if (!band) return <span className="text-[13px] text-muted">—</span>;
+  return (
+    <span data-fit={band} data-fit-source={source ?? ""} className="block">
+      <span
+        aria-label={`fit: ${band}`}
+        className={`font-mono text-[13px] tracking-tight ${
+          band === "high" ? "text-success" : band === "medium" ? "text-ink" : "text-muted"
+        }`}
+      >
+        {"\u25CF".repeat(filled)}
+        <span className="text-muted opacity-40">{"\u25CB".repeat(3 - filled)}</span>
+      </span>
+      {reason && (
+        <span className="mt-0.5 line-clamp-3 text-[11px] leading-snug text-muted" title={reason}>
+          {reason}
+        </span>
+      )}
+      {/* A model outage must be visible, not silent: a feed that quietly stops being semantic
+          while still showing bands is telling the user something untrue about its own ranking. */}
+      {source === "keyword" && (
+        <span className="mt-0.5 block text-[10px] uppercase tracking-wide text-muted opacity-70">
+          keyword match
+        </span>
+      )}
+    </span>
+  );
+}
 
 const VERDICT_ORDER: Record<Match["eligibility"], number> = {
   likely_eligible: 0,
@@ -192,11 +234,17 @@ export function OpportunityFeed({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [sweeping, setSweeping] = useState(false);
-  const [sort, setSort] = useState<SortKey>("closing");
+  const [sort, setSort] = useState<SortKey>("fit");
+  const [gating, setGating] = useState(false);
 
   const items = useMemo(() => {
     const rows = (data.items ?? []).filter((m) => m.opportunities);
     const by: Record<SortKey, (a: Match, b: Match) => number> = {
+      // Best fit first, then the deadline that forces the decision — an unbanded row sorts last
+      // because "we have not judged this" is not the same as "this is a good match".
+      fit: (a, b) =>
+        (BAND_ORDER[a.relevance_band ?? ""] ?? 9) - (BAND_ORDER[b.relevance_band ?? ""] ?? 9) ||
+        (a.opportunities!.closing_at ?? "9999").localeCompare(b.opportunities!.closing_at ?? "9999"),
       closing: (a, b) =>
         (a.opportunities!.closing_at ?? "9999").localeCompare(b.opportunities!.closing_at ?? "9999"),
       verdict: (a, b) => VERDICT_ORDER[a.eligibility] - VERDICT_ORDER[b.eligibility],
@@ -218,6 +266,29 @@ export function OpportunityFeed({
   const activeRules = (data.rules ?? []).filter((r) => r.enabled);
   const swept = (data.counts?.in_scope ?? 0) + (data.counts?.excluded ?? 0);
   const lastSwept = items[0]?.opportunities?.last_seen_at;
+
+  const gateOn = (data.rules ?? []).some(
+    (r) => r.name === "Only my capability keywords" && r.enabled,
+  );
+
+  async function toggleGate(on: boolean) {
+    setGating(true);
+    try {
+      const res = await fetch(`/api/opportunities/keyword-gate?on=${on}`, { method: "POST" });
+      const body = await res.json().catch(() => null);
+      if (!body?.ok) {
+        // Most likely NO_CAPABILITY_KEYWORDS. Say what to do rather than that it failed.
+        alert(
+          body?.error?.message ??
+            "Could not change the feed. Your tenders are unaffected.",
+        );
+        return;
+      }
+      startTransition(() => router.refresh());
+    } finally {
+      setGating(false);
+    }
+  }
 
   async function refresh() {
     setSweeping(true);
@@ -323,6 +394,18 @@ export function OpportunityFeed({
           ))}
         </nav>
 
+        <label className="ml-3 flex items-center gap-2 text-sm text-muted">
+          <input
+            type="checkbox"
+            data-keyword-gate
+            checked={gateOn}
+            disabled={gating || busy}
+            onChange={(e) => toggleGate(e.target.checked)}
+            className="h-4 w-4 rounded border-hairline accent-[color:var(--color-primary)]"
+          />
+          Only my keywords
+        </label>
+
         {items.length > 0 && (
           <label className="ml-auto flex items-center gap-2 text-sm text-muted">
             Sort
@@ -331,6 +414,7 @@ export function OpportunityFeed({
               onChange={(e) => setSort(e.target.value as SortKey)}
               className="rounded-control border border-hairline bg-surface px-2 py-1.5 text-sm text-ink"
             >
+              <option value="fit">Best fit</option>
               <option value="closing">Closing soonest</option>
               <option value="verdict">Eligibility</option>
               <option value="turnover">Turnover bar</option>
@@ -382,16 +466,18 @@ export function OpportunityFeed({
           <table className="w-full table-fixed text-sm">
             <colgroup>
               <col />
-              <col className="w-[22%]" />
-              <col className="w-[92px]" />
-              <col className="w-[130px]" />
-              <col className="w-[110px]" />
-              <col className="w-[160px]" />
+              <col className="w-[14%]" />
+              <col className="w-[210px]" />
+              <col className="w-[84px]" />
+              <col className="w-[112px]" />
+              <col className="w-[88px]" />
+              <col className="w-[124px]" />
             </colgroup>
             <thead className="border-b border-hairline bg-surface-alt text-left text-[11px] uppercase tracking-wider text-muted">
               <tr>
                 <th className="px-4 py-2.5 font-medium">Tender</th>
                 <th className="px-4 py-2.5 font-medium">Buyer</th>
+                <th className="px-4 py-2.5 font-medium">Fit</th>
                 <th className="px-4 py-2.5 font-medium">Closes</th>
                 <th className="px-4 py-2.5 text-right font-medium">Turnover bar</th>
                 <th className="px-4 py-2.5 text-right font-medium">EMD</th>
@@ -435,6 +521,13 @@ export function OpportunityFeed({
                       </span>
                     </td>
                     <td className="px-4 py-2.5 align-top">
+                      <Fit
+                        band={match.relevance_band}
+                        reason={match.relevance_reason}
+                        source={match.relevance_source}
+                      />
+                    </td>
+                    <td className="px-4 py-2.5 align-top">
                       <Deadline closingAt={opp.closing_at} now={now} />
                     </td>
                     <td className="px-4 py-2.5 text-right align-top tabular-nums">
@@ -476,7 +569,7 @@ export function OpportunityFeed({
                         <span
                           data-eligibility={match.eligibility}
                           title={match.eligibility_reason ?? undefined}
-                          className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${verdict.cls}`}
+                          className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight tracking-wide ${verdict.cls}`}
                         >
                           {match.eligibility === "unknown"
                             ? unknownLabel(opp.eligibility)

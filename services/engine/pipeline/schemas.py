@@ -152,3 +152,34 @@ CRITERIA_SCHEMA = {
     },
     "required": ["criteria"],
 }
+
+
+# Relevance band (F-FR11) — the model's fit signal for one tender against a vendor capability.
+#
+# `band`, never a score. The PRD is explicit that a decimal implies a precision this signal does
+# not have, and a bidder shown 0.62 will reason about the second digit. The enum makes an
+# out-of-range answer impossible rather than merely unlikely.
+#
+# `matched_capability` is the citation: the part of the bidder's OWN statement that makes the
+# tender fit. Empty means the model could not point at one, which the caller treats as low —
+# the same cite-or-flag discipline the drafter follows (G-5).
+RELEVANCE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "opportunity_id": {"type": "string"},
+                    "band": {"type": "string", "enum": ["high", "medium", "low"]},
+                    "rationale": {"type": "string"},
+                    "matched_capability": {"type": "string"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["opportunity_id", "band", "rationale", "confidence"],
+            },
+        }
+    },
+    "required": ["results"],
+}

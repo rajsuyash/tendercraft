@@ -14,7 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-COMPONENTS = ("extractor", "drafter")
+COMPONENTS = ("extractor", "drafter", "relevance")
 
 
 def load_cases(component: str) -> list[dict]:
@@ -152,7 +152,83 @@ def _raise(*_a, **_k):
     raise ModelError("injected failure")
 
 
-_SCORERS = {"extractor": score_extractor, "drafter": score_drafter}
+def score_relevance() -> int:
+    """F-FR11 — the fit band.
+
+    Two properties matter more than accuracy here, and both are pass/fail rather than a
+    percentage:
+
+      * **A band cannot hide a tender.** The model output never reaches the gate, so a wrong
+        band costs one badly-ordered row. That is asserted structurally in
+        tests/test_discovery_rules.py; this suite checks the band itself is sane.
+      * **Cite or demote.** A non-low band with no `matched_capability` is dropped to low by
+        pipeline/relevance.py — the same cite-or-flag rule the drafter follows (G-5).
+    """
+    from app.discovery import relevance as orchestrator
+    from pipeline import relevance as rel
+
+    cases = load_cases("relevance")
+    normal = [c for c in cases if not c.get("inject")]
+    inject = [c for c in cases if c.get("inject")]
+
+    passed = 0
+    print("\n== Relevance golden set (live) ==")
+    for c in normal:
+        i = c["input"]
+        results = rel.score(i["capability_statement"], i["keywords"], i["tenders"])
+        r = results.get("t1")
+        if r is None:
+            print(f"  {c['id']:14} FAIL  (no band returned)")
+            continue
+        band_ok = r.band in c["expected"]["band_in"]
+        # A cited band must actually carry its citation; an uncited one must have been demoted.
+        cite_ok = bool(r.matched_capability) if c["expected"]["must_cite"] else True
+        ok = band_ok and cite_ok
+        passed += ok
+        print(f"  {c['id']:14} {'PASS' if ok else 'FAIL'}  band={r.band:6} "
+              f"conf={r.confidence:.2f} cited={'y' if r.matched_capability else 'n'}"
+              + ("" if ok else f"  expected={c['expected']['band_in']}"))
+
+    # Fault injection: the model failing must degrade to deterministic keyword banding, visibly.
+    print("\n== Fault injection (deterministic fallback) ==")
+    inject_passed = 0
+    orig = rel.generate_json
+    for c in inject:
+        rel.generate_json = _raise  # type: ignore[assignment]
+        ok = False
+        try:
+            i = c["input"]
+            patches = orchestrator.bands_for(
+                [{**t, "category_codes": t["categories"].split(",")} for t in i["tenders"]],
+                capability_statement=i["capability_statement"],
+                keywords=i["keywords"],
+            )
+            patch = patches.get("t1", {})
+            ok = (
+                patch.get("relevance_source") == c["expected"]["fallback"]
+                and patch.get("relevance_band") in c["expected"]["band_in"]
+            )
+        except Exception:  # noqa: BLE001 — a crash is exactly the failure we test against
+            ok = False
+        finally:
+            rel.generate_json = orig  # type: ignore[assignment]
+        inject_passed += ok
+        print(f"  {c['id']:14} {'PASS' if ok else 'FAIL'}  ({c['inject']} -> keyword fallback)")
+
+    total, total_pass = len(normal) + len(inject), passed + inject_passed
+    print(f"\nSUMMARY: {total_pass}/{total} cases pass "
+          f"(normal {passed}/{len(normal)}, injection {inject_passed}/{len(inject)})")
+    print("NOTE: starter set. It pins the adversarial cases the live feed actually produced "
+          "(adhesive gum, KRAZ TUBE INNER, a keyword collision, and a prompt-injection title), "
+          "not release-grade accuracy.")
+    return 0 if total_pass == total else 1
+
+
+_SCORERS = {
+    "extractor": score_extractor,
+    "drafter": score_drafter,
+    "relevance": score_relevance,
+}
 
 
 def main() -> None:

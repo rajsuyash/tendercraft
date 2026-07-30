@@ -974,9 +974,17 @@ def delete_discovery_rule(rule_id: str, workspace_id: str) -> None:
 
 
 def upsert_opportunity_matches(workspace_id: str, rows: list[dict]) -> int:
+    """Bulk upsert. Every row is padded to the SAME key set first.
+
+    PostgREST rejects a bulk insert whose objects have differing keys with a bare
+    `400 Bad Request` — no column name, no hint. It bites here because only the in-scope rows
+    carry relevance fields, so the payload is legitimately ragged the moment ranking exists.
+    Filling the gaps with None writes an explicit null, which is what "not banded" means anyway.
+    """
     if not rows:
         return 0
-    payload = [{**r, "workspace_id": workspace_id} for r in rows]
+    keys = {k for r in rows for k in r} | {"workspace_id"}
+    payload = [{**{k: None for k in keys}, **r, "workspace_id": workspace_id} for r in rows]
     _rest(
         "POST",
         "opportunity_matches",
@@ -1002,7 +1010,9 @@ def get_feed(workspace_id: str, state: str, limit: int = 100) -> list[dict]:
                 "workspace_id": f"eq.{workspace_id}",
                 "state": f"eq.{state}",
                 "select": "*,opportunities(*)",
-                "order": "computed_at.desc",
+                # Best fit first, then the deadline that forces the decision. `nullsfirst` is
+                # wrong here: an unbanded row is not the best match, it is an unknown one.
+                "order": "relevance_band.asc.nullslast,computed_at.desc",
                 "limit": str(limit),
             },
         )
@@ -1028,6 +1038,27 @@ def count_feed(workspace_id: str, state: str) -> int:
         raise ApiError(502, "DB_ERROR", f"database request failed: {exc}") from exc
     content_range = r.headers.get("Content-Range", "*/0")
     return int(content_range.split("/")[-1] or 0)
+
+
+def get_relevance_hashes(workspace_id: str) -> dict[str, str]:
+    """opportunity_id -> the relevance input hash already stored.
+
+    The cost short-circuit: an unchanged hash means nothing the band depends on has changed, so
+    the model is not asked again. One query rather than one per row.
+    """
+    rows = (
+        _rest(
+            "GET",
+            "opportunity_matches",
+            params={
+                "workspace_id": f"eq.{workspace_id}",
+                "select": "opportunity_id,relevance_input_hash",
+                "relevance_input_hash": "not.is.null",
+            },
+        )
+        or []
+    )
+    return {r["opportunity_id"]: r["relevance_input_hash"] for r in rows}
 
 
 def count_eligible(workspace_id: str) -> int:

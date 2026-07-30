@@ -41,6 +41,16 @@ class Certification(BaseModel):
 class ProfileIn(BaseModel):
     """Everything the eligibility comparators read. Sent as a whole from one form."""
 
+    # Capability drives the relevance band on the opportunity feed (F-FR11). Free prose because
+    # what a bidder can say about themselves does not fit a taxonomy; the keywords beside it are
+    # the deterministic half, and the only half permitted to gate the feed.
+    #
+    # NOTE `update_profile` dumps with exclude_none=True, so a null statement is DROPPED rather
+    # than written — the form sends "" to clear it. The keyword list is never None, so it is
+    # written on every save and clearing it works normally.
+    capability_statement: str | None = None
+    capability_keywords: list[str] = Field(default_factory=list)
+
     legal_name: str | None = None
     cin: str | None = None
     pan: str | None = None

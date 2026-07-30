@@ -53,7 +53,7 @@ export default async function ProfilePage() {
       supabase
         .from("vendor_profiles")
         .select(
-          "legal_name,cin,pan,gst,udyam_registration,dpiit_registered,net_worth_cr,working_capital_cr,oem_status",
+          "legal_name,cin,pan,gst,udyam_registration,dpiit_registered,net_worth_cr,working_capital_cr,oem_status,capability_statement,capability_keywords",
         )
         .maybeSingle(),
       supabase
@@ -142,6 +142,9 @@ export default async function ProfilePage() {
         <ProfileEditor
           initial={{
             legal_name: profile?.legal_name ?? orgName,
+            capability_statement: profile?.capability_statement,
+            // The form edits one comma-separated string; the server stores an array.
+            capability_keywords_raw: (profile?.capability_keywords ?? []).join(", "),
             cin: profile?.cin,
             pan: profile?.pan,
             gst: profile?.gst,

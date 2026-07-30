@@ -18,6 +18,7 @@ skimmed line. A false negative costs the bid.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -33,8 +34,15 @@ RULE_KINDS = frozenset(
         "authority_not_contains",
         "min_days_to_close",  # spec: {"days": 7}
         "value_between",  # spec: {"min": 100000, "max": null}
+        # The opt-in narrow feed. Fires when the vendor's own capability keywords match nothing
+        # on the tender. spec: {"keywords": ["cctv", "networking"]}
+        "keyword_match_required",
     }
 )
+
+# Bands, never decimals. F-FR11 is explicit: a decimal implies a precision this signal does not
+# have, and a bidder who sees 0.62 will reason about the second digit.
+BANDS = ("high", "medium", "low")
 
 
 @dataclass(frozen=True)
@@ -80,6 +88,117 @@ def _days_to_close(record: dict[str, Any], now: datetime) -> float | None:
     return (closing - now).total_seconds() / 86400.0
 
 
+@dataclass(frozen=True)
+class KeywordMatch:
+    band: str
+    matched_terms: tuple[str, ...]
+
+    @property
+    def reason(self) -> str:
+        if not self.matched_terms:
+            return "No capability keyword matched this tender"
+        return "Matched your keyword" + ("s " if len(self.matched_terms) > 1 else " ") + ", ".join(
+            self.matched_terms
+        )
+
+
+# Words shorter than this must match EXACTLY; only longer ones may match on a shared prefix.
+#
+# Raised from 4 to 5 by production output: at 4, the keyword "desktop" matched the token "desk"
+# and banded a classroom "Desk and Bench Set" as a top fit for an IT supplier. The prefix rule
+# has to survive both directions — "networking" must still match "network" — so the lever is the
+# length of the SHORTER word, not which side is longer. At 5, "desk" is too short to stem and
+# must match exactly, while "network" (7) still stems to "networking".
+_MIN_STEM = 5
+
+# GeM's category codes are deliberately truncated to four-letter segments — `home_info_netw`,
+# `home_clea_clea`. There, a four-character prefix IS the portal's own abbreviation of the word,
+# so the floor is lower and the match runs one way only: the code may be a prefix of the
+# vendor's keyword ("netw" -> "networking"), never the reverse.
+_MIN_CODE_STEM = 4
+
+_WORD = re.compile(r"[a-z0-9]+")
+
+
+def _tokens(text: str) -> set[str]:
+    """Words, including the parts of a GeM category code — `home_info_netw` is three tokens."""
+    return set(_WORD.findall(text.lower()))
+
+
+def _term_hits(term: str, blob: str, tokens: set[str], *, code: bool = False) -> bool:
+    """One keyword against one haystack.
+
+    A multi-word keyword ("it services") is matched as a phrase against the raw text. A single
+    word is matched against tokens with a shared-prefix rule, because the vendor and the portal
+    will not agree on inflection: a vendor writes "networking" and GeM writes "Network switch
+    supply". Plain substring matching misses that in one direction and only that direction,
+    which is the kind of gap that looks like the feature working until someone checks.
+    """
+    if " " in term:
+        return term in blob
+    if term in tokens:
+        return True
+    if code:
+        # One direction only: an abbreviated code may open the vendor's word.
+        return any(
+            len(tok) >= _MIN_CODE_STEM and term.startswith(tok) for tok in tokens
+        )
+    if len(term) < _MIN_STEM:
+        return False
+    return any(
+        len(tok) >= _MIN_STEM and (tok.startswith(term) or term.startswith(tok))
+        for tok in tokens
+    )
+
+
+def keyword_relevance(record: dict[str, Any], keywords: list[str]) -> KeywordMatch:
+    """Deterministic fit between a tender and the vendor's own keywords.
+
+    Pure, explainable, and the fallback whenever the model is unavailable — which is why it
+    lives here rather than beside the model: `app/deterministic/` may not import pipeline code,
+    and CI enforces that.
+
+    An empty keyword list returns `low` with no matched terms — never an error and never a
+    silent pass. The caller decides what `low` means; only a named rule may act on it.
+    """
+    terms = [k.strip().lower() for k in (keywords or []) if k and k.strip()]
+    if not terms:
+        return KeywordMatch(band="low", matched_terms=())
+
+    title = (record.get("title") or "").lower()
+    categories = " ".join(_category_codes(record)).lower()
+    authority = (record.get("authority") or "").lower()
+
+    title_tokens, category_tokens = _tokens(title), _tokens(categories)
+    all_tokens = title_tokens | category_tokens | _tokens(authority)
+    blob = " ".join((title, categories, authority))
+
+    matched = tuple(
+        sorted(
+            {
+                t
+                for t in terms
+                if _term_hits(t, blob, title_tokens | _tokens(authority))
+                or _term_hits(t, categories, category_tokens, code=True)
+            }
+        )
+    )
+    if not matched:
+        return KeywordMatch(band="low", matched_terms=())
+
+    # A hit inside a GeM category code outranks one anywhere else: the codes are the portal's
+    # own structured taxonomy, so `services_home_cust` matching "services" is a classification,
+    # whereas the same word inside a buyer's department name is a coincidence.
+    in_category = any(_term_hits(t, categories, category_tokens, code=True) for t in matched)
+    in_title = any(_term_hits(t, title, title_tokens) for t in matched)
+    if in_category or len(matched) >= 2:
+        return KeywordMatch(band="high", matched_terms=matched)
+    if in_title:
+        return KeywordMatch(band="medium", matched_terms=matched)
+    # Matched only on the buying authority's name — real, but weak evidence of fit.
+    return KeywordMatch(band="low", matched_terms=matched)
+
+
 def _matches(rule: Rule, record: dict[str, Any], now: datetime) -> bool:
     """True when this rule's condition FIRES on the record (i.e. the rule wants it excluded).
 
@@ -113,6 +232,15 @@ def _matches(rule: Rule, record: dict[str, Any], now: datetime) -> bool:
         if days is None or remaining is None:
             return False  # no date published → never excluded on this basis
         return remaining < float(days)
+
+    if rule.kind == "keyword_match_required":
+        keywords = spec.get("keywords") or []
+        if not keywords:
+            # Inert on an empty list, deliberately. A vendor who switched this on before filling
+            # in their profile would otherwise have their ENTIRE feed hidden by a rule whose
+            # name gives no clue why — a self-inflicted ET-7 with a plausible-looking cause.
+            return False
+        return keyword_relevance(record, keywords).band == "low"
 
     if rule.kind == "value_between":
         value = record.get("estimated_value")

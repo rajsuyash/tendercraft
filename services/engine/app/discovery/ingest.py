@@ -25,6 +25,7 @@ import httpx
 
 from .. import db, http, service_auth
 from ..deterministic.discovery import Rule, evaluate_eligibility, evaluate_gate
+from . import relevance
 
 log = logging.getLogger("tendercraft.engine")
 
@@ -106,6 +107,15 @@ def _rules_for(workspace_id: str) -> list[Rule]:
     ]
 
 
+def _capability(workspace_id: str) -> tuple[str, list[str]]:
+    """The vendor's own words, and the terms they bid on. Both drive the relevance band."""
+    identity = db.get_profile_context(workspace_id).get("legal_identity") or {}
+    return (
+        identity.get("capability_statement") or "",
+        list(identity.get("capability_keywords") or []),
+    )
+
+
 def _profile_turnover_inr(workspace_id: str) -> dict[str, Any]:
     """Average annual turnover from the vendor profile, in rupees.
 
@@ -157,6 +167,22 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
             row["eligibility"] = "unknown"
             row["eligibility_reason"] = None
         matches.append(row)
+
+    # Relevance bands the IN-SCOPE items only: the excluded bucket is ordered by nothing anyone
+    # reads, and scoring it would pay a model to rank tenders the user asked not to see.
+    capability, keywords = _capability(workspace_id)
+    if in_scope:
+        seen_hashes = db.get_relevance_hashes(workspace_id)
+        patches = relevance.bands_for(
+            in_scope,
+            capability_statement=capability,
+            keywords=keywords,
+            existing=seen_hashes,
+        )
+        by_id = {m["opportunity_id"]: m for m in matches}
+        for opportunity_id, patch in patches.items():
+            if opportunity_id in by_id:
+                by_id[opportunity_id].update(patch)
 
     db.upsert_opportunity_matches(workspace_id, matches)
 

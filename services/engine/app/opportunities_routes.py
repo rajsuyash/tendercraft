@@ -31,6 +31,11 @@ class RuleIn(BaseModel):
     enabled: bool = True
 
 
+#: The opt-in narrow feed. One well-known name so the toggle can find and remove its own rule,
+#: and so the Excluded bucket says something a human wrote rather than something we generated.
+CAPABILITY_RULE_NAME = "Only my capability keywords"
+
+
 class MatchPatch(BaseModel):
     watched: bool | None = None
     assigned_to: str | None = None
@@ -78,6 +83,47 @@ async def refresh(user: CurrentUser, max_pages: int = Query(default=8, ge=1, le=
         return ok(await run_in_threadpool(work))
     except RuntimeError as exc:
         raise ApiError(503, "CONNECTOR_UNAVAILABLE", str(exc)) from exc
+
+
+@router.post("/api/opportunities/keyword-gate")
+async def set_keyword_gate(user: CurrentUser, on: bool = Query(...)) -> dict:
+    """Turn the narrow feed on or off.
+
+    It is a RULE, not a setting, on purpose: the check constraint on `opportunity_matches`
+    refuses an exclusion that names no rule, so making this a boolean flag somewhere would have
+    required a second, unnamed way to hide tenders. As a rule it appears in the Excluded bucket,
+    names itself on every row it hides, and is undone by deleting it (G-9 / F-AC6).
+    """
+
+    def work() -> dict:
+        existing = next(
+            (r for r in db.get_discovery_rules(user.workspace_id)
+             if r["name"] == CAPABILITY_RULE_NAME),
+            None,
+        )
+        if not on:
+            if existing:
+                db.delete_discovery_rule(existing["id"], user.workspace_id)
+            return {"enabled": False} | ingest.recompute_matches(user.workspace_id, doc_budget=0)
+
+        identity = db.get_profile_context(user.workspace_id).get("legal_identity") or {}
+        keywords = list(identity.get("capability_keywords") or [])
+        if not keywords:
+            # Refusing here rather than creating an inert rule: a rule that hides nothing but
+            # claims to be filtering is a worse lie than an error message.
+            raise ApiError(
+                422,
+                "NO_CAPABILITY_KEYWORDS",
+                "Add capability keywords to your vendor profile before narrowing the feed",
+            )
+        db.create_discovery_rule(
+            user.workspace_id,
+            {"name": CAPABILITY_RULE_NAME, "kind": "keyword_match_required",
+             "spec": {"keywords": keywords}, "enabled": True},
+        )
+        return {"enabled": True} | ingest.recompute_matches(user.workspace_id, doc_budget=0)
+
+    return ok(await run_in_threadpool(work))
 
 
 @router.post("/api/opportunities/rules")

@@ -17,6 +17,7 @@ from app.deterministic.discovery import (
     Rule,
     evaluate_eligibility,
     evaluate_gate,
+    keyword_relevance,
 )
 
 NOW = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
@@ -200,3 +201,120 @@ class TestDepth1Eligibility:
             assert evaluate_eligibility(fields, {"avg_annual_turnover_inr": 1}).signal in {
                 "likely_eligible", "likely_ineligible", "unknown",
             }
+
+
+class TestKeywordRelevance:
+    """The deterministic half of F-FR11. It ranks, and it is the fallback when the model is
+    unavailable — so it must never need the model to be correct."""
+
+    KW = ["cctv", "networking", "it services", "surveillance"]
+
+    def test_a_category_code_hit_outranks_everything(self):
+        # `home_info_netw` is GeM's own taxonomy saying this is networking. That is a
+        # classification, not a coincidence of wording.
+        m = keyword_relevance(record(title="Network switch supply",
+                                     category_codes=["home_info_netw"]), self.KW)
+        assert m.band == "high"
+        assert "networking" in m.matched_terms
+
+    def test_two_distinct_keywords_reach_high(self):
+        m = keyword_relevance(record(title="CCTV Surveillance System AMC",
+                                     category_codes=["services_home_cust"]), self.KW)
+        assert m.band == "high"
+        assert set(m.matched_terms) == {"cctv", "surveillance"}
+
+    def test_an_unrelated_tender_bands_low_with_no_terms(self):
+        for title in ("Adhesive Gum", "KRAZ TUBE INNER", "Modular Toilet"):
+            m = keyword_relevance(record(title=title, category_codes=["home_univ_univ"]), self.KW)
+            assert m.band == "low", title
+            assert m.matched_terms == ()
+
+    def test_inflection_is_tolerated_in_both_directions(self):
+        # The vendor writes "networking"; GeM writes "Network". A plain substring test fails
+        # this in exactly one direction, which looks like it works until someone checks.
+        assert keyword_relevance(record(title="Network cabling"), ["networking"]).matched_terms
+        assert keyword_relevance(record(title="Networking services"), ["network"]).matched_terms
+
+    def test_a_short_word_is_not_a_stem_of_a_longer_one(self):
+        # Found in production: "desktop" matched "desk" and banded a classroom Desk and Bench
+        # Set as a top fit for an IT supplier.
+        assert keyword_relevance(record(title="Desk and Bench Set for Classroom"),
+                                 ["desktop"]).band == "low"
+        # ...while the inflection case it exists for still works.
+        assert keyword_relevance(record(title="Network switch"), ["networking"]).matched_terms
+
+    def test_short_words_must_match_exactly(self):
+        # Without the floor, "IT" matches item, kit, unit — a feed of confident nonsense.
+        assert keyword_relevance(record(title="Item pack, kit and unit"), ["it"]).band == "low"
+        assert keyword_relevance(record(title="IT hardware"), ["it"]).matched_terms == ("it",)
+
+    def test_no_keywords_is_low_and_never_an_error(self):
+        for kws in ([], None, ["", "   "]):
+            m = keyword_relevance(record(), kws)
+            assert m.band == "low" and m.matched_terms == ()
+
+    def test_every_band_carries_its_evidence(self):
+        # F-FR11: a band on its own is an opinion; a band with what matched is checkable.
+        m = keyword_relevance(record(title="CCTV AMC", category_codes=["services_x"]), self.KW)
+        assert "cctv" in m.reason.lower()
+        assert keyword_relevance(record(title="Adhesive Gum"), self.KW).reason
+
+
+class TestTheOptInKeywordGate:
+    KW = ["cctv", "networking"]
+
+    _DEFAULT = object()  # distinct sentinel: None is a VALUE under test here, not "unset"
+
+    def rule(self, keywords=_DEFAULT):
+        return Rule(name="Only my capability keywords", kind="keyword_match_required",
+                    spec={"keywords": self.KW if keywords is self._DEFAULT else keywords})
+
+    def test_it_excludes_a_non_matching_tender_and_names_itself(self):
+        result = evaluate_gate(record(title="Adhesive Gum"), [self.rule()], now=NOW)
+        assert result.in_scope is False
+        assert result.excluded_by_rule == "Only my capability keywords"
+
+    def test_it_keeps_a_matching_tender(self):
+        result = evaluate_gate(
+            record(title="CCTV AMC", category_codes=["services_home_cust"]), [self.rule()], now=NOW
+        )
+        assert result.in_scope is True
+
+    def test_an_empty_keyword_list_hides_NOTHING(self):
+        # The trap this guards: a vendor switches the narrow feed on before filling in their
+        # profile and every single tender vanishes, under a rule whose name explains nothing.
+        for empty in ([], None):
+            assert evaluate_gate(record(title="Adhesive Gum"),
+                                 [self.rule(empty)], now=NOW).in_scope is True
+
+    def test_the_gate_is_opt_in_and_absent_by_default(self):
+        # No rule -> nothing hidden, whatever the keywords would have said.
+        assert evaluate_gate(record(title="Adhesive Gum"), [], now=NOW).in_scope is True
+
+
+class TestAModelBandCanNeverHideATender:
+    """F-AC6 / G-9 at the unit level, and the reason the two layers are kept apart.
+
+    A model may rank and summarise. It may never decide what a human never sees. The gate takes
+    a record and RULES; a relevance band is neither, so no band on the record can reach it.
+    """
+
+    @pytest.mark.parametrize("band", ["high", "medium", "low", None, "garbage"])
+    def test_a_band_on_the_record_does_not_change_the_gate(self, band):
+        rules = [Rule(name="7+ days", kind="min_days_to_close", spec={"days": 1})]
+        plain = evaluate_gate(record(), rules, now=NOW)
+        with_band = evaluate_gate(
+            record(relevance_band=band, relevance_reason="model says so"), rules, now=NOW
+        )
+        assert with_band.in_scope == plain.in_scope is True
+        assert with_band.excluded_by_rule == plain.excluded_by_rule is None
+
+    def test_no_rule_kind_reads_a_model_field(self):
+        # If someone adds a rule kind that gates on a model band, this fails: the gate would
+        # start returning different answers for records that differ only in model output.
+        for kind in sorted(RULE_KINDS):
+            rule = Rule(name=kind, kind=kind, spec={"keywords": ["zzz"], "days": 0,
+                                                    "prefixes": ["zzz"], "needles": ["zzz"]})
+            low = evaluate_gate(record(relevance_band="low"), [rule], now=NOW)
+            high = evaluate_gate(record(relevance_band="high"), [rule], now=NOW)
+            assert low.in_scope == high.in_scope, f"{kind} reads the model band"

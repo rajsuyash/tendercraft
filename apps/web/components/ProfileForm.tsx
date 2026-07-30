@@ -14,6 +14,11 @@ export type Experience = {
 
 export type ProfileData = {
   legal_name?: string | null;
+  capability_statement?: string | null;
+  /** What the server stores. Read-only here — the input edits the raw string below. */
+  capability_keywords?: string[] | null;
+  /** The comma-separated text the input actually holds, seeded from the array by the page. */
+  capability_keywords_raw?: string | null;
   cin?: string | null;
   pan?: string | null;
   gst?: string | null;
@@ -23,6 +28,18 @@ export type ProfileData = {
   certifications: Certification[];
   experience_records: Experience[];
 };
+
+/** One comma-separated input, one string[] on the wire. De-duplicated and lower-cased because
+ *  matching is case-insensitive anyway, and "CCTV, cctv" in the list would show the same term
+ *  twice in the evidence chip on every row it matched. */
+export function splitKeywords(raw: string): string[] {
+  const seen = new Set<string>();
+  for (const part of raw.split(",")) {
+    const term = part.trim().toLowerCase();
+    if (term) seen.add(term);
+  }
+  return [...seen];
+}
 
 const INPUT =
   "w-full rounded border border-border bg-surface px-2.5 py-1.5 text-sm text-ink " +
@@ -76,6 +93,10 @@ export function ProfileForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           legal_name: d.legal_name || null,
+          // "" rather than null, deliberately. The engine dumps with exclude_none=True, so a
+          // null is DROPPED instead of written and the field could never be cleared once set.
+          capability_statement: d.capability_statement ?? "",
+          capability_keywords: splitKeywords(d.capability_keywords_raw ?? ""),
           cin: d.cin || null,
           pan: d.pan || null,
           gst: d.gst || null,
@@ -121,6 +142,35 @@ export function ProfileForm({
           {error}
         </p>
       ) : null}
+
+      <section className="rounded-card border border-border bg-surface p-card">
+        <h2 className="mb-1 font-heading text-base font-medium text-ink">What you bid on</h2>
+        <p className="mb-3 text-xs text-muted">
+          Used to rank your opportunity feed. Nothing is hidden because of what you write here
+          unless you switch on the narrow feed yourself.
+        </p>
+        <div className="grid grid-cols-1 gap-3">
+          <Row label="Capability and expertise">
+            <textarea
+              data-field-capability
+              rows={4}
+              className={INPUT}
+              value={d.capability_statement ?? ""}
+              onChange={(e) => set("capability_statement", e.target.value)}
+              placeholder="e.g. We design, supply and maintain IT infrastructure for state government departments — CCTV and surveillance networks, structured cabling, data-centre hardware, and annual maintenance contracts."
+            />
+          </Row>
+          <Row label="Keywords you bid on (comma separated)">
+            <input
+              data-field-capability-keywords
+              className={INPUT}
+              value={d.capability_keywords_raw ?? ""}
+              onChange={(e) => set("capability_keywords_raw", e.target.value)}
+              placeholder="cctv, surveillance, networking, structured cabling, amc"
+            />
+          </Row>
+        </div>
+      </section>
 
       <section className="rounded-card border border-border bg-surface p-card">
         <h2 className="mb-3 font-heading text-base font-medium text-ink">Legal identity</h2>
