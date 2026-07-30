@@ -29,16 +29,16 @@ export default async function OpportunitiesPage({
   if (!res.ok || !body?.ok) {
     const code = body?.error?.code ?? "UNAVAILABLE";
     return (
-      <div className="space-y-6">
+      <main className="p-page">
         <h1 className="font-heading text-2xl font-semibold text-ink">Opportunities</h1>
-        <div data-feed-error className="rounded-card border border-danger bg-danger-bg p-card">
+        <div data-feed-error className="mt-6 rounded-card border border-danger bg-danger-bg p-card">
           <p className="font-medium text-danger">The feed could not be loaded ({code}).</p>
           <p className="mt-2 text-sm text-muted">
             Your rules and shortlist are unaffected — nothing has been excluded. Retry once the
             discovery service is reachable.
           </p>
         </div>
-      </div>
+      </main>
     );
   }
 

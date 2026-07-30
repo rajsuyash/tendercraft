@@ -103,22 +103,37 @@ const STAMP = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
 });
 
+const DAY = new Intl.DateTimeFormat("en-IN", {
+  day: "2-digit",
+  month: "short",
+  timeZone: "Asia/Kolkata",
+});
+
 /** C6 escalation: neutral, amber at T-48h, red at T-24h. Text carries the meaning too. */
 function Deadline({ closingAt, now }: { closingAt: string | null; now: number }) {
   const days = daysUntil(closingAt, now);
   if (days === null) return <span className="text-xs text-muted">not published</span>;
+  // C6 escalation. Only the last step gets a filled background: on a feed where most tenders
+  // close within the week, filling the amber step too paints every row the same colour and the
+  // escalation stops being a signal at all. Fill is reserved for the row you must act on today.
   const tone =
     days <= 1
-      ? "border-danger text-danger"
+      ? "border-danger bg-danger-bg text-danger"
       : days <= 2
         ? "border-warning text-warning"
         : "border-hairline text-ink";
   return (
-    <span
-      data-deadline-days={days}
-      className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium tabular-nums ${tone}`}
-    >
-      {days < 0 ? "closed" : days === 0 ? "today" : `${days}d`}
+    <span data-deadline-days={days} className="block">
+      <span
+        className={`inline-block whitespace-nowrap rounded-control border px-2 py-1 text-[13px] font-semibold tabular-nums ${tone}`}
+      >
+        {days < 0 ? "closed" : days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"}`}
+      </span>
+      {closingAt && (
+        <span className="mt-1 block text-[11px] tabular-nums text-muted">
+          {DAY.format(new Date(closingAt))}
+        </span>
+      )}
     </span>
   );
 }
@@ -136,10 +151,12 @@ function Coverage({
   tone?: string;
 }) {
   return (
-    <div className="flex-1 px-4 py-3 first:pl-0">
-      <div className={`font-heading text-2xl font-semibold tabular-nums ${tone}`}>{value}</div>
-      <div className="mt-0.5 text-sm text-ink">{label}</div>
-      {note && <div className="mt-0.5 text-xs text-muted">{note}</div>}
+    <div className="border-b border-r border-hairline p-card last:border-r-0 md:border-b-0 [&:nth-child(2)]:border-r-0 md:[&:nth-child(2)]:border-r">
+      <div className={`font-heading text-[28px] font-semibold leading-none tabular-nums ${tone}`}>
+        {value}
+      </div>
+      <div className="mt-2 text-[13px] font-medium text-ink">{label}</div>
+      {note && <div className="mt-0.5 text-xs leading-snug text-muted">{note}</div>}
     </div>
   );
 }
@@ -196,16 +213,31 @@ export function OpportunityFeed({
 
   const busy = sweeping || pending;
 
+  /** The one figure every row was repeating. Stated once, above the table, so each row can
+   *  carry only what varies — the tender's own bar. Thirty rows of "…your profile shows
+   *  ₹8.20 Cr" is not information, it is noise wearing information's clothes. */
+  const profileLine = useMemo(() => {
+    const withReason = (data.items ?? []).find(
+      (m) => m.eligibility !== "unknown" && m.eligibility_reason,
+    );
+    const shows = withReason?.eligibility_reason?.match(/your profile shows (.+)$/);
+    return shows?.[1] ?? null;
+  }, [data.items]);
+
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <h1 className="font-heading text-2xl font-semibold text-ink">Opportunities</h1>
-        <p className="text-sm text-muted">
-          Public tenders on GeM, deduplicated and matched against your rules and profile.
-        </p>
-        <div className="ml-auto flex items-center gap-2">
+    <main className="p-page">
+      <header className="flex flex-wrap items-start gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-ink">
+            Opportunities
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            Live public tenders on GeM, deduplicated and matched against your rules and profile.
+          </p>
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-3">
           {lastSwept && (
-            <span className="font-mono text-xs text-muted">
+            <span className="hidden font-mono text-xs text-muted sm:inline">
               swept {STAMP.format(new Date(lastSwept))} IST
             </span>
           )}
@@ -213,28 +245,32 @@ export function OpportunityFeed({
             type="button"
             onClick={refresh}
             disabled={busy}
-            className="rounded-control border border-hairline px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-surface-alt disabled:opacity-50"
+            className="rounded-control border border-hairline bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-surface-alt disabled:opacity-50"
           >
             {busy ? "Sweeping GeM…" : "Refresh"}
           </button>
         </div>
       </header>
 
-      {/* The coverage sentence, as one ruled instrument. */}
+      {/* Coverage as one instrument, bounded to the same width as the table beneath it. */}
       <section
         aria-label="Feed coverage"
-        className="flex flex-wrap divide-x divide-hairline border-y border-hairline"
+        className="mt-6 grid grid-cols-2 overflow-hidden rounded-card border border-hairline bg-surface md:grid-cols-4"
       >
         <Coverage value={swept} label="Swept from GeM" note="deduplicated by bid number" />
         <Coverage
           value={data.counts?.in_scope ?? 0}
           label="In your feed"
-          note={activeRules.length ? `${activeRules.length} rule${activeRules.length > 1 ? "s" : ""} applied` : "no rules yet"}
+          note={
+            activeRules.length
+              ? `${activeRules.length} rule${activeRules.length > 1 ? "s" : ""} applied`
+              : "no rules yet"
+          }
         />
         <Coverage
           value={eligibleCount}
           label="Likely eligible"
-          note="turnover checked against your profile"
+          note={profileLine ? `against your ${profileLine}` : "needs your turnover on file"}
           tone={eligibleCount > 0 ? "text-success" : "text-ink"}
         />
         <Coverage
@@ -244,8 +280,7 @@ export function OpportunityFeed({
         />
       </section>
 
-      {/* S14-D2: both buckets, both counts, always reachable in one click. */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         <nav className="flex gap-2" data-feed-tabs>
           {(
             [
@@ -262,10 +297,10 @@ export function OpportunityFeed({
               className={`rounded-control border px-3 py-1.5 text-sm font-medium transition-colors ${
                 state === key
                   ? "border-primary bg-primary text-white"
-                  : "border-hairline text-ink hover:bg-surface-alt"
+                  : "border-hairline bg-surface text-ink hover:bg-surface-alt"
               }`}
             >
-              {label} <span className="tabular-nums opacity-80">{count}</span>
+              {label} <span className="tabular-nums opacity-75">{count}</span>
             </a>
           ))}
         </nav>
@@ -280,7 +315,7 @@ export function OpportunityFeed({
             >
               <option value="closing">Closing soonest</option>
               <option value="verdict">Eligibility</option>
-              <option value="turnover">Turnover required</option>
+              <option value="turnover">Turnover bar</option>
               <option value="value">Estimated value</option>
             </select>
           </label>
@@ -288,7 +323,7 @@ export function OpportunityFeed({
       </div>
 
       {state === "excluded" && activeRules.length > 0 && (
-        <p className="text-sm text-muted">
+        <p className="mt-3 text-sm text-muted">
           Hidden by{" "}
           {activeRules.map((r, i) => (
             <span key={r.id}>
@@ -301,7 +336,10 @@ export function OpportunityFeed({
       )}
 
       {items.length === 0 ? (
-        <div data-empty-state className="rounded-card border border-hairline bg-surface p-card">
+        <div
+          data-empty-state
+          className="mt-6 rounded-card border border-hairline bg-surface p-card"
+        >
           <p className="font-medium text-ink">
             {state === "excluded" ? "Nothing is hidden" : "No opportunities yet"}
           </p>
@@ -322,15 +360,24 @@ export function OpportunityFeed({
           )}
         </div>
       ) : (
-        <section className="overflow-x-auto rounded-card border border-hairline bg-surface">
-          <table className="w-full min-w-[1000px] text-sm">
-            <thead className="sticky top-0 bg-surface-alt text-left text-xs uppercase tracking-wide text-muted">
+        <section className="mt-4 overflow-x-auto rounded-card border border-hairline bg-surface">
+          <table className="w-full table-fixed text-sm">
+            <colgroup>
+              <col />
+              <col className="w-[22%]" />
+              <col className="w-[92px]" />
+              <col className="w-[130px]" />
+              <col className="w-[110px]" />
+              <col className="w-[160px]" />
+            </colgroup>
+            <thead className="border-b border-hairline bg-surface-alt text-left text-[11px] uppercase tracking-wider text-muted">
               <tr>
-                <th className="p-3 font-medium">Tender</th>
-                <th className="p-3 font-medium">Closes</th>
-                <th className="p-3 font-medium">Turnover required</th>
-                <th className="p-3 font-medium">EMD</th>
-                <th className="p-3 font-medium">
+                <th className="px-4 py-2.5 font-medium">Tender</th>
+                <th className="px-4 py-2.5 font-medium">Buyer</th>
+                <th className="px-4 py-2.5 font-medium">Closes</th>
+                <th className="px-4 py-2.5 text-right font-medium">Turnover bar</th>
+                <th className="px-4 py-2.5 text-right font-medium">EMD</th>
+                <th className="px-4 py-2.5 font-medium">
                   {state === "excluded" ? "Excluded by" : "Eligibility"}
                 </th>
               </tr>
@@ -344,75 +391,77 @@ export function OpportunityFeed({
                   <tr
                     key={match.opportunity_id}
                     data-opportunity={opp.portal_ref_no}
-                    className="align-top transition-colors hover:bg-surface-alt"
+                    data-eligibility-reason={match.eligibility_reason ?? ""}
+                    className="transition-colors hover:bg-surface-alt"
                   >
-                    <td className="max-w-[420px] p-3">
-                      <div className="flex flex-wrap items-center gap-x-2">
-                        {/* Mono here is measurement, not costume: a bid number is an identifier
-                            a user will read against the portal character by character. */}
-                        <span className="font-mono text-xs text-primary">{opp.portal_ref_no}</span>
-                        {opp.document_urls?.[0] && (
-                          <a
-                            href={opp.document_urls[0]}
-                            target="_blank"
-                            rel="noreferrer"
-                            data-source-link
-                            className="text-xs text-primary underline-offset-2 hover:underline"
-                          >
-                            bid document ↗
-                          </a>
-                        )}
-                      </div>
-                      <div className="mt-1 line-clamp-2 text-ink">{opp.title ?? "Untitled"}</div>
-                      <div className="mt-1 text-xs text-muted">
-                        {opp.authority ?? "Authority not published"}
-                      </div>
+                    <td className="px-4 py-2.5 align-top">
+                      <a
+                        href={opp.document_urls?.[0] ?? "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        data-source-link
+                        className="line-clamp-2 font-medium leading-snug text-ink hover:text-primary"
+                        title={opp.title ?? undefined}
+                      >
+                        {opp.title ?? "Untitled tender"}
+                      </a>
+                      {/* Mono is measurement here, not costume: a bid number gets read back
+                          against the portal character by character. */}
+                      <span className="mt-1 block font-mono text-[11px] text-muted">
+                        {opp.portal_ref_no}
+                      </span>
                     </td>
-                    <td className="p-3">
+                    <td className="px-4 py-2.5 align-top">
+                      <span className="line-clamp-2 text-[13px] leading-snug text-muted">
+                        {opp.authority ?? "Not published"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 align-top">
                       <Deadline closingAt={opp.closing_at} now={now} />
                     </td>
-                    <td className="p-3 tabular-nums text-ink">
-                      {parsed.min_avg_annual_turnover_inr != null
-                        ? formatINR(parsed.min_avg_annual_turnover_inr)
-                        : /* Absent is not zero. The bid document states no requirement, and
-                             saying "—" is the honest rendering of that. */
-                          <span className="text-muted">—</span>}
-                      {parsed.estimated_value_inr != null && (
-                        <div className="text-xs text-muted">
-                          est. {formatINR(parsed.estimated_value_inr)}
-                        </div>
+                    <td className="px-4 py-2.5 text-right align-top tabular-nums">
+                      {parsed.min_avg_annual_turnover_inr != null ? (
+                        <>
+                          <span className="text-ink">
+                            {formatINR(parsed.min_avg_annual_turnover_inr)}
+                          </span>
+                          {parsed.estimated_value_inr != null && (
+                            <span className="mt-0.5 block text-[11px] text-muted">
+                              est. {formatINR(parsed.estimated_value_inr)}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        /* "none stated" rather than a dash: a tender with no financial bar is
+                            good news for a small bidder, and a dash reads as missing data. */
+                        <span className="text-[13px] text-muted">none stated</span>
                       )}
                     </td>
-                    <td className="p-3 tabular-nums">
+                    <td className="px-4 py-2.5 text-right align-top tabular-nums">
                       {parsed.emd_amount_inr != null ? (
                         <span className="text-ink">{formatINR(parsed.emd_amount_inr)}</span>
                       ) : parsed.emd_required === false ? (
-                        <span className="text-muted">none</span>
+                        <span className="text-[13px] text-muted">none</span>
                       ) : (
-                        <span className="text-muted">—</span>
+                        <span className="text-[13px] text-muted">—</span>
                       )}
                     </td>
-                    <td className="p-3">
+                    <td className="px-4 py-2.5 align-top">
                       {match.state === "excluded" ? (
-                        // S14-D1: the rule's own name, because the user wrote it and can undo it.
-                        <span data-excluded-by={match.excluded_by_rule ?? ""} className="text-ink">
+                        <span
+                          data-excluded-by={match.excluded_by_rule ?? ""}
+                          className="text-[13px] text-ink"
+                        >
                           {match.excluded_by_rule}
                         </span>
                       ) : (
-                        <>
-                          <span
-                            data-eligibility={match.eligibility}
-                            className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${verdict.cls}`}
-                          >
-                            {verdict.label}
-                          </span>
-                          {/* S14-D4: the deciding criterion in words, not a colour. */}
-                          {match.eligibility_reason && (
-                            <div className="mt-1 max-w-[320px] text-xs text-muted">
-                              {match.eligibility_reason}
-                            </div>
-                          )}
-                        </>
+                        <span
+                          data-eligibility={match.eligibility}
+                          title={match.eligibility_reason ?? undefined}
+                          className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${verdict.cls}`}
+                        >
+                          {verdict.label}
+                        </span>
                       )}
                     </td>
                   </tr>
@@ -423,11 +472,11 @@ export function OpportunityFeed({
         </section>
       )}
 
-      <p className="text-xs text-muted">
+      <p className="mt-4 max-w-prose text-xs leading-relaxed text-muted">
         Source: Government e-Marketplace (bidplus.gem.gov.in). Tender content stays on GeM and is
-        linked, not reproduced. Eligibility figures are read from each bid document by a
-        deterministic parser and are provisional until the tender is fully analysed.
+        linked, not reproduced. Turnover and EMD are read from each bid document by a
+        deterministic parser; eligibility is provisional until the tender is fully analysed.
       </p>
-    </div>
+    </main>
   );
 }
