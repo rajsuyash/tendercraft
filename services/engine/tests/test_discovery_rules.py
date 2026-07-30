@@ -7,7 +7,7 @@ ET-7, the discovery miss — the only failure in this product with no natural fe
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -19,7 +19,7 @@ from app.deterministic.discovery import (
     evaluate_gate,
 )
 
-NOW = datetime(2026, 7, 30, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
 
 
 def record(**overrides):
@@ -165,6 +165,33 @@ class TestDepth1Eligibility:
         result = evaluate_eligibility(fields, profile)
         assert isinstance(result, EligibilityResult)
         assert result.reason.strip()
+
+    def test_a_pass_claims_only_what_it_compared(self):
+        """The audit finding this pins: Depth-1 compares ONE criterion.
+
+        Calling that "likely eligible" put a green pass on Adhesive Gum and vehicle spares for
+        an IT services firm — true about the money, useless about the bid, and exactly the kind
+        of overstatement this product refuses everywhere else. The verdict must name the bar it
+        cleared and disclaim the ones it did not check.
+        """
+        result = evaluate_eligibility(
+            {"min_avg_annual_turnover_inr": 500_000}, {"avg_annual_turnover_inr": 82_000_000}
+        )
+        assert result.signal == "likely_eligible"
+        assert "turnover bar" in result.reason.lower()
+        # It must NOT imply the bidder qualifies outright.
+        assert "not yet checked" in result.reason.lower()
+
+    def test_read_but_no_bar_is_worded_differently_from_not_read(self):
+        # 56 live rows said "NEEDS THE NIT" about documents already parsed.
+        not_read = evaluate_eligibility(None, {"avg_annual_turnover_inr": 1})
+        no_bar = evaluate_eligibility(
+            {"min_avg_annual_turnover_inr": None}, {"avg_annual_turnover_inr": 1}
+        )
+        assert not_read.signal == no_bar.signal == "unknown"
+        assert not_read.reason != no_bar.reason
+        assert "not read" in not_read.reason.lower()
+        assert "states no minimum turnover" in no_bar.reason.lower()
 
     def test_eligibility_never_returns_an_exclusion(self):
         # Depth-1 ranks; it does not hide (C-FR9 / F-FR12). The signal vocabulary has no

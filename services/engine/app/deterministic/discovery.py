@@ -180,6 +180,10 @@ def evaluate_eligibility(
 
     required = eligibility_fields.get("min_avg_annual_turnover_inr")
     if required is None:
+        # Read, and it states no financial bar. That is a different fact from "not read", and
+        # collapsing them into one label told 56 live rows they still needed a document we had
+        # already parsed. The signal stays `unknown` because no eligibility criterion was
+        # actually decided; only the wording distinguishes the two.
         return EligibilityResult(
             "unknown", "The bid document states no minimum turnover requirement"
         )
@@ -193,10 +197,12 @@ def evaluate_eligibility(
         )
 
     if float(actual) >= float(required):
+        # Deliberately narrow wording. This compared ONE criterion. Saying "eligible" would
+        # claim experience, certifications and supply capability were checked; they were not.
         return EligibilityResult(
             "likely_eligible",
-            f"Requires average annual turnover of {_inr(required)}; "
-            f"your profile shows {_inr(actual)}",
+            f"Clears the turnover bar of {_inr(required)} with your {_inr(actual)}. "
+            "Experience, certifications and category fit are not yet checked at this depth.",
         )
 
     # Never a bare "ineligible": an MSE/startup relaxation can reverse it, and the bidder needs
@@ -206,7 +212,7 @@ def evaluate_eligibility(
     return EligibilityResult(
         "likely_ineligible",
         f"Requires average annual turnover of {_inr(required)}; "
-        f"your profile shows {_inr(actual)}{tail}",
+        f"your profile shows {_inr(actual)}{tail}. Turnover only.",
     )
 
 

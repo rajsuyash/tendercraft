@@ -67,13 +67,31 @@ type FeedData = {
   rules: Rule[];
 };
 
+/**
+ * Verdict semantics are reserved (DESIGN_SPEC §C): these hues mean Pass / Fail / Needs-review
+ * and are never repurposed.
+ *
+ * The labels say what was actually checked. Depth-1 compares ONE criterion — the turnover bar
+ * — against the vendor profile; it does not check experience, certifications, bidder-type
+ * restrictions or whether the company can supply the thing at all (C-FR7 lists all of those as
+ * still to come). Labelling that "LIKELY ELIGIBLE" put a green chip on Adhesive Gum for an IT
+ * services firm, which is true about the money and useless about the bid. "CLEARS TURNOVER BAR"
+ * claims exactly what was computed and no more — the same discipline the drafter follows when
+ * it refuses to write a figure it cannot source.
+ */
 const VERDICT: Record<Match["eligibility"], { label: string; cls: string }> = {
-  // Verdict semantics are reserved (DESIGN_SPEC §C): these three hues mean Pass / Fail /
-  // Needs-review across the whole product and are never repurposed.
-  likely_eligible: { label: "LIKELY ELIGIBLE", cls: "border-success text-success bg-success-bg" },
-  likely_ineligible: { label: "LIKELY INELIGIBLE", cls: "border-danger text-danger bg-danger-bg" },
-  unknown: { label: "NEEDS THE NIT", cls: "border-warning text-warning bg-warning-bg" },
+  likely_eligible: { label: "CLEARS TURNOVER BAR", cls: "border-success text-success bg-success-bg" },
+  likely_ineligible: { label: "BELOW TURNOVER BAR", cls: "border-danger text-danger bg-danger-bg" },
+  unknown: { label: "NOT ASSESSED", cls: "border-warning text-warning bg-warning-bg" },
 };
+
+/** `unknown` covers two genuinely different states and one label for both was a lie in one of
+ *  them: 56 rows read as "NEEDS THE NIT" when the NIT had already been read and simply stated
+ *  no turnover requirement. Distinguish by whether the document was parsed. */
+function unknownLabel(parsed: ParsedEligibility | null): string {
+  if (!parsed) return "NIT NOT READ YET";
+  return parsed.min_avg_annual_turnover_inr == null ? "NO TURNOVER BAR" : "NOT ASSESSED";
+}
 
 type SortKey = "closing" | "verdict" | "turnover" | "value";
 
@@ -269,8 +287,8 @@ export function OpportunityFeed({
         />
         <Coverage
           value={eligibleCount}
-          label="Likely eligible"
-          note={profileLine ? `against your ${profileLine}` : "needs your turnover on file"}
+          label="Clear the turnover bar"
+          note={profileLine ? `against your ${profileLine} · turnover only` : "needs your turnover on file"}
           tone={eligibleCount > 0 ? "text-success" : "text-ink"}
         />
         <Coverage
@@ -460,7 +478,9 @@ export function OpportunityFeed({
                           title={match.eligibility_reason ?? undefined}
                           className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${verdict.cls}`}
                         >
-                          {verdict.label}
+                          {match.eligibility === "unknown"
+                            ? unknownLabel(opp.eligibility)
+                            : verdict.label}
                         </span>
                       )}
                     </td>

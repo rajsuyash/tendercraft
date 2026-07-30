@@ -14,16 +14,16 @@ Required to exist by tools/check-discovery-guardrails.sh.
 
 from __future__ import annotations
 
-import pytest
-
-from app.deterministic.discovery import Rule, evaluate_gate
-
 # The normalizer under test lives in the connector, which is a separate service and not
 # importable here. It is one small pure function and the merge rule is a product invariant
 # rather than one service's implementation detail, so it is restated — deliberately duplicated
 # per the wall precedent in CLAUDE.md: copying beats coupling two deploy cycles. If these two
 # ever disagree, this test is the one that should be believed.
 import re
+
+import pytest
+
+from app.deterministic.discovery import Rule, evaluate_gate
 
 _REF_SEPARATORS = re.compile(r"[\s\-_/\\.]+")
 
