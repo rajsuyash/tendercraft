@@ -14,4 +14,20 @@ playwright-report/
 .claude/dev-server.log
 .gstack/
 apps/*/.env
-.playwright-mcp/fx/
+
+# Build and test output that was previously TRACKED. Every build rewrote tsbuildinfo and every
+# pytest run rewrote .coverage, so the four files produced a dirty tree and a spurious diff on
+# every machine, forever. Nothing in the Dockerfiles, cloudbuild configs or CI reads them.
+*.tsbuildinfo
+.coverage
+
+# Browser-automation debug output. Only `fx/` was ignored before, which left 152 console logs
+# permanently untracked-but-not-ignored — enough noise to hide a real file in `git status`.
+.playwright-mcp/
+
+# Root-level scratch: verification screenshots and portal probe dumps. Scoped to the repo root
+# with a leading slash so it can never shadow a real asset under design/reference/ or
+# apps/*/public/. `gem-*.json` in particular is raw GeM listing data, which must not be
+# committed even to a private repo (docs/discovery/source-gem.md §8).
+/*.png
+/gem-*.json
