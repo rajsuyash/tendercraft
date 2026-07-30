@@ -1,0 +1,4 @@
+# Real GeM bid documents. NOT committed: this repo is public and GeM forbids reproducing
+# its content without prior written permission (docs/discovery/source-gem.md §8).
+# Regenerate: uv run python -m tests.fetch_fixtures
+*.pdf
