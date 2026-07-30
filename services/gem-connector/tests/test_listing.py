@@ -125,12 +125,27 @@ class TestNormalize:
         assert record["published_at"] == "2026-07-28T10:00:00Z"
         assert record["closing_at"] == "2026-07-30T15:43:46Z"
 
-    def test_document_url_uses_the_PARENT_id_not_the_item_id(self):
-        # The trap: /showbidDocument/<item_id> returns a 200 for the wrong bid rather than an
+    def test_document_url_prefers_the_PARENT_id_for_a_reverse_auction_record(self):
+        # An R record's own id is the auction; the bid document hangs off the parent. The trap:
+        # /showbidDocument/<wrong_id> returns 200 with a DIFFERENT bid's PDF rather than an
         # error, so this is unobservable in production without an assertion.
         record = normalize(DOC_SERVICES)
         assert record["document_urls"] == ["https://bidplus.gem.gov.in/showbidDocument/9555122"]
         assert "9664201" not in record["document_urls"][0]
+
+    def test_document_url_falls_back_to_the_OWN_id_for_a_parent_bid_record(self):
+        # A `GEM/…/B/…` record IS the bid, so it has no b_id_parent. Before this fallback every
+        # such row shipped with an empty document_urls — and since the feed is mostly B records,
+        # that silently disabled eligibility for the entire production feed while looking fine.
+        # Verified against the live portal: the resulting document's own bid number matches.
+        doc = {k: v for k, v in DOC_SERVICES.items() if k != "b_id_parent"}
+        doc["b_id"] = [8906360]
+        record = normalize(doc)
+        assert record["document_urls"] == ["https://bidplus.gem.gov.in/showbidDocument/8906360"]
+
+    def test_the_parent_wins_when_both_ids_are_present(self):
+        doc = dict(DOC_SERVICES) | {"b_id": [9664201]}
+        assert normalize(doc)["document_urls"][0].endswith("/9555122")
 
     def test_drops_gems_NA_department_placeholder(self):
         record = normalize(DOC_GOODS_NA_DEPT)
@@ -147,8 +162,10 @@ class TestNormalize:
         assert len(record["category_codes"]) == 3
         assert record["category_codes"][2] == "home_tool_hand_brus_scru"  # leading space trimmed
 
-    def test_missing_parent_id_yields_no_document_url_rather_than_a_broken_one(self):
-        doc = {k: v for k, v in DOC_SERVICES.items() if k != "b_id_parent"}
+    def test_no_usable_id_at_all_yields_no_document_url_rather_than_a_broken_one(self):
+        # Neither id present: emit nothing rather than ".../showbidDocument/None", which would
+        # 200 with an empty body and read downstream as "the parser broke".
+        doc = {k: v for k, v in DOC_SERVICES.items() if k not in ("b_id_parent", "b_id")}
         assert normalize(doc)["document_urls"] == []
 
     def test_snapshot_ref_is_stable_and_content_addressed(self):
@@ -169,6 +186,13 @@ class TestPayloadAndParsing:
         body = build_payload(7)
         assert '"page":7' in body["payload"]
         assert '"bidStatusType":"ongoing_bids"' in body["payload"]
+
+    def test_the_sweep_sorts_by_newest_published_not_soonest_closing(self):
+        # Sorting by soonest-closing returns tenders already too late to bid on, and hides new
+        # ones mid-corpus where the incremental frontier never reaches them. Measured: the first
+        # production sweep under the portal's default sort produced 60 bids all closing within
+        # five days.
+        assert '"sort":"Bid-Start-Date-Latest"' in build_payload(1)["payload"]
 
     def test_parse_page_reads_solr_shape(self):
         raw = '{"status":1,"code":200,"message":"Bid result","response":{"response":{"numFound":48476,"start":0,"docs":[{"b_bid_number":["GEM/2026/R/1"]}]}}}'

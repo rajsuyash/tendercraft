@@ -82,10 +82,16 @@ def normalize(doc: dict[str, Any]) -> dict[str, Any]:
     """One Solr document → one F-FR1 record. Pure."""
     ref = normalize_ref(_first(doc.get("b_bid_number")))
 
-    # The document lives under the PARENT bid id, not the item id. Getting this wrong yields a
-    # 200 for the wrong bid rather than an error, so it is asserted in the tests.
-    parent_id = _first(doc.get("b_id_parent"))
-    document_urls = [f"{BASE_URL}/showbidDocument/{parent_id}"] if parent_id else []
+    # The document lives under the bid's own id when the record IS a bid (`GEM/…/B/…`), and
+    # under `b_id_parent` when it is a reverse-auction entry (`GEM/…/R/…`) pointing back at one.
+    #
+    # Both shapes appear in the same feed and the split is not cosmetic: an R record's own id is
+    # the auction, whose document endpoint is not the bid document. Preferring the parent and
+    # falling back to the own id covers both, and getting it backwards returns a 200 carrying a
+    # DIFFERENT bid's PDF rather than an error — confident eligibility facts about the wrong
+    # tender. Both branches are pinned by tests.
+    document_id = _first(doc.get("b_id_parent")) or _first(doc.get("b_id"))
+    document_urls = [f"{BASE_URL}/showbidDocument/{document_id}"] if document_id else []
 
     # bd_category_name carries the full item list; b_category_name is a truncated display
     # string. Prefer the complete one, fall back rather than concatenate.
@@ -124,15 +130,31 @@ def normalize(doc: dict[str, Any]) -> dict[str, Any]:
             "is_rate_contract": _first(doc.get("is_rc_bid")),
             "is_boq": _first(doc.get("bd_details_is_boq")),
             "parent_ref_no": normalize_ref(_first(doc.get("b_bid_number_parent"))),
+            "document_id": document_id,
         },
     }
 
 
-def build_payload(page: int) -> dict[str, str]:
-    """The exact body /all-bids-data expects, newest-closing last.
+# GeM offers four sorts; this one is load-bearing. `Bid-End-Date-Oldest` is the portal's own
+# default and it is the wrong frontier for a discovery feed twice over:
+#
+#   1. It returns the tenders closing SOONEST — the ones a bidder can least act on. A first
+#      sweep against it produced 60 bids all closing within five days, i.e. a feed made
+#      entirely of tenders that are already too late to win.
+#   2. Newly published bids land somewhere in the middle of that ordering, so the incremental
+#      "stop when a page yields nothing new" frontier never sees them first, and a daily sweep
+#      would have to page deep into the corpus to find the day's new work.
+#
+# Sorting by latest START date puts the newly published bids on page 1, which is both what the
+# user wants to see and where the incremental sweep needs them.
+_SORT = "Bid-Start-Date-Latest"
 
-    `Bid-End-Date-Oldest` is GeM's default and is stable across pages, which matters: a sweep
-    paginating over a shifting sort order silently skips items, and a skipped item is ET-7.
+
+def build_payload(page: int) -> dict[str, str]:
+    """The exact body /all-bids-data expects, most recently published first.
+
+    The sort must be stable across pages: a sweep paginating over a shifting order silently
+    skips items, and a skipped item is ET-7.
     """
     payload = {
         "page": page,
@@ -142,7 +164,7 @@ def build_payload(page: int) -> dict[str, str]:
             "byType": "all",
             "highBidValue": "",
             "byEndDate": {"from": "", "to": ""},
-            "sort": "Bid-End-Date-Oldest",
+            "sort": _SORT,
         },
     }
     return {"payload": json.dumps(payload, separators=(",", ":"))}

@@ -1,0 +1,206 @@
+"""Pull normalized records from the GeM connector into the shared corpus, then re-run each
+workspace's gate over them.
+
+**This module deliberately contains no filtering.** It reads the connector, writes rows, and
+delegates every include/exclude decision to `app/deterministic/discovery.py`, which is
+model-import-free and enforced as such by CI. G-9 is a structural rule here, not a convention:
+the exclusion path must be somewhere a model cannot reach, and this file — which does talk to
+the network — is not that place. `tools/check-discovery-guardrails.sh` fails the build if a
+function whose name suggests filtering ever appears under `app/discovery/`.
+
+Why the connector is a separate service at all is documented in
+`services/gem-connector/app/fetch.py`: GeM's listing needs an anonymous WAF cookie, and rather
+than weaken the guardrail that (correctly) forbids that word in this tree, the one source that
+needs it lives outside it. This module only ever speaks to our own connector over HTTP.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from datetime import UTC, datetime
+from typing import Any
+
+import httpx
+
+from .. import db, http, service_auth
+from ..deterministic.discovery import Rule, evaluate_eligibility, evaluate_gate
+
+log = logging.getLogger("tendercraft.engine")
+
+CONNECTOR_URL = os.environ.get("GEM_CONNECTOR_URL", "").rstrip("/")
+
+# One sweep pulls the day's new bids. The connector itself caps pages and rate-limits per host;
+# this is the engine-side ceiling so a scheduler misfire cannot ask for an unbounded crawl.
+DEFAULT_PAGES = int(os.environ.get("GEM_SWEEP_PAGES", "12"))
+
+# Documents are fetched only for items that survived a workspace's gate, newest deadline first.
+# Fetching all 48k would be pointless and rude; this is §4.1's escalation ladder, capped.
+DEFAULT_DOC_BUDGET = int(os.environ.get("GEM_DOC_BUDGET", "25"))
+
+
+def _connector(path: str, params: dict[str, Any] | None = None) -> dict:
+    if not CONNECTOR_URL:
+        raise RuntimeError("GEM_CONNECTOR_URL is not configured")
+    # Identity headers are built outside this tree (see app/service_auth.py) so the guardrail
+    # forbidding portal-bound credentials here stays literal and unweakened.
+    response = http.client.request(
+        "GET",
+        f"{CONNECTOR_URL}{path}",
+        params=params,
+        headers=service_auth.headers_for(CONNECTOR_URL),
+        timeout=180,
+    )
+    response.raise_for_status()
+    body = response.json()
+    if not body.get("ok"):
+        raise RuntimeError(f"connector error: {(body.get('error') or {}).get('message')}")
+    return body["data"]
+
+
+def _to_row(record: dict[str, Any]) -> dict[str, Any]:
+    """Connector record → `opportunities` row. Absent stays absent (F-FR1)."""
+    return {
+        "source_id": record["source_id"],
+        "portal_ref_no": record["portal_ref_no"],
+        "title": record.get("title"),
+        "authority": record.get("authority"),
+        "category_codes": record.get("category_codes") or [],
+        "geography": record.get("geography"),
+        "estimated_value": record.get("estimated_value"),
+        "emd": record.get("emd"),
+        "published_at": record.get("published_at"),
+        "closing_at": record.get("closing_at"),
+        "prebid_at": record.get("prebid_at"),
+        "document_urls": record.get("document_urls") or [],
+        "raw_snapshot_ref": record.get("raw_snapshot_ref"),
+        "source_fields": record.get("source_fields") or {},
+        "last_seen_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def refresh_corpus(max_pages: int = DEFAULT_PAGES) -> dict[str, Any]:
+    """Sweep the connector and upsert into the shared corpus. Workspace-agnostic."""
+    data = _connector("/opportunities", {"max_pages": max_pages})
+    rows = [_to_row(r) for r in data.get("records", []) if r.get("portal_ref_no")]
+    stored = db.upsert_opportunities(rows)
+    log.info(
+        "discovery: swept %d pages, upserted %d rows",
+        data.get("pages_fetched", 0),
+        len(stored),
+    )
+    return {
+        "portal_total_ongoing": data.get("portal_total_ongoing"),
+        "pages_fetched": data.get("pages_fetched"),
+        "upserted": len(stored),
+    }
+
+
+def _rules_for(workspace_id: str) -> list[Rule]:
+    return [
+        Rule(
+            name=r["name"], kind=r["kind"],
+            spec=r.get("spec") or {}, enabled=r.get("enabled", True),
+        )
+        for r in db.get_discovery_rules(workspace_id)
+    ]
+
+
+def _profile_turnover_inr(workspace_id: str) -> dict[str, Any]:
+    """Average annual turnover from the vendor profile, in rupees.
+
+    `profile_financials.turnover_cr` is in crores; the comparator works in rupees. Converting at
+    the boundary rather than in the comparator keeps one unit inside the deterministic layer —
+    a mixed-unit comparison is the 100x error this codebase already guards against in the GeM
+    amount parser.
+    """
+    profile = db.get_profile_context(workspace_id)
+    values = [
+        float(f["turnover_cr"])
+        for f in profile.get("financials") or []
+        if f.get("turnover_cr") is not None
+    ]
+    if not values:
+        return {}
+    return {"avg_annual_turnover_inr": (sum(values) / len(values)) * 10_000_000}
+
+
+def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -> dict[str, Any]:
+    """Re-run this workspace's gate and Depth-1 eligibility over the whole corpus.
+
+    Deliberately recomputes everything rather than only new items: a rule edit must take effect
+    across the feed immediately, and C-FR10 wants a profile change to surface newly-eligible
+    tenders without waiting for the next sweep.
+    """
+    rules = _rules_for(workspace_id)
+    profile = _profile_turnover_inr(workspace_id)
+    opportunities = db.get_opportunities(limit=1000)
+
+    matches: list[dict[str, Any]] = []
+    in_scope: list[dict[str, Any]] = []
+    for opportunity in opportunities:
+        gate = evaluate_gate(opportunity, rules)
+        row = {
+            "opportunity_id": opportunity["id"],
+            "state": "in_scope" if gate.in_scope else "excluded",
+            "excluded_by_rule": gate.excluded_by_rule,
+            "computed_at": datetime.now(UTC).isoformat(),
+        }
+        if gate.in_scope:
+            verdict = evaluate_eligibility(opportunity.get("eligibility"), profile)
+            row["eligibility"] = verdict.signal
+            row["eligibility_reason"] = verdict.reason
+            in_scope.append(opportunity)
+        else:
+            # An excluded item keeps 'unknown': we did not evaluate it, and claiming a verdict
+            # we never computed would be a fact invented to fill a column.
+            row["eligibility"] = "unknown"
+            row["eligibility_reason"] = None
+        matches.append(row)
+
+    db.upsert_opportunity_matches(workspace_id, matches)
+
+    fetched = _enrich_documents(in_scope, budget=doc_budget)
+    if fetched:
+        # Second pass so the freshly-parsed turnover figures reach the verdicts in this run
+        # rather than the next one — a demo that shows "unknown" everywhere teaches nothing.
+        return recompute_matches(workspace_id, doc_budget=0) | {"documents_fetched": fetched}
+
+    return {
+        "evaluated": len(matches),
+        "in_scope": sum(1 for m in matches if m["state"] == "in_scope"),
+        "excluded": sum(1 for m in matches if m["state"] == "excluded"),
+        "documents_fetched": 0,
+    }
+
+
+def _enrich_documents(opportunities: list[dict[str, Any]], *, budget: int) -> int:
+    """Fetch and parse bid documents for in-scope items that have none yet.
+
+    Bounded by `budget` because this is the only part of the pipeline that touches a government
+    portal per-item. Ordered by closing date so the tenders a bidder must act on soonest get
+    their eligibility first.
+    """
+    if budget <= 0:
+        return 0
+    pending = [
+        o for o in opportunities
+        if not o.get("eligibility") and o.get("document_urls")
+    ]
+    pending.sort(key=lambda o: o.get("closing_at") or "9999")
+
+    fetched = 0
+    for opportunity in pending[:budget]:
+        parent_id = str(opportunity["document_urls"][0]).rstrip("/").rsplit("/", 1)[-1]
+        try:
+            data = _connector(f"/bids/{parent_id}/eligibility")
+        except (httpx.HTTPError, RuntimeError) as exc:
+            # One unreadable document must not end the sweep. EC-8: a source that starts
+            # returning nothing is an incident, but a single bad row is just a bad row.
+            log.warning("discovery: eligibility fetch failed for %s: %s", parent_id, exc)
+            continue
+        db.set_opportunity_eligibility(
+            opportunity["id"], data.get("fields") or {}, datetime.now(UTC).isoformat()
+        )
+        fetched += 1
+    return fetched

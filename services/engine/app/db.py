@@ -889,3 +889,186 @@ def update_matrix_row(row_id: str, tender_id: str, workspace_id: str, patch: dic
         )
         or []
     )
+
+
+# ---------- Module F: opportunities ----------
+# The shared corpus has no workspace_id (migration 0019 explains why). Every workspace-shaped
+# decision lives in opportunity_matches, which is RLS'd like everything else.
+
+
+def upsert_opportunities(records: list[dict]) -> list[dict]:
+    """Insert or refresh shared-corpus rows.
+
+    `on_conflict` names BOTH columns of the unique constraint. Omitting one lets a service-role
+    merge (which bypasses RLS) rewrite the wrong row — the upsert trap already documented in
+    known-pitfalls, and here it would silently rewrite one tender with another's data.
+    """
+    if not records:
+        return []
+    return (
+        _rest(
+            "POST",
+            "opportunities",
+            params={"on_conflict": "source_id,portal_ref_no"},
+            json=records,
+            prefer="resolution=merge-duplicates,return=representation",
+        )
+        or []
+    )
+
+
+def get_opportunities(limit: int = 500) -> list[dict]:
+    return (
+        _rest(
+            "GET",
+            "opportunities",
+            params={"select": "*", "order": "closing_at.asc", "limit": str(limit)},
+        )
+        or []
+    )
+
+
+def set_opportunity_eligibility(opportunity_id: str, fields: dict, at_iso: str) -> None:
+    _rest(
+        "PATCH",
+        "opportunities",
+        params={"id": f"eq.{opportunity_id}"},
+        json={"eligibility": fields, "eligibility_at": at_iso},
+        prefer="return=minimal",
+    )
+
+
+def get_discovery_rules(workspace_id: str) -> list[dict]:
+    return (
+        _rest(
+            "GET",
+            "discovery_rules",
+            params={
+                "workspace_id": f"eq.{workspace_id}",
+                "select": "id,name,kind,spec,enabled",
+                "order": "created_at.asc",
+            },
+        )
+        or []
+    )
+
+
+def create_discovery_rule(workspace_id: str, rule: dict) -> dict:
+    rows = _rest(
+        "POST",
+        "discovery_rules",
+        params={"on_conflict": "workspace_id,name"},
+        json={**rule, "workspace_id": workspace_id},
+        prefer="resolution=merge-duplicates,return=representation",
+    )
+    return rows[0] if rows else {}
+
+
+def delete_discovery_rule(rule_id: str, workspace_id: str) -> None:
+    _rest(
+        "DELETE",
+        "discovery_rules",
+        params={"id": f"eq.{rule_id}", "workspace_id": f"eq.{workspace_id}"},
+        prefer="return=minimal",
+    )
+
+
+def upsert_opportunity_matches(workspace_id: str, rows: list[dict]) -> int:
+    if not rows:
+        return 0
+    payload = [{**r, "workspace_id": workspace_id} for r in rows]
+    _rest(
+        "POST",
+        "opportunity_matches",
+        params={"on_conflict": "workspace_id,opportunity_id"},
+        json=payload,
+        prefer="resolution=merge-duplicates,return=minimal",
+    )
+    return len(payload)
+
+
+def get_feed(workspace_id: str, state: str, limit: int = 100) -> list[dict]:
+    """Feed rows with their shared-corpus opportunity embedded.
+
+    One query, not N+1: a 50-row feed that lazily loaded each opportunity would be 51 round
+    trips, and at the app-to-database latency this codebase has already been bitten by, that is
+    the difference between a fast page and a broken-feeling one.
+    """
+    return (
+        _rest(
+            "GET",
+            "opportunity_matches",
+            params={
+                "workspace_id": f"eq.{workspace_id}",
+                "state": f"eq.{state}",
+                "select": "*,opportunities(*)",
+                "order": "computed_at.desc",
+                "limit": str(limit),
+            },
+        )
+        or []
+    )
+
+
+def count_feed(workspace_id: str, state: str) -> int:
+    """Exact count for the Excluded bucket. F-FR12 requires the number to be always visible —
+    "142 hidden by 3 of your rules" is the affordance that stops the feed feeling like a
+    black box, so it cannot be approximated or omitted."""
+    s = get_settings()
+    try:
+        r = http.client.request(
+            "GET",
+            f"{s.supabase_url}/rest/v1/opportunity_matches",
+            headers={**_headers(), "Prefer": "count=exact", "Range": "0-0"},
+            params={"workspace_id": f"eq.{workspace_id}", "state": f"eq.{state}", "select": "id"},
+            timeout=15,
+        )
+        r.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise ApiError(502, "DB_ERROR", f"database request failed: {exc}") from exc
+    content_range = r.headers.get("Content-Range", "*/0")
+    return int(content_range.split("/")[-1] or 0)
+
+
+def count_eligible(workspace_id: str) -> int:
+    """Workspace-wide count of Depth-1 `likely_eligible` items.
+
+    Computed here rather than by counting the rows on the page. The coverage strip describes the
+    WORKSPACE, so it must read the same whichever bucket is open; deriving it from the current
+    bucket made it show 21 on In-scope and 0 on Excluded — two counters describing one object,
+    disagreeing (docs/known-pitfalls.md).
+    """
+    s = get_settings()
+    try:
+        r = http.client.request(
+            "GET",
+            f"{s.supabase_url}/rest/v1/opportunity_matches",
+            headers={**_headers(), "Prefer": "count=exact", "Range": "0-0"},
+            params={
+                "workspace_id": f"eq.{workspace_id}",
+                "eligibility": "eq.likely_eligible",
+                "select": "id",
+            },
+            timeout=15,
+        )
+        r.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise ApiError(502, "DB_ERROR", f"database request failed: {exc}") from exc
+    return int((r.headers.get("Content-Range", "*/0")).split("/")[-1] or 0)
+
+
+def set_match_flags(
+    workspace_id: str, opportunity_id: str, patch: dict
+) -> list[dict]:
+    return (
+        _rest(
+            "PATCH",
+            "opportunity_matches",
+            params={
+                "workspace_id": f"eq.{workspace_id}",
+                "opportunity_id": f"eq.{opportunity_id}",
+            },
+            json=patch,
+        )
+        or []
+    )

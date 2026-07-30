@@ -55,6 +55,26 @@ export default async function DashboardPage() {
         ))}
       </div>
 
+      {/* Discovery comes BEFORE upload in the journey: the bidder's first question is "what
+          could we bid on", not "here is a document I already found". */}
+      <section className="mb-3">
+        <Link
+          href="/opportunities"
+          data-find-opportunities
+          className="flex items-center justify-between gap-4 rounded-card border border-hairline bg-surface p-card hover:bg-surface-alt"
+        >
+          <span>
+            <span className="block font-heading text-base font-medium text-ink">
+              Find opportunities
+            </span>
+            <span className="text-sm text-muted">
+              Live public tenders from GeM, matched against your rules and profile
+            </span>
+          </span>
+          <span aria-hidden className="text-xl text-primary">→</span>
+        </Link>
+      </section>
+
       <section className="mb-6">
         <Link
           href="/tenders/upload"

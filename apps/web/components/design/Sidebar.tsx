@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 /** C1 — fixed 280px primary navigation; active item primary-tinted. */
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/opportunities", label: "Opportunities" },
   { href: "/tenders", label: "Tenders" },
   { href: "/proposals", label: "Proposals" },
   { href: "/library", label: "Knowledge Base" },
