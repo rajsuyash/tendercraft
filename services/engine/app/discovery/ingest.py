@@ -234,7 +234,14 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
             "computed_at": datetime.now(UTC).isoformat(),
         }
         if gate.in_scope:
-            verdict = evaluate_eligibility(opportunity.get("eligibility"), profile, language)
+            # The profile's money is in the HOME market's currency; the tender's is in its
+            # own. Comparable only when they are the same country.
+            verdict = evaluate_eligibility(
+                opportunity.get("eligibility"),
+                profile,
+                language,
+                same_currency=(opportunity.get("market") or market) == market,
+            )
             row["eligibility"] = verdict.signal
             row["eligibility_reason"] = verdict.reason
             in_scope.append(opportunity)

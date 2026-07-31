@@ -100,6 +100,10 @@ PHRASES: dict[str, dict[str, str]] = {
         "keyword_1": "Matched your keyword {terms}",
         "keyword_n": "Matched your keywords {terms}",
         "not_read": "Bid document not read yet",
+        "cross_currency": (
+            "This tender's figures are in a different currency from your profile, "
+            "so the turnover bar was not compared"
+        ),
         "no_bar": "The bid document states no minimum turnover requirement",
         "no_profile_turnover": (
             "Requires average annual turnover of {required}; "
@@ -120,6 +124,10 @@ PHRASES: dict[str, dict[str, str]] = {
         "keyword_1": "Correspond à votre mot-clé {terms}",
         "keyword_n": "Correspond à vos mots-clés {terms}",
         "not_read": "Avis de marché pas encore lu",
+        "cross_currency": (
+            "Les montants de cet avis sont dans une devise différente de celle de votre "
+            "profil : le seuil de chiffre d'affaires n'a pas été comparé"
+        ),
         "no_bar": "L'avis ne fixe aucune exigence de chiffre d'affaires minimum",
         "no_profile_turnover": (
             "Exige un chiffre d'affaires annuel moyen de {required} ; "
@@ -350,6 +358,7 @@ def evaluate_eligibility(
     eligibility_fields: dict[str, Any] | None,
     profile: dict[str, Any] | None,
     language: str = "en",
+    same_currency: bool = True,
 ) -> EligibilityResult:
     """Depth-1 triage over the deterministically-parsed bid document and the vendor profile.
 
@@ -371,7 +380,23 @@ def evaluate_eligibility(
         # collapsing them into one label told 56 live rows they still needed a document we had
         # already parsed. The signal stays `unknown` because no eligibility criterion was
         # actually decided; only the wording distinguishes the two.
+        #
+        # BEFORE the currency guard on purpose: "this tender sets no turnover requirement" is a
+        # fact about the TENDER and is true in any currency. Answering "the bar was not compared"
+        # when there is no bar would be declining a question nobody asked.
         return EligibilityResult("unknown", phrase("no_bar", language))
+
+    # A bare number cannot be compared across currencies, and there is no exchange rate in this
+    # system — deliberately, because a rate is a moving external fact and a verdict computed from
+    # one would be stale the day after it was stored.
+    #
+    # This fired in production the day cross-market watching shipped: a French consultancy's
+    # €2.43M is stored as `2.43` in the same column an Indian firm stores crores in, the
+    # comparator multiplied it by 1e7 and called it rupees, and seven tenders were reported as
+    # below a bar nobody had actually compared them to. Declining to answer is the only honest
+    # option; guessing a rate would be a fact invented to fill a column.
+    if not same_currency:
+        return EligibilityResult("unknown", phrase("cross_currency", language))
 
     actual = (profile or {}).get("avg_annual_turnover_inr")
     if actual is None:

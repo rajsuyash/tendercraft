@@ -15,6 +15,7 @@ Three independent guards, because one of them will eventually be bypassed:
 from __future__ import annotations
 
 from app import db
+from app.deterministic.discovery import evaluate_eligibility
 from app.discovery.registry import REGISTRY
 
 
@@ -107,3 +108,61 @@ class TestTheFeedReadIsScopedTooNotJustTheRecompute:
         # coverage strip claiming tenders the user cannot see.
         scope = db._market_scope(["IN", "FR"])
         assert scope["opportunities.market"] == "in.(FR,IN)"
+
+
+class TestMoneyIsNeverComparedAcrossCurrencies:
+    """Found live, not in review: seven tenders on the French workspace were reported as below a
+    turnover bar the day cross-market watching shipped.
+
+    `profile_financials.turnover_cr` holds a bare number in the MARKET's own large unit — crore
+    in India, millions of euros in France. The comparator multiplied it by 1e7 unconditionally
+    and called the result rupees, so €2.43M was compared against Indian rupee thresholds as
+    ₹2.43 Cr. Both the "below the bar" and the "clears the bar" verdicts were meaningless.
+
+    The fix is to decline, not to convert: there is no exchange rate in this system, and a
+    verdict computed from one would be stale the day after it was stored.
+    """
+
+    FIELDS = {"min_avg_annual_turnover_inr": 50_000_000}
+    RICH = {"avg_annual_turnover_inr": 900_000_000}
+    POOR = {"avg_annual_turnover_inr": 1_000_000}
+
+    def test_a_cross_currency_row_is_never_given_a_verdict(self):
+        for profile in (self.RICH, self.POOR):
+            result = evaluate_eligibility(self.FIELDS, profile, "en", same_currency=False)
+            # Neither direction. A false PASS is as wrong as a false FAIL here, and the pass
+            # was the more common one — 154 of the 161 bogus verdicts said "clears the bar".
+            assert result.signal == "unknown", profile
+            assert "different currency" in result.reason
+
+    def test_the_same_currency_path_is_unchanged(self):
+        assert evaluate_eligibility(self.FIELDS, self.RICH).signal == "likely_eligible"
+        assert evaluate_eligibility(self.FIELDS, self.POOR).signal == "likely_ineligible"
+
+    def test_the_refusal_is_explained_in_the_market_language(self):
+        result = evaluate_eligibility(self.FIELDS, self.RICH, "fr", same_currency=False)
+        assert "devise différente" in result.reason
+
+    def test_a_tender_stating_no_bar_says_so_even_across_currencies(self):
+        """Ordering: the no-bar branch runs BEFORE the currency guard.
+
+        This assertion is the inverse of the one first written here, and the change is
+        deliberate. "This tender sets no minimum turnover requirement" is a fact about the
+        TENDER and is true in every currency; answering "the bar was not compared" when there
+        is no bar declines a question nobody asked. The live feed showed the inconsistency —
+        three Indian rows all displaying `non précisé` gave two different explanations
+        depending only on whether their document had been parsed.
+        """
+        result = evaluate_eligibility(
+            {"min_avg_annual_turnover_inr": None}, self.RICH, "en", same_currency=False
+        )
+        assert result.signal == "unknown"
+        assert "no minimum turnover" in result.reason
+        assert "different currency" not in result.reason
+
+    def test_an_unparsed_document_still_outranks_everything(self):
+        # Nothing was read, so neither the bar nor the currency is knowable yet.
+        assert (
+            evaluate_eligibility(None, self.RICH, "en", same_currency=False).reason
+            == "Bid document not read yet"
+        )

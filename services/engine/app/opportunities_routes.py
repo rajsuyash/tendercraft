@@ -62,6 +62,15 @@ async def list_opportunities(
                 "in_scope": db.count_feed(user.workspace_id, "in_scope", markets),
                 "excluded": db.count_feed(user.workspace_id, "excluded", markets),
                 "likely_eligible": db.count_eligible(user.workspace_id, markets),
+                # The one that earns its place on the strip: rare, and it means "do not spend
+                # an afternoon on this". Kept alongside rather than replacing the other so the
+                # response shape stays additive for anything already reading it.
+                "below_turnover_bar": db.count_eligible(
+                    user.workspace_id, markets, "likely_ineligible"
+                ),
+                # The denominator for the one above. Without it a zero reads as an all-clear
+                # when it may mean nothing was measurable at all.
+                "states_a_turnover_bar": db.count_comparable(user.workspace_id, markets),
             },
             "markets": markets,
             "rules": db.get_discovery_rules(user.workspace_id),

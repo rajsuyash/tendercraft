@@ -1089,11 +1089,19 @@ def get_feed(
     )
 
 
-def count_feed(workspace_id: str, state: str, markets: list[str] | None = None) -> int:
-    """Exact count for the Excluded bucket. F-FR12 requires the number to be always visible —
-    "142 hidden by 3 of your rules" is the affordance that stops the feed feeling like a
-    black box, so it cannot be approximated or omitted."""
+def _count_matches(
+    workspace_id: str, filters: dict[str, str], markets: list[str] | None = None
+) -> int:
+    """Exact count of this workspace's match rows under `filters`, scoped to `markets`.
+
+    One implementation for every counter on the coverage strip. There were three copies of this
+    request and they differed only in one parameter; the strip's whole job is to read as ONE
+    sentence about coverage, and three hand-maintained copies of the scoping logic is how two of
+    its numbers end up describing different sets (docs/known-pitfalls.md: four counters
+    describing one object will disagree).
+    """
     s = get_settings()
+    scope = _market_scope(markets)
     try:
         r = http.client.request(
             "GET",
@@ -1101,11 +1109,10 @@ def count_feed(workspace_id: str, state: str, markets: list[str] | None = None) 
             headers={**_headers(), "Prefer": "count=exact", "Range": "0-0"},
             params={
                 "workspace_id": f"eq.{workspace_id}",
-                "state": f"eq.{state}",
-                # Same scope as the rows themselves. A count that counts a wider set than the
-                # list beneath it is the "four counters describing one object" failure in
-                # docs/known-pitfalls.md, and here it would claim tenders the user cannot see.
-                **{k: v for k, v in _market_scope(markets).items() if k != "select"},
+                **filters,
+                **{k: v for k, v in scope.items() if k != "select"},
+                # The join has to survive into the count, or the filter on the embedded
+                # resource silently counts rows it was supposed to exclude.
                 "select": "id,opportunities!inner(id)" if markets else "id",
             },
             timeout=15,
@@ -1113,8 +1120,31 @@ def count_feed(workspace_id: str, state: str, markets: list[str] | None = None) 
         r.raise_for_status()
     except httpx.HTTPError as exc:
         raise ApiError(502, "DB_ERROR", f"database request failed: {exc}") from exc
-    content_range = r.headers.get("Content-Range", "*/0")
-    return int(content_range.split("/")[-1] or 0)
+    return int((r.headers.get("Content-Range", "*/0")).split("/")[-1] or 0)
+
+
+def count_feed(workspace_id: str, state: str, markets: list[str] | None = None) -> int:
+    """Exact count for the Excluded bucket. F-FR12 requires the number to be always visible —
+    "142 hidden by 3 of your rules" is the affordance that stops the feed feeling like a
+    black box, so it cannot be approximated or omitted."""
+    return _count_matches(workspace_id, {"state": f"eq.{state}"}, markets)
+
+
+def count_comparable(workspace_id: str, markets: list[str] | None = None) -> int:
+    """How many tenders in scope even STATE a turnover bar.
+
+    Without it "0 below the turnover bar" is ambiguous in the worst direction: it reads as
+    "nothing disqualifies you" when it may mean "nothing was measurable". On the French corpus
+    today that distinction is the whole truth — 0 of 300 TED notices carry an extracted bar, so
+    the zero says nothing at all and looked like an all-clear.
+    """
+    return _count_matches(
+        workspace_id,
+        {"opportunities.eligibility->>min_avg_annual_turnover_inr": "not.is.null"},
+        # The filter is on the embedded resource, so the join must exist even when the caller
+        # watches every market. Passing the scope through unconditionally guarantees it.
+        markets or [],
+    )
 
 
 def get_relevance_hashes(workspace_id: str) -> dict[str, str]:
@@ -1138,32 +1168,22 @@ def get_relevance_hashes(workspace_id: str) -> dict[str, str]:
     return {r["opportunity_id"]: r["relevance_input_hash"] for r in rows}
 
 
-def count_eligible(workspace_id: str, markets: list[str] | None = None) -> int:
-    """Workspace-wide count of Depth-1 `likely_eligible` items.
+def count_eligible(
+    workspace_id: str, markets: list[str] | None = None, signal: str = "likely_eligible"
+) -> int:
+    """Workspace-wide count of Depth-1 items carrying `signal`.
+
+    The coverage strip asks for `likely_ineligible`, not `likely_eligible`. Measured across four
+    real workspaces, the "clears the bar" figure disqualified nobody — 0 of 1,161 rows in three
+    of them — because clearing a turnover bar only means your revenue is large enough, which is
+    true of almost every row and decides nothing. The FAILING count is the rare, actionable one.
 
     Computed here rather than by counting the rows on the page. The coverage strip describes the
     WORKSPACE, so it must read the same whichever bucket is open; deriving it from the current
     bucket made it show 21 on In-scope and 0 on Excluded — two counters describing one object,
     disagreeing (docs/known-pitfalls.md).
     """
-    s = get_settings()
-    try:
-        r = http.client.request(
-            "GET",
-            f"{s.supabase_url}/rest/v1/opportunity_matches",
-            headers={**_headers(), "Prefer": "count=exact", "Range": "0-0"},
-            params={
-                "workspace_id": f"eq.{workspace_id}",
-                "eligibility": "eq.likely_eligible",
-                **{k: v for k, v in _market_scope(markets).items() if k != "select"},
-                "select": "id,opportunities!inner(id)" if markets else "id",
-            },
-            timeout=15,
-        )
-        r.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise ApiError(502, "DB_ERROR", f"database request failed: {exc}") from exc
-    return int((r.headers.get("Content-Range", "*/0")).split("/")[-1] or 0)
+    return _count_matches(workspace_id, {"eligibility": f"eq.{signal}"}, markets)
 
 
 def set_match_flags(

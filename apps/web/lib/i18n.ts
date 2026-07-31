@@ -50,10 +50,12 @@ const FR: Record<string, string> = {
   "no rules yet": "aucune règle définie",
   "rule applied": "règle appliquée",
   "rules applied": "règles appliquées",
-  "Clear the turnover bar": "Satisfont le seuil de CA",
+  "Below the turnover bar": "Sous le seuil de CA",
   "needs your turnover on file": "renseignez votre chiffre d'affaires",
+  "no tender in your feed states one": "aucun avis de votre flux n'en fixe",
+  of: "sur",
+  "that state one": "qui en fixent un",
   "against your": "face à votre",
-  "turnover only": "seuil de CA uniquement",
   "Hidden by your rules": "Masqués par vos règles",
   "never by the system": "jamais par le système",
   "In scope": "Retenus",
@@ -62,7 +64,6 @@ const FR: Record<string, string> = {
   Sort: "Trier",
   "Best fit": "Pertinence",
   "Closing soonest": "Clôture la plus proche",
-  Eligibility: "Éligibilité",
   "Turnover bar": "Seuil de CA",
   "Estimated value": "Montant estimé",
 
@@ -86,13 +87,8 @@ const FR: Record<string, string> = {
   "Untitled tender": "Consultation sans intitulé",
   "Not published": "Non publié",
 
-  // ── verdict chips ──────────────────────────────────────────
-  "TURNOVER OK": "SEUIL DE CA OK",
+  // ── the one verdict chip still rendered ────────────────────
   "BELOW BAR": "SOUS LE SEUIL",
-  "NOT ASSESSED": "NON ÉVALUÉ",
-  "NO BAR SET": "AUCUN SEUIL",
-  "NIT NOT READ": "AVIS NON LU",
-  "NOTICE NOT READ": "AVIS NON LU",
 
   // ── empty and error states ─────────────────────────────────
   "No opportunities yet": "Aucune opportunité pour le moment",

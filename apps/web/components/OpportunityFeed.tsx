@@ -14,11 +14,24 @@
  * by what"), which is the sentence F-FR12 actually requires. Four detached cards would say four
  * unrelated things.
  *
+ * **No eligibility column.** It was removed after measuring what it produced across four real
+ * workspaces: 7 disqualifications in 1,161 rows, and three workspaces where it had never ruled
+ * anything out at all. It compares ONE criterion — the turnover bar — so a green chip meant
+ * "your revenue is large enough", which is true of nearly every row and decides nothing, while
+ * a column headed "Eligibility" promises an answer to "can we bid on this" that only the
+ * post-upload analysis against a locked TOM can give (C-AC10 already forbade this verdict from
+ * feeding a bid/no-bid card). What survives is the asymmetry: a FAIL is rare, cheap and
+ * actionable, so it renders inline beside the figure that caused it, and only when it fires.
+ * The tender's own facts — the bar and the deposit — stay as columns, because those are facts
+ * about the tender rather than claims about the bidder.
+ *
  * Load-bearing design ACs:
  *   S14-D1  every excluded row names the rule that excluded it
  *   S14-D2  the Excluded count is visible from the primary feed, never behind a menu
  *   S14-D3  every row renders a resolvable source link and a retrieval timestamp
- *   S14-D4  eligibility renders with its deciding criterion, never a bare colour
+ *   S14-D4  eligibility renders with its deciding criterion, never a bare colour —
+ *           still honoured: the inline disqualifier sits against the turnover figure that
+ *           decided it and carries its reason, rather than a colour in a column of its own
  *   GLB-D3  verdict chips carry their label text; colour is never the only signal
  */
 
@@ -68,7 +81,13 @@ type Rule = { id: string; name: string; kind: string; enabled: boolean };
 type FeedData = {
   state: string;
   items: Match[];
-  counts: { in_scope: number; excluded: number; likely_eligible: number };
+  counts: {
+    in_scope: number;
+    excluded: number;
+    likely_eligible: number;
+    below_turnover_bar?: number;
+    states_a_turnover_bar?: number;
+  };
   /** The countries this workspace watches, from the server. NOT inferred from the rendered
    *  rows: an inferred scope described the page instead of the choice, so the coverage strip
    *  went on naming a country the user had just switched off until the rows caught up. */
@@ -77,52 +96,16 @@ type FeedData = {
 };
 
 /**
- * Verdict semantics are reserved (DESIGN_SPEC §C): these hues mean Pass / Fail / Needs-review
- * and are never repurposed.
+ * The one verdict still shown, and the only one worth a bidder's attention.
  *
- * The labels say what was actually checked. Depth-1 compares ONE criterion — the turnover bar
- * — against the vendor profile; it does not check experience, certifications, bidder-type
- * restrictions or whether the company can supply the thing at all (C-FR7 lists all of those as
- * still to come). Labelling that "LIKELY ELIGIBLE" put a green chip on Adhesive Gum for an IT
- * services firm, which is true about the money and useless about the bid. "CLEARS TURNOVER BAR"
- * claims exactly what was computed and no more — the same discipline the drafter follows when
- * it refuses to write a figure it cannot source.
+ * Verdict semantics are reserved (DESIGN_SPEC §C): this hue means Fail and is never repurposed.
+ * There is deliberately no chip for the passing case — "your turnover clears this tender's bar"
+ * is true of almost every row a bidder sees, and a feed of green chips saying so trains people
+ * to ignore the column that also carries the rare disqualification.
  */
-const VERDICT: Record<Match["eligibility"], { label: string; cls: string }> = {
-  // Short enough to sit on ONE line in a pill. The previous labels were honest but three words
-  // long, and a full-round pill wrapping to three lines reads as a broken component. The full
-  // sentence still travels in the title attribute and the turnover column sits right beside it,
-  // so nothing is lost by being terse here.
-  likely_eligible: { label: "TURNOVER OK", cls: "border-success text-success bg-success-bg" },
-  likely_ineligible: { label: "BELOW BAR", cls: "border-danger text-danger bg-danger-bg" },
-  unknown: { label: "NOT ASSESSED", cls: "border-warning text-warning bg-warning-bg" },
-};
+const BELOW_BAR = "border-danger bg-danger-bg text-danger";
 
-/** `unknown` covers two genuinely different states and one label for both was a lie in one of
- *  them: 56 rows read as "NEEDS THE NIT" when the NIT had already been read and simply stated
- *  no turnover requirement. Distinguish by whether the document was parsed. */
-function unknownLabel(
-  parsed: ParsedEligibility | null,
-  market: string,
-): { label: string; cls: string } {
-  if (!parsed) {
-    // Genuinely unknown — we have not read the document. Amber is right.
-    // "NIT" is the Indian term of art; a French buyer publishes an avis, not a NIT.
-    return {
-      label: market === "IN" ? "NIT NOT READ" : "NOTICE NOT READ",
-      cls: "border-warning text-warning bg-warning-bg",
-    };
-  }
-  if (parsed.min_avg_annual_turnover_inr == null) {
-    // We read it and it sets no financial bar. For a smaller bidder that is GOOD NEWS, so it
-    // must not wear warning colours — and on this feed roughly half the rows are in this state,
-    // which would paint the column amber and make the real warnings invisible.
-    return { label: "NO BAR SET", cls: "border-hairline text-muted" };
-  }
-  return { label: "NOT ASSESSED", cls: "border-warning text-warning bg-warning-bg" };
-}
-
-type SortKey = "fit" | "closing" | "verdict" | "turnover" | "value";
+type SortKey = "fit" | "closing" | "turnover" | "value";
 
 const BAND_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
@@ -163,12 +146,6 @@ function Fit({ band, reason, source, t }: {
     </span>
   );
 }
-
-const VERDICT_ORDER: Record<Match["eligibility"], number> = {
-  likely_eligible: 0,
-  unknown: 1,
-  likely_ineligible: 2,
-};
 
 /** Days between a server-supplied instant and a closing date.
  *
@@ -332,7 +309,6 @@ export function OpportunityFeed({
         (a.opportunities!.closing_at ?? "9999").localeCompare(b.opportunities!.closing_at ?? "9999"),
       closing: (a, b) =>
         (a.opportunities!.closing_at ?? "9999").localeCompare(b.opportunities!.closing_at ?? "9999"),
-      verdict: (a, b) => VERDICT_ORDER[a.eligibility] - VERDICT_ORDER[b.eligibility],
       turnover: (a, b) =>
         (a.opportunities!.eligibility?.min_avg_annual_turnover_inr ?? Infinity) -
         (b.opportunities!.eligibility?.min_avg_annual_turnover_inr ?? Infinity),
@@ -346,7 +322,17 @@ export function OpportunityFeed({
   // Workspace-wide, from the server. Counting the rows on THIS page made the figure read 21 on
   // the In-scope tab and 0 on the Excluded tab — the same object described by two disagreeing
   // counters, which is the failure docs/known-pitfalls.md warns about by name.
-  const eligibleCount = data.counts?.likely_eligible ?? 0;
+  // The FAILING count, not the passing one. Across four real workspaces the "clears the bar"
+  // figure ruled nothing out — it is true of nearly every row, so it measured the corpus rather
+  // than telling the bidder anything. This one is rare by construction, which is what makes it
+  // worth a quarter of the strip.
+  const belowBarCount = data.counts?.below_turnover_bar ?? 0;
+  // The denominator, and the reason this tile is not a lie when it reads 0. Zero below the bar
+  // means "none disqualified you" only if something was measurable; on the French corpus today
+  // NO notice carries an extracted bar, so the honest note is "0 of 300 state one" rather than
+  // a silent all-clear. Same instinct that removed the eligibility column: say what was
+  // actually computed, not what the number looks like it means.
+  const comparableCount = data.counts?.states_a_turnover_bar ?? 0;
 
   const activeRules = (data.rules ?? []).filter((r) => r.enabled);
   const swept = (data.counts?.in_scope ?? 0) + (data.counts?.excluded ?? 0);
@@ -452,14 +438,16 @@ export function OpportunityFeed({
           }
         />
         <Coverage
-          value={eligibleCount}
-          label={t("Clear the turnover bar")}
+          value={belowBarCount}
+          label={t("Below the turnover bar")}
           note={
-            profileLine
-              ? `${t("against your")} ${profileLine} · ${t("turnover only")}`
-              : t("needs your turnover on file")
+            comparableCount === 0
+              ? t("no tender in your feed states one")
+              : profileLine
+                ? `${t("of")} ${comparableCount} ${t("that state one")} · ${t("against your")} ${profileLine}`
+                : `${t("of")} ${comparableCount} ${t("that state one")} · ${t("needs your turnover on file")}`
           }
-          tone={eligibleCount > 0 ? "text-success" : "text-ink"}
+          tone={belowBarCount > 0 ? "text-danger" : "text-muted"}
         />
         <Coverage
           value={data.counts?.excluded ?? 0}
@@ -515,7 +503,6 @@ export function OpportunityFeed({
             >
               <option value="fit">{t("Best fit")}</option>
               <option value="closing">{t("Closing soonest")}</option>
-              <option value="verdict">{t("Eligibility")}</option>
               <option value="turnover">{t("Turnover bar")}</option>
               <option value="value">{t("Estimated value")}</option>
             </select>
@@ -574,7 +561,7 @@ export function OpportunityFeed({
               <col className="w-[84px]" />
               <col className="w-[132px]" />
               <col className="w-[92px]" />
-              <col className="w-[118px]" />
+              {state === "excluded" && <col className="w-[160px]" />}
             </colgroup>
             <thead className="border-b border-hairline bg-surface-alt text-left text-[11px] uppercase tracking-wider text-muted">
               <tr>
@@ -586,9 +573,9 @@ export function OpportunityFeed({
                 <th className="px-4 py-2.5 text-right font-medium">
                   {t(market === "IN" ? "EMD" : "Deposit")}
                 </th>
-                <th className="px-4 py-2.5 font-medium">
-                  {t(state === "excluded" ? "Excluded by" : "Eligibility")}
-                </th>
+                {state === "excluded" && (
+                  <th className="px-4 py-2.5 font-medium">{t("Excluded by")}</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline">
@@ -597,7 +584,6 @@ export function OpportunityFeed({
                 const parsed = opp.eligibility ?? {};
                 // Per row, not per page: a mixed feed must not render euros as rupees.
                 const rowMarket = opp.market ?? market;
-                const verdict = VERDICT[match.eligibility];
                 return (
                   <tr
                     key={match.opportunity_id}
@@ -660,6 +646,19 @@ export function OpportunityFeed({
                             good news for a small bidder, and a dash reads as missing data. */
                         <span className="text-[13px] text-muted">{t("none stated")}</span>
                       )}
+                      {/* The disqualifier, and only the disqualifier. Rendered against the
+                          figure that decided it — which is what keeps S14-D4 satisfied without
+                          a column: the deciding criterion is the cell it sits in, and the full
+                          sentence is in the title. */}
+                      {match.eligibility === "likely_ineligible" && (
+                        <span
+                          data-eligibility="likely_ineligible"
+                          title={match.eligibility_reason ?? undefined}
+                          className={`mt-1 inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-wide ${BELOW_BAR}`}
+                        >
+                          {t("BELOW BAR")}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-right align-top tabular-nums">
                       {parsed.emd_amount_inr != null ? (
@@ -670,32 +669,19 @@ export function OpportunityFeed({
                         <span className="text-[13px] text-muted">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 align-top">
-                      {match.state === "excluded" ? (
+                    {/* S14-D1: an excluded row must name its rule. In the in-scope bucket the
+                        column has nothing to say, so it does not exist rather than rendering a
+                        chip whose only content is "your revenue is large enough". */}
+                    {state === "excluded" && (
+                      <td className="px-4 py-2.5 align-top">
                         <span
                           data-excluded-by={match.excluded_by_rule ?? ""}
                           className="text-[13px] text-ink"
                         >
                           {match.excluded_by_rule}
                         </span>
-                      ) : (
-                        (() => {
-                          const shown =
-                            match.eligibility === "unknown"
-                              ? unknownLabel(opp.eligibility, rowMarket)
-                              : verdict;
-                          return (
-                            <span
-                              data-eligibility={match.eligibility}
-                              title={match.eligibility_reason ?? undefined}
-                              className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${shown.cls}`}
-                            >
-                              {t(shown.label)}
-                            </span>
-                          );
-                        })()
-                      )}
-                    </td>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

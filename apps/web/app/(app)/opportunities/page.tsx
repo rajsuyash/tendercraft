@@ -8,7 +8,10 @@
  *   S14-D1  every excluded item names the rule that excluded it
  *   S14-D2  the Excluded count is visible from the primary feed, never behind a menu
  *   S14-D3  every row renders a resolvable source link and a retrieval timestamp
- *   S14-D4  eligibility renders with its deciding criterion, never a bare colour
+ *   S14-D4  eligibility renders with its deciding criterion, never a bare colour — the feed
+ *           no longer carries an eligibility COLUMN (see OpportunityFeed for the measurement
+ *           that removed it); the surviving disqualifier renders against the figure that
+ *           decided it, which is what the AC actually asks for
  */
 import { OpportunityFeed } from "@/components/OpportunityFeed";
 import { engineFetch } from "@/lib/engine";
