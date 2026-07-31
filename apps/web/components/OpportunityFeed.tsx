@@ -83,17 +83,30 @@ type FeedData = {
  * it refuses to write a figure it cannot source.
  */
 const VERDICT: Record<Match["eligibility"], { label: string; cls: string }> = {
-  likely_eligible: { label: "CLEARS TURNOVER BAR", cls: "border-success text-success bg-success-bg" },
-  likely_ineligible: { label: "BELOW TURNOVER BAR", cls: "border-danger text-danger bg-danger-bg" },
+  // Short enough to sit on ONE line in a pill. The previous labels were honest but three words
+  // long, and a full-round pill wrapping to three lines reads as a broken component. The full
+  // sentence still travels in the title attribute and the turnover column sits right beside it,
+  // so nothing is lost by being terse here.
+  likely_eligible: { label: "TURNOVER OK", cls: "border-success text-success bg-success-bg" },
+  likely_ineligible: { label: "BELOW BAR", cls: "border-danger text-danger bg-danger-bg" },
   unknown: { label: "NOT ASSESSED", cls: "border-warning text-warning bg-warning-bg" },
 };
 
 /** `unknown` covers two genuinely different states and one label for both was a lie in one of
  *  them: 56 rows read as "NEEDS THE NIT" when the NIT had already been read and simply stated
  *  no turnover requirement. Distinguish by whether the document was parsed. */
-function unknownLabel(parsed: ParsedEligibility | null): string {
-  if (!parsed) return "NIT NOT READ YET";
-  return parsed.min_avg_annual_turnover_inr == null ? "NO TURNOVER BAR" : "NOT ASSESSED";
+function unknownLabel(parsed: ParsedEligibility | null): { label: string; cls: string } {
+  if (!parsed) {
+    // Genuinely unknown — we have not read the document. Amber is right.
+    return { label: "NIT NOT READ", cls: "border-warning text-warning bg-warning-bg" };
+  }
+  if (parsed.min_avg_annual_turnover_inr == null) {
+    // We read it and it sets no financial bar. For a smaller bidder that is GOOD NEWS, so it
+    // must not wear warning colours — and on this feed roughly half the rows are in this state,
+    // which would paint the column amber and make the real warnings invisible.
+    return { label: "NO BAR SET", cls: "border-hairline text-muted" };
+  }
+  return { label: "NOT ASSESSED", cls: "border-warning text-warning bg-warning-bg" };
 }
 
 type SortKey = "fit" | "closing" | "verdict" | "turnover" | "value";
@@ -469,9 +482,9 @@ export function OpportunityFeed({
               <col className="w-[14%]" />
               <col className="w-[210px]" />
               <col className="w-[84px]" />
-              <col className="w-[112px]" />
-              <col className="w-[88px]" />
-              <col className="w-[124px]" />
+              <col className="w-[132px]" />
+              <col className="w-[92px]" />
+              <col className="w-[118px]" />
             </colgroup>
             <thead className="border-b border-hairline bg-surface-alt text-left text-[11px] uppercase tracking-wider text-muted">
               <tr>
@@ -537,7 +550,7 @@ export function OpportunityFeed({
                             {formatINR(parsed.min_avg_annual_turnover_inr)}
                           </span>
                           {parsed.estimated_value_inr != null && (
-                            <span className="mt-0.5 block text-[11px] text-muted">
+                            <span className="mt-0.5 block whitespace-nowrap text-[11px] text-muted">
                               est. {formatINR(parsed.estimated_value_inr)}
                             </span>
                           )}
@@ -566,15 +579,21 @@ export function OpportunityFeed({
                           {match.excluded_by_rule}
                         </span>
                       ) : (
-                        <span
-                          data-eligibility={match.eligibility}
-                          title={match.eligibility_reason ?? undefined}
-                          className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight tracking-wide ${verdict.cls}`}
-                        >
-                          {match.eligibility === "unknown"
-                            ? unknownLabel(opp.eligibility)
-                            : verdict.label}
-                        </span>
+                        (() => {
+                          const shown =
+                            match.eligibility === "unknown"
+                              ? unknownLabel(opp.eligibility)
+                              : verdict;
+                          return (
+                            <span
+                              data-eligibility={match.eligibility}
+                              title={match.eligibility_reason ?? undefined}
+                              className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${shown.cls}`}
+                            >
+                              {shown.label}
+                            </span>
+                          );
+                        })()
                       )}
                     </td>
                   </tr>

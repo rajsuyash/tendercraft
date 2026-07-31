@@ -80,9 +80,16 @@ def _to_row(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def refresh_corpus(max_pages: int = DEFAULT_PAGES) -> dict[str, Any]:
-    """Sweep the connector and upsert into the shared corpus. Workspace-agnostic."""
-    data = _connector("/opportunities", {"max_pages": max_pages})
+def refresh_corpus(max_pages: int = DEFAULT_PAGES, query: str = "") -> dict[str, Any]:
+    """Sweep the connector and upsert into the shared corpus. Workspace-agnostic.
+
+    `query` runs GeM's own full-text search. It ACQUIRES more, it never filters: a chronological
+    sweep only ever reaches the newest bids, so a consultancy tender published last week is
+    otherwise unreachable no matter how good the ranking is. Widening coverage is the safe
+    direction under ET-7 — the failure this module guards against is a tender never seen, and
+    nothing here can hide one. The corpus stays shared; only the ranking is per workspace.
+    """
+    data = _connector("/opportunities", {"max_pages": max_pages, "q": query})
     rows = [_to_row(r) for r in data.get("records", []) if r.get("portal_ref_no")]
     stored = db.upsert_opportunities(rows)
     log.info(

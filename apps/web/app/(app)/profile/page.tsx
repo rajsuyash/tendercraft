@@ -95,7 +95,11 @@ export default async function ProfilePage() {
   const missingLegalCount = [profile?.cin, profile?.pan, profile?.gst].filter((v) => !v).length;
   const blockingCount = missingLegalCount + expiredCerts.length;
 
+  const capabilityKeywords: string[] = profile?.capability_keywords ?? [];
+
   const checklist = [
+    Boolean(profile?.capability_statement),
+    capabilityKeywords.length > 0,
     Boolean(profile?.cin),
     Boolean(profile?.pan),
     Boolean(profile?.gst),
@@ -171,6 +175,54 @@ export default async function ProfilePage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {/* First, because it is the thing that decides what the opportunity feed shows. A
+              profile section that only exists inside the edit modal is invisible to the person
+              who has to trust the ranking — the same trap `oem_status` already fell into. */}
+          <section className="rounded-card border border-border bg-surface p-card">
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="font-heading text-lg font-semibold text-ink">What you bid on</h2>
+              <a href="/opportunities" className="text-sm text-primary hover:underline">
+                See your ranked feed →
+              </a>
+            </div>
+
+            <p className="text-xs uppercase tracking-wide text-muted">Capability and expertise</p>
+            {profile?.capability_statement ? (
+              <p
+                data-capability-statement
+                className="m-measure mt-1 whitespace-pre-line text-sm leading-relaxed text-ink"
+              >
+                {profile.capability_statement}
+              </p>
+            ) : (
+              <p data-missing-field className="mt-1 max-w-prose text-sm text-warning">
+                Not provided — without it your opportunity feed is ranked on keywords alone.
+              </p>
+            )}
+
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs uppercase tracking-wide text-muted">
+                Keywords you bid on
+              </p>
+              {capabilityKeywords.length > 0 ? (
+                <div data-capability-keywords className="mt-2 flex flex-wrap gap-1.5">
+                  {capabilityKeywords.map((k) => (
+                    <span
+                      key={k}
+                      className="rounded-full border border-hairline bg-surface-alt px-2 py-0.5 text-xs text-ink"
+                    >
+                      {k}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p data-missing-field className="mt-1 text-sm text-warning">
+                  Not provided
+                </p>
+              )}
+            </div>
+          </section>
+
           <section className="rounded-card border border-border bg-surface p-card">
             <h2 className="mb-4 font-heading text-lg font-semibold text-ink">Legal identity</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

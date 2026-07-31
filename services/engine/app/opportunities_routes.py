@@ -66,7 +66,11 @@ async def list_opportunities(
 
 
 @router.post("/api/opportunities/refresh")
-async def refresh(user: CurrentUser, max_pages: int = Query(default=8, ge=1, le=60)) -> dict:
+async def refresh(
+    user: CurrentUser,
+    max_pages: int = Query(default=8, ge=1, le=60),
+    q: str = Query(default="", max_length=80, description="GeM full-text query; widens coverage"),
+) -> dict:
     """Sweep the connector, then re-run this workspace's gate.
 
     Sync work in a threadpool: the sweep sleeps between portal requests to honour the rate cap,
@@ -75,7 +79,7 @@ async def refresh(user: CurrentUser, max_pages: int = Query(default=8, ge=1, le=
     """
 
     def work() -> dict:
-        swept = ingest.refresh_corpus(max_pages=max_pages)
+        swept = ingest.refresh_corpus(max_pages=max_pages, query=q)
         matched = ingest.recompute_matches(user.workspace_id)
         return {"swept": swept, "matched": matched}
 

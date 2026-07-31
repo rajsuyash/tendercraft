@@ -48,7 +48,7 @@ def input_hash(capability: str, keywords: list[str], opportunity: dict[str, Any]
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
 
 
-def _deterministic_row(opportunity: dict[str, Any], keywords: list[str], digest: str) -> dict:
+def _deterministic_row(opportunity: dict[str, Any], keywords: list[str]) -> dict:
     match = keyword_relevance(opportunity, keywords)
     return {
         "relevance_band": match.band,
@@ -56,7 +56,11 @@ def _deterministic_row(opportunity: dict[str, Any], keywords: list[str], digest:
         # Recorded so a model outage is visible in the UI rather than silently changing what
         # "high" means on the page (EC-6's honesty rule, applied to ranking).
         "relevance_source": "keyword",
-        "relevance_input_hash": digest,
+        # NO hash. The hash is a cache key meaning "this answer is final", and a fallback is not
+        # a final answer — it is what we could say while the model was unavailable. Storing one
+        # here made a single transient failure freeze that row on a crude keyword band forever,
+        # because every later run then skipped it as unchanged. Only a model result is cached.
+        "relevance_input_hash": None,
         "relevance_scored_at": datetime.now(UTC).isoformat(),
     }
 
@@ -86,7 +90,8 @@ def bands_for(
         if existing.get(str(opportunity.get("id"))) == digest:
             continue  # nothing that feeds the band has changed
         stale.append(opportunity)
-        patches[str(opportunity["id"])] = _deterministic_row(opportunity, keywords, digest)
+        patches[str(opportunity["id"])] = _deterministic_row(opportunity, keywords)
+        patches[str(opportunity["id"])]["_digest"] = digest  # promoted only on model success
 
     if not stale:
         return {}
@@ -94,6 +99,8 @@ def bands_for(
     # With nothing said about the vendor there is nothing to be semantic about, and calling a
     # model to compare a tender against an empty string is a bill for a guess.
     if not capability:
+        for patch in patches.values():
+            patch.pop("_digest", None)
         log.info("relevance: %d banded by keyword (no capability statement)", len(stale))
         return patches
 
@@ -119,8 +126,13 @@ def bands_for(
                     else result.rationale
                 ),
                 "relevance_source": "model",
+                # Now it is cacheable: this answer will not change until an input does.
+                "relevance_input_hash": patch.pop("_digest", None),
             }
         )
+
+    for patch in patches.values():
+        patch.pop("_digest", None)  # never reaches the database
 
     log.info(
         "relevance: %d scored by model, %d by keyword fallback, %d skipped as unchanged",

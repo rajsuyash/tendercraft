@@ -318,3 +318,33 @@ class TestAModelBandCanNeverHideATender:
             low = evaluate_gate(record(relevance_band="low"), [rule], now=NOW)
             high = evaluate_gate(record(relevance_band="high"), [rule], now=NOW)
             assert low.in_scope == high.in_scope, f"{kind} reads the model band"
+
+
+class TestAFallbackBandIsNeverCached:
+    """A keyword band is what we could say while the model was unavailable, not a final answer.
+
+    Storing the input hash on it made a single transient model failure freeze that row on a
+    crude keyword band FOREVER: every later run saw an unchanged hash and skipped it. The bug is
+    invisible — the row keeps a plausible band and simply never improves.
+    """
+
+    def test_a_keyword_fallback_stores_no_hash(self):
+        from app.discovery.relevance import bands_for
+
+        patches = bands_for(
+            [{"id": "a", "title": "CCTV AMC", "category_codes": ["services_x"]}],
+            capability_statement=None,  # forces the deterministic path
+            keywords=["cctv"],
+        )
+        assert patches["a"]["relevance_source"] == "keyword"
+        assert patches["a"]["relevance_input_hash"] is None
+
+    def test_no_internal_key_reaches_the_database_payload(self):
+        from app.discovery.relevance import bands_for
+
+        patches = bands_for(
+            [{"id": "a", "title": "X", "category_codes": []}],
+            capability_statement=None,
+            keywords=["cctv"],
+        )
+        assert all(not k.startswith("_") for k in patches["a"])

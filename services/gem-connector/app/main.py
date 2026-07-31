@@ -59,6 +59,7 @@ def sweep(
     *,
     max_pages: int,
     stop_at_refs: frozenset[str] = frozenset(),
+    search: str = "",
 ) -> dict[str, Any]:
     """Bootstrap an anonymous session, page the listing, return F-FR1 records.
 
@@ -84,7 +85,7 @@ def sweep(
     pages_fetched = 0
 
     for page in range(1, max_pages + 1):
-        body = build_payload(page) | {"csrf_bd_gem_nk": token}
+        body = build_payload(page, search) | {"csrf_bd_gem_nk": token}
         response = fetcher.post_form("/all-bids-data", body)
         pages_fetched += 1
         total_found, docs = parse_page(response.text)
@@ -112,6 +113,7 @@ def sweep(
 
     return {
         "source_id": "gem_bidplus",
+        "search": search,
         "portal_total_ongoing": total_found,
         "pages_fetched": pages_fetched,
         "count": len(records),
@@ -155,6 +157,7 @@ def create_app() -> FastAPI:
         known_refs: str = Query(
             default="", description="comma-separated normalized refs to stop at"
         ),
+        q: str = Query(default="", description="GeM full-text query; widens coverage only"),
     ) -> dict[str, Any]:
         """Sync on purpose: the sweep sleeps between requests to honour the rate cap, and
         sleeping inside an async handler stalls the event loop (docs/known-pitfalls.md).
@@ -162,7 +165,7 @@ def create_app() -> FastAPI:
         stop_at = frozenset(r.strip() for r in known_refs.split(",") if r.strip())
         fetcher = GuardedFetcher()
         try:
-            return ok(sweep(fetcher, max_pages=max_pages, stop_at_refs=stop_at))
+            return ok(sweep(fetcher, max_pages=max_pages, stop_at_refs=stop_at, search=q))
         finally:
             fetcher.close()
 

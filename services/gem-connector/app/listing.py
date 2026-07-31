@@ -150,7 +150,7 @@ def normalize(doc: dict[str, Any]) -> dict[str, Any]:
 _SORT = "Bid-Start-Date-Latest"
 
 
-def build_payload(page: int) -> dict[str, str]:
+def build_payload(page: int, search: str = "") -> dict[str, str]:
     """The exact body /all-bids-data expects, most recently published first.
 
     The sort must be stable across pages: a sweep paginating over a shifting order silently
@@ -158,7 +158,12 @@ def build_payload(page: int) -> dict[str, str]:
     """
     payload = {
         "page": page,
-        "param": {"searchBid": "", "searchType": "fullText"},
+        # GeM's own full-text search. Used to ACQUIRE more, never to filter: a chronological
+        # sweep reaches only the newest bids, so a tender published a week ago in a category the
+        # workspace cares about is otherwise unreachable. Adding a targeted query can only
+        # increase coverage, which is the safe direction under ET-7 — the danger is always
+        # hiding, never finding.
+        "param": {"searchBid": search, "searchType": "fullText"},
         "filter": {
             "bidStatusType": "ongoing_bids",
             "byType": "all",
