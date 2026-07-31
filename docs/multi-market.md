@@ -2,6 +2,9 @@
 
 **Status:** proposed, 2026-07-31 · **Prompted by:** inbound interest from a French client
 **Decision owner:** human sign-off required before any of §6 is built
+**Confirmed by owner, 2026-07-31:** the site ships in French for French clients with an EN/FR
+toggle; tender content is fetched in French and stays fully in French. See
+*What the EN/FR toggle governs*, below.
 
 ## Decision
 
@@ -44,13 +47,70 @@ independent, and the product needs all three separately.
 
 | Axis | Values | Governs | Lives on |
 |---|---|---|---|
-| **Locale** | `fr-FR`, `en-IN` | UI language, number/date/currency **format**, and the language the drafter writes in | user preference |
+| **Locale** | `fr-FR`, `en-IN` | UI language, our own explanations, number/date/currency **format**. **Not** the drafter's output language — see below | user preference |
 | **Market** | `FR`, `IN` | which sources are polled, which procurement vocabulary applies, which document parsers run, which thresholds | workspace |
 | **Residency** | EU, IN | where the data physically lives | deployment |
 
 They come apart in practice. A French client may want the UI in English. An Indian bidder may
 legitimately pursue an EU tender — GeM's own listing carries `ba_is_global_tendering`, so this is
 not hypothetical. And residency is a contractual question that has nothing to do with either.
+
+A fourth language exists that belongs to none of these axes: the one a **tender** is written in.
+It is a property of the notice, and it decides what the drafter must produce. The next section
+is entirely about keeping it separate from the toggle.
+
+## What the EN/FR toggle governs — and what it must never touch
+
+Confirmed with the owner: a French client gets a French site with an EN/FR toggle, and tender
+requirements stay fully in French. That is the right call, and the reason is worth writing down
+because someone will eventually try to "finish the translation" and break it.
+
+**The toggle governs the interface. It never governs the evidence.**
+
+A tender is a legal document. A requirement rendered in a language the buyer did not publish it
+in is a claim about a text that does not exist — and this product's entire position is that
+nothing it shows is unsourced. So a compliance matrix will legitimately mix languages: English
+column headers with French requirement text, when an English-reading reviewer at a French firm
+toggles to EN. **That is correct behaviour, not a bug to fix.**
+
+Four categories, three different languages, and they are decided by three different things:
+
+| What | Language follows | Why |
+|---|---|---|
+| Interface chrome — nav, labels, buttons, empty states, errors | **the EN/FR toggle** | it is ours, and it is a preference |
+| Our explanations — relevance rationales, eligibility reasons, gap notes | **the EN/FR toggle** | also ours: commentary *about* a tender, addressed to the user |
+| Tender content — titles, requirement text, clauses, source anchors, citations | **the source, always** | it is the legal document; verbatim or not at all (A-AC3, cite-or-flag) |
+| Generated deliverables — the proposal, the exported matrix | **the tender's language** | a French buyer receives a French bid. This does NOT follow the toggle |
+
+That last row is the one that surprises people. **The drafter's output language is a property of
+the tender, not of the reader.** A French bid manager who prefers an English interface still
+needs the submitted document in French, because the buyer requires it. Wire the drafter's
+language from the tender/notice metadata, never from the user's UI preference — getting this
+backwards produces a fluent, well-cited, unsubmittable proposal.
+
+### Consequences worth planning for
+
+- **Locale is a per-user preference, not a workspace setting.** Two people in the same French
+  workspace may want different interfaces; neither choice may change what the tender says.
+  It belongs on `profiles`, beside `active_workspace_id`.
+- **Prompts gain an output-language parameter, and it is not one flag.** The relevance prompt
+  writes its rationale in the *UI* locale; the drafter writes in the *tender's* language. Two
+  different inputs, and `evals/` needs cases for both — a French drafter eval is the commercial
+  gate (assumption 3), while a French rationale eval is cosmetic by comparison.
+- **Keyword matching needs accent folding.** `app/deterministic/discovery.py` matches by
+  substring and bounded stem, which is language-agnostic in principle — but a vendor typing
+  `securite` must match a tender saying `sécurité`, and `l'entreprise` must tokenise to
+  `entreprise`. Fold diacritics and strip French elisions before matching. The existing
+  `_MIN_STEM` floors were tuned against English and GeM's four-letter codes; re-tune them
+  against French, and keep a case in the tests for each.
+- **Typography needs nothing.** `docs/DESIGN_SPEC.md` §C already ships a Latin stack with an
+  Inter fallback; French is covered. The Devanagari fallback reserved for PH2 Hindi is untouched
+  by this work.
+- **The marketing surface is a separate translation job with the same discipline.** The landing
+  page runs its own language scoped under `.marketing`, and `apps/web/components/marketing/
+  content.ts` carries a `CLAIMS` block of things that are not true yet. **No claim may outrun the
+  product in French either** — a translated marketing page is a new set of claims, not a copy of
+  the old ones, and needs the same review.
 
 ## What is already true today
 
@@ -153,9 +213,9 @@ Steps 1–3 are the architecture. Steps 4–6 are the product. Step 7 is a contr
 - **Machine-translating the UI.** In a compliance product a mistranslated "mandatory",
   "self-attested" or "conditionally eligible" is a liability, not a typo. French strings are
   written or reviewed by someone who knows French public procurement.
-- **Translating tender content.** The tender is the legal document; a translated requirement in a
-  compliance matrix would be a claim about a text that does not exist. Show the source language,
-  translate the interface around it.
+- **Translating tender content.** Confirmed with the owner, and expanded above: the tender is the
+  legal document, and a translated requirement in a compliance matrix would be a claim about a
+  text that does not exist. Show the source language; translate the interface around it.
 - **A second `market` for the evaluate product** (`apps/evaluate`). Out of scope until asked, and
   the wall stays exactly where it is.
 
@@ -167,4 +227,5 @@ Steps 1–3 are the architecture. Steps 4–6 are the product. Step 7 is a contr
 | 2 | CPV codes map cleanly onto the existing `category_prefix_*` rule kinds | Medium-high — CPV is hierarchical and prefix-shaped, which is the same shape GeM's codes have |
 | 3 | Gemini drafts French of a quality a French bid manager will sign their name to | **Unverified, and this is the commercial gate.** Test before promising a French drafter to anyone |
 | 4 | One deployment can serve both markets until a customer contract says otherwise | Medium-high — true today; a public-sector French buyer may still ask where the data sits |
-| 5 | French clients want French UI rather than English | Low — ask the client. The axes are separate precisely so this can be answered late |
+| 5 | ~~French clients want French UI rather than English~~ | **Resolved 2026-07-31: both. EN/FR toggle, per user (§4).** |
+| 6 | French tender text is reliably published in French by BOAMP/TED, so "fetch in French" needs no language detection | Medium-high — TED carries multilingual notices; record the notice language per record rather than inferring it from the market |
