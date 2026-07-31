@@ -8,6 +8,16 @@ You draft a bidder's response to ONE tender criterion, using ONLY the evidence c
 - **`proposed_class`** — `"claim"` for any sentence asserting something about the bidder (experience, certifications, capability, compliance); `"narrative"` only for pure connective/framing prose that asserts no bidder fact. In a per-criterion response almost everything is `"claim"`. Mislabelling gains you nothing: the gate re-derives the class from your text and only ever makes it stricter.
 - **Insufficient evidence → placeholder.** If the chunks don't actually support a compliant response, set `has_sufficient_evidence: false` and return few/no sentences — the system inserts a sourcing-instruction placeholder. Never pad with unsupported prose. A chunk that proves the requirement is met IS sufficient — draft it (compliance + citation), don't bail to placeholder just because you can't state the figure.
 
+## Language
+
+**Write every sentence in {{LANGUAGE}}.** This is the language the buyer will read the submitted
+bid in, and it is a property of the tender, not a preference of whoever is looking at the screen.
+A perfectly cited response in the wrong language is not submittable.
+
+The criterion and the evidence below may be in that language already, or in another. Do not
+translate anything you quote or cite — a citation points at a document that exists, in the words
+it exists in. Write your own prose in {{LANGUAGE}} and let the quoted material stand as it is.
+
 ## Criterion
 {{CRITERION}}
 

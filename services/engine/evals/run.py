@@ -14,7 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-COMPONENTS = ("extractor", "drafter", "relevance")
+COMPONENTS = ("extractor", "drafter", "drafter-fr", "relevance")
 
 
 def load_cases(component: str) -> list[dict]:
@@ -146,6 +146,71 @@ def score_drafter() -> int:
     return 0 if total_pass == total else 1
 
 
+def score_drafter_fr() -> int:
+    """The commercial gate for the French market.
+
+    "It produced French" is not the bar. A French bid is only worth anything if the rules that
+    make the English one trustworthy still hold in French — so this asserts the SAME properties
+    as the English drafter set, plus the language:
+
+      * no authored money figure (B-FR3). The scanner reads sentence TEXT, and "2 000 000 EUR"
+        is as much a hard block as "₹8.2 Cr"; a French draft must state compliance and cite.
+      * cite-or-flag (B-FR1). Evidence that proves nothing must placeholder, not pad — fluent
+        French is exactly the failure mode that makes an unsupported claim look supported.
+      * model failure still yields a placeholder, never invention.
+    """
+    from pipeline import drafter as dr
+
+    cases = load_cases("drafter-fr")
+    normal = [c for c in cases if not c.get("inject")]
+    inject = [c for c in cases if c.get("inject")]
+
+    passed = 0
+    print("\n== Drafter FR golden set (live) ==")
+    for c in normal:
+        r = dr.draft_response(c["input"]["criterion"], c["input"]["chunks"], "fr")
+        checks = _check_draft(r, c["expected"])
+        text = " ".join(str(s.get("text", "")) for s in r.sentences).lower()
+        # Language check without a detector dependency: these are short compliance sentences,
+        # which most detectors are unreliable on. French function words and accents are enough.
+        checks["language"] = (
+            True
+            if r.draft_status == "placeholder" and not text.strip()
+            else any(w in text for w in (" le ", " la ", " les ", " des ", " du ", " est ",
+                                         " et ", " aux ", " par ", " candidat"))
+            or any(ch in text for ch in "éèêàçôûî")
+        )
+        ok = all(checks.values())
+        passed += ok
+        failed = [k for k, v in checks.items() if not v]
+        print(f"  {c['id']:16} {'PASS' if ok else 'FAIL'}  status={r.draft_status} "
+              f"flags={len(r.flags)}" + (f"  missed={failed}" if failed else ""))
+
+    print("\n== Fault injection (fallback) ==")
+    inject_passed = 0
+    orig = dr.generate_json
+    for c in inject:
+        dr.generate_json = _raise  # type: ignore[assignment]
+        ok = False
+        try:
+            r = dr.draft_response(c["input"]["criterion"], c["input"]["chunks"], "fr")
+            ok = r.draft_status == "placeholder"
+        except Exception:  # noqa: BLE001 — a crash is exactly the failure we test against
+            ok = False
+        finally:
+            dr.generate_json = orig  # type: ignore[assignment]
+        inject_passed += ok
+        print(f"  {c['id']:16} {'PASS' if ok else 'FAIL'}  ({c['inject']} -> placeholder)")
+
+    total, total_pass = len(normal) + len(inject), passed + inject_passed
+    print(f"\nSUMMARY: {total_pass}/{total} cases pass "
+          f"(normal {passed}/{len(normal)}, injection {inject_passed}/{len(inject)})")
+    print("NOTE: this is the gate on selling the product in French. A pass means the money and "
+          "cite-or-flag rules survive the language change, not that the prose is idiomatic — "
+          "that still needs a French procurement reader.")
+    return 0 if total_pass == total else 1
+
+
 def _raise(*_a, **_k):
     from pipeline.client import ModelError
 
@@ -175,18 +240,29 @@ def score_relevance() -> int:
     print("\n== Relevance golden set (live) ==")
     for c in normal:
         i = c["input"]
-        results = rel.score(i["capability_statement"], i["keywords"], i["tenders"])
+        lang = c.get("language", "en")
+        results = rel.score(i["capability_statement"], i["keywords"], i["tenders"], lang)
         r = results.get("t1")
         if r is None:
             print(f"  {c['id']:14} FAIL  (no band returned)")
             continue
         band_ok = r.band in c["expected"]["band_in"]
+        # A French workspace must get French commentary. Checked with accented characters and
+        # common French function words rather than a language-detection dependency: the
+        # rationale is one sentence, which is too short for most detectors to be reliable on.
+        lang_ok = True
+        if c["expected"].get("language") == "fr":
+            text = f"{r.rationale} {r.matched_capability}".lower()
+            lang_ok = any(w in text for w in (
+                " de ", " des ", " votre ", " vos ", " qui ", " est ", " pour ", " la ", " le ",
+            )) or any(ch in text for ch in "éèêàçôû")
         # A cited band must actually carry its citation; an uncited one must have been demoted.
         cite_ok = bool(r.matched_capability) if c["expected"]["must_cite"] else True
-        ok = band_ok and cite_ok
+        ok = band_ok and cite_ok and lang_ok
         passed += ok
         print(f"  {c['id']:14} {'PASS' if ok else 'FAIL'}  band={r.band:6} "
-              f"conf={r.confidence:.2f} cited={'y' if r.matched_capability else 'n'}"
+              f"conf={r.confidence:.2f} cited={'y' if r.matched_capability else 'n'} "
+              f"lang={'ok' if lang_ok else 'WRONG'}"
               + ("" if ok else f"  expected={c['expected']['band_in']}"))
 
     # Fault injection: the model failing must degrade to deterministic keyword banding, visibly.
@@ -228,6 +304,7 @@ _SCORERS = {
     "extractor": score_extractor,
     "drafter": score_drafter,
     "relevance": score_relevance,
+    "drafter-fr": score_drafter_fr,
 }
 
 

@@ -88,18 +88,75 @@ def _days_to_close(record: dict[str, Any], now: datetime) -> float | None:
     return (closing - now).total_seconds() / 86400.0
 
 
+# Our own explanations, per market language.
+#
+# A table rather than gettext: this module is a pure function library with no runtime, no
+# process locale and no import of anything that has one, and six sentences do not earn a
+# translation toolchain. An unknown language falls back to English rather than raising — an
+# untranslated explanation is a cosmetic defect, a 500 on the feed is not.
+PHRASES: dict[str, dict[str, str]] = {
+    "en": {
+        "no_keyword": "No capability keyword matched this tender",
+        "keyword_1": "Matched your keyword {terms}",
+        "keyword_n": "Matched your keywords {terms}",
+        "not_read": "Bid document not read yet",
+        "no_bar": "The bid document states no minimum turnover requirement",
+        "no_profile_turnover": (
+            "Requires average annual turnover of {required}; "
+            "your vendor profile has no turnover on record"
+        ),
+        "clears": (
+            "Clears the turnover bar of {required} with your {actual}. "
+            "Experience, certifications and category fit are not yet checked at this depth."
+        ),
+        "below": (
+            "Requires average annual turnover of {required}; "
+            "your profile shows {actual}{tail}. Turnover only."
+        ),
+        "mse_tail": " — an MSE turnover relaxation is offered on this bid",
+    },
+    "fr": {
+        "no_keyword": "Aucun de vos mots-clés ne correspond à cet avis",
+        "keyword_1": "Correspond à votre mot-clé {terms}",
+        "keyword_n": "Correspond à vos mots-clés {terms}",
+        "not_read": "Avis de marché pas encore lu",
+        "no_bar": "L'avis ne fixe aucune exigence de chiffre d'affaires minimum",
+        "no_profile_turnover": (
+            "Exige un chiffre d'affaires annuel moyen de {required} ; "
+            "votre profil entreprise n'indique aucun chiffre d'affaires"
+        ),
+        "clears": (
+            "Satisfait le seuil de chiffre d'affaires de {required} avec vos {actual}. "
+            "Les références, les certifications et l'adéquation sectorielle ne sont pas "
+            "encore vérifiées à ce niveau."
+        ),
+        "below": (
+            "Exige un chiffre d'affaires annuel moyen de {required} ; "
+            "votre profil indique {actual}{tail}. Chiffre d'affaires uniquement."
+        ),
+        "mse_tail": "",
+    },
+}
+
+
+def phrase(key: str, language: str = "en", **fields: object) -> str:
+    table = PHRASES.get(language) or PHRASES["en"]
+    template = table.get(key) or PHRASES["en"][key]
+    return template.format(**fields)
+
+
 @dataclass(frozen=True)
 class KeywordMatch:
     band: str
     matched_terms: tuple[str, ...]
+    language: str = "en"
 
     @property
     def reason(self) -> str:
         if not self.matched_terms:
-            return "No capability keyword matched this tender"
-        return "Matched your keyword" + ("s " if len(self.matched_terms) > 1 else " ") + ", ".join(
-            self.matched_terms
-        )
+            return phrase("no_keyword", self.language)
+        key = "keyword_n" if len(self.matched_terms) > 1 else "keyword_1"
+        return phrase(key, self.language, terms=", ".join(self.matched_terms))
 
 
 # Words shorter than this must match EXACTLY; only longer ones may match on a shared prefix.
@@ -151,7 +208,9 @@ def _term_hits(term: str, blob: str, tokens: set[str], *, code: bool = False) ->
     )
 
 
-def keyword_relevance(record: dict[str, Any], keywords: list[str]) -> KeywordMatch:
+def keyword_relevance(
+    record: dict[str, Any], keywords: list[str], language: str = "en"
+) -> KeywordMatch:
     """Deterministic fit between a tender and the vendor's own keywords.
 
     Pure, explainable, and the fallback whenever the model is unavailable — which is why it
@@ -163,14 +222,13 @@ def keyword_relevance(record: dict[str, Any], keywords: list[str]) -> KeywordMat
     """
     terms = [k.strip().lower() for k in (keywords or []) if k and k.strip()]
     if not terms:
-        return KeywordMatch(band="low", matched_terms=())
+        return KeywordMatch(band="low", matched_terms=(), language=language)
 
     title = (record.get("title") or "").lower()
     categories = " ".join(_category_codes(record)).lower()
     authority = (record.get("authority") or "").lower()
 
     title_tokens, category_tokens = _tokens(title), _tokens(categories)
-    all_tokens = title_tokens | category_tokens | _tokens(authority)
     blob = " ".join((title, categories, authority))
 
     matched = tuple(
@@ -184,7 +242,7 @@ def keyword_relevance(record: dict[str, Any], keywords: list[str]) -> KeywordMat
         )
     )
     if not matched:
-        return KeywordMatch(band="low", matched_terms=())
+        return KeywordMatch(band="low", matched_terms=(), language=language)
 
     # A hit inside a GeM category code outranks one anywhere else: the codes are the portal's
     # own structured taxonomy, so `services_home_cust` matching "services" is a classification,
@@ -192,11 +250,11 @@ def keyword_relevance(record: dict[str, Any], keywords: list[str]) -> KeywordMat
     in_category = any(_term_hits(t, categories, category_tokens, code=True) for t in matched)
     in_title = any(_term_hits(t, title, title_tokens) for t in matched)
     if in_category or len(matched) >= 2:
-        return KeywordMatch(band="high", matched_terms=matched)
+        return KeywordMatch(band="high", matched_terms=matched, language=language)
     if in_title:
-        return KeywordMatch(band="medium", matched_terms=matched)
+        return KeywordMatch(band="medium", matched_terms=matched, language=language)
     # Matched only on the buying authority's name — real, but weak evidence of fit.
-    return KeywordMatch(band="low", matched_terms=matched)
+    return KeywordMatch(band="low", matched_terms=matched, language=language)
 
 
 def _matches(rule: Rule, record: dict[str, Any], now: datetime) -> bool:
@@ -291,6 +349,7 @@ class EligibilityResult:
 def evaluate_eligibility(
     eligibility_fields: dict[str, Any] | None,
     profile: dict[str, Any] | None,
+    language: str = "en",
 ) -> EligibilityResult:
     """Depth-1 triage over the deterministically-parsed bid document and the vendor profile.
 
@@ -304,7 +363,7 @@ def evaluate_eligibility(
     feeds a Bid/No-Bid card (C-AC10).
     """
     if not eligibility_fields:
-        return EligibilityResult("unknown", "Bid document not read yet")
+        return EligibilityResult("unknown", phrase("not_read", language))
 
     required = eligibility_fields.get("min_avg_annual_turnover_inr")
     if required is None:
@@ -312,16 +371,13 @@ def evaluate_eligibility(
         # collapsing them into one label told 56 live rows they still needed a document we had
         # already parsed. The signal stays `unknown` because no eligibility criterion was
         # actually decided; only the wording distinguishes the two.
-        return EligibilityResult(
-            "unknown", "The bid document states no minimum turnover requirement"
-        )
+        return EligibilityResult("unknown", phrase("no_bar", language))
 
     actual = (profile or {}).get("avg_annual_turnover_inr")
     if actual is None:
         return EligibilityResult(
             "unknown",
-            f"Requires average annual turnover of {_inr(required)}; "
-            "your vendor profile has no turnover on record",
+            phrase("no_profile_turnover", language, required=_inr(required)),
         )
 
     if float(actual) >= float(required):
@@ -329,18 +385,16 @@ def evaluate_eligibility(
         # claim experience, certifications and supply capability were checked; they were not.
         return EligibilityResult(
             "likely_eligible",
-            f"Clears the turnover bar of {_inr(required)} with your {_inr(actual)}. "
-            "Experience, certifications and category fit are not yet checked at this depth.",
+            phrase("clears", language, required=_inr(required), actual=_inr(actual)),
         )
 
     # Never a bare "ineligible": an MSE/startup relaxation can reverse it, and the bidder needs
     # to see that before skipping the tender.
     relaxation = eligibility_fields.get("mse_turnover_relaxation")
-    tail = " — an MSE turnover relaxation is offered on this bid" if relaxation else ""
+    tail = phrase("mse_tail", language) if relaxation else ""
     return EligibilityResult(
         "likely_ineligible",
-        f"Requires average annual turnover of {_inr(required)}; "
-        f"your profile shows {_inr(actual)}{tail}. Turnover only.",
+        phrase("below", language, required=_inr(required), actual=_inr(actual), tail=tail),
     )
 
 

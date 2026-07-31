@@ -11,6 +11,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 
+from . import db
 from .auth import AuthedUser, get_current_user
 from .envelope import (
     ApiError,
@@ -56,7 +57,17 @@ def create_app() -> FastAPI:
 
     @app.get("/api/me")
     async def me(user: CurrentUser) -> dict:
-        return ok({"user_id": user.user_id, "workspace_id": user.workspace_id, "role": user.role})
+        # `market` travels with the identity because the WEB has no tenancy code of its own
+        # (known-pitfalls) — the pages that need to know whether they are rendering an Indian or
+        # a French workspace must be told, not left to infer it from the reader's language.
+        return ok(
+            {
+                "user_id": user.user_id,
+                "workspace_id": user.workspace_id,
+                "role": user.role,
+                "market": db.get_workspace_market(user.workspace_id),
+            }
+        )
 
     return app
 

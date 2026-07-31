@@ -34,7 +34,9 @@ DEFAULT_BUDGET = int(os.environ.get("RELEVANCE_BUDGET", "40"))
 BAND_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
-def input_hash(capability: str, keywords: list[str], opportunity: dict[str, Any]) -> str:
+def input_hash(
+    capability: str, keywords: list[str], opportunity: dict[str, Any], language: str = "en"
+) -> str:
     """Everything the band depends on. Change any of it and the band is recomputed; change
     nothing and it is not."""
     material = "\x1f".join(
@@ -43,13 +45,19 @@ def input_hash(capability: str, keywords: list[str], opportunity: dict[str, Any]
             ",".join(sorted(k.strip().lower() for k in (keywords or []) if k.strip())),
             str(opportunity.get("title") or ""),
             ",".join(opportunity.get("category_codes") or []),
+            # In the hash because the rationale is written in it: without this, a workspace that
+            # changed language would keep every stale-language explanation forever, since the
+            # cache would see nothing as having changed.
+            language,
         ]
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
 
 
-def _deterministic_row(opportunity: dict[str, Any], keywords: list[str]) -> dict:
-    match = keyword_relevance(opportunity, keywords)
+def _deterministic_row(
+    opportunity: dict[str, Any], keywords: list[str], language: str = "en"
+) -> dict:
+    match = keyword_relevance(opportunity, keywords, language)
     return {
         "relevance_band": match.band,
         "relevance_reason": match.reason,
@@ -72,6 +80,7 @@ def bands_for(
     keywords: list[str] | None,
     existing: dict[str, str] | None = None,
     budget: int = DEFAULT_BUDGET,
+    language: str = "en",
 ) -> dict[str, dict[str, Any]]:
     """→ {opportunity_id: patch}. Every opportunity gets a band; only some cost a model call.
 
@@ -86,11 +95,11 @@ def bands_for(
     patches: dict[str, dict[str, Any]] = {}
     stale: list[dict[str, Any]] = []
     for opportunity in opportunities:
-        digest = input_hash(capability, keywords, opportunity)
+        digest = input_hash(capability, keywords, opportunity, language)
         if existing.get(str(opportunity.get("id"))) == digest:
             continue  # nothing that feeds the band has changed
         stale.append(opportunity)
-        patches[str(opportunity["id"])] = _deterministic_row(opportunity, keywords)
+        patches[str(opportunity["id"])] = _deterministic_row(opportunity, keywords, language)
         patches[str(opportunity["id"])]["_digest"] = digest  # promoted only on model success
 
     if not stale:
@@ -110,7 +119,7 @@ def bands_for(
     except ImportError:  # pragma: no cover - import shape differs only under odd packaging
         from pipeline import relevance as model_relevance  # type: ignore[no-redef]
 
-    scored = model_relevance.score(capability, keywords, to_score)
+    scored = model_relevance.score(capability, keywords, to_score, language)
     for opportunity_id, result in scored.items():
         patch = patches.get(opportunity_id)
         if patch is None:

@@ -348,3 +348,34 @@ class TestAFallbackBandIsNeverCached:
             keywords=["cctv"],
         )
         assert all(not k.startswith("_") for k in patches["a"])
+
+
+class TestOurExplanationsFollowTheMarketLanguage:
+    """The rationale is OUR commentary, so it is written in the workspace's market language.
+
+    Load-bearing because it is stored once per (workspace, opportunity): a French workspace
+    cannot be served English explanations by simply toggling the chrome, so if these come back
+    in English the row is wrong in the database, not just on screen.
+    """
+
+    def test_keyword_reasons_translate(self):
+        record = {"title": "Assistance à maîtrise d'ouvrage", "category_codes": [], "authority": ""}
+        fr = keyword_relevance(record, ["assistance"], "fr")
+        assert fr.reason.startswith("Correspond à votre mot-clé")
+        assert keyword_relevance(record, ["plomberie"], "fr").reason.startswith("Aucun")
+        # English stays the default for every caller that does not ask.
+        assert keyword_relevance(record, ["assistance"]).reason.startswith("Matched your keyword")
+
+    def test_eligibility_reasons_translate(self):
+        assert evaluate_eligibility(None, {}, "fr").reason == "Avis de marché pas encore lu"
+        below = evaluate_eligibility(
+            {"min_avg_annual_turnover_inr": 50_000_000},
+            {"avg_annual_turnover_inr": 10_000_000},
+            "fr",
+        )
+        assert below.signal == "likely_ineligible"
+        assert "Exige un chiffre d'affaires" in below.reason
+
+    def test_an_unknown_language_falls_back_to_english_rather_than_raising(self):
+        # A 500 on the feed would be a worse failure than an untranslated sentence.
+        assert evaluate_eligibility(None, {}, "xx").reason == "Bid document not read yet"

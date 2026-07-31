@@ -6,6 +6,7 @@ import {
   WorkspaceSwitcherSkeleton,
   WorkspaceSwitcherSlot,
 } from "@/components/design/WorkspaceSwitcherSlot";
+import { getLocale } from "@/lib/locale";
 import { createClient } from "@/lib/supabase/server";
 
 // Protected shell: C1 sidebar + content. Auth is enforced in middleware; this is the
@@ -17,14 +18,20 @@ import { createClient } from "@/lib/supabase/server";
 // streams in through Suspense instead, so the shell and the page skeleton paint immediately.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Parallel: the locale lookup is independent of the auth check and must not add a serial
+  // round trip to the critical path (known-pitfalls, latency).
+  const [
+    {
+      data: { user },
+    },
+    locale,
+  ] = await Promise.all([supabase.auth.getUser(), getLocale()]);
   if (!user) redirect("/login");
 
   return (
     <div className="flex min-h-screen">
       <Sidebar
+        locale={locale}
         switcher={
           <Suspense fallback={<WorkspaceSwitcherSkeleton />}>
             <WorkspaceSwitcherSlot />

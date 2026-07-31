@@ -43,6 +43,12 @@ that makes the tender fit. If you cannot point at something they actually said, 
 `rationale` is one sentence, addressed to the bidder, naming the concrete reason. No hedging
 adverbs, no restating the title back at them.
 
+**Write `rationale` and `matched_capability` in {output_language}.** This is commentary you are
+addressing to the bidder, so it follows their working language — not the language the tender
+happens to be published in. Do not translate anything you quote from the tender itself: if you
+need to name part of the tender, name it in the tender's own words. The requirement text is a
+legal document and it is shown verbatim elsewhere on the page.
+
 `confidence` is your certainty in the band itself, 0 to 1. Use it honestly: a terse tender title
 with no category information deserves a low confidence even when the band seems obvious.
 

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { formatConfidence, formatCrore, formatDate, formatFYRange, formatINR } from "./format";
+import {
+  formatConfidence,
+  formatCrore,
+  formatDate,
+  formatFYRange,
+  formatINR,
+  formatMoney,
+  formatTurnover,
+} from "./format";
 
 describe("formatINR", () => {
   it("groups in the Indian system (lakh/crore)", () => {
@@ -57,5 +65,26 @@ describe("formatConfidence", () => {
   it("rejects out-of-range confidence", () => {
     expect(() => formatConfidence(1.2)).toThrow(RangeError);
     expect(() => formatConfidence(-0.1)).toThrow(RangeError);
+  });
+});
+
+describe("market-aware money", () => {
+  it("keeps Indian grouping and the rupee for the Indian market", () => {
+    expect(formatMoney(240000, "IN")).toBe("\u20b92,40,000");
+    expect(formatMoney(240000, null)).toBe("\u20b92,40,000");
+  });
+
+  it("renders euros for the French market", () => {
+    // Non-breaking spaces are what Intl emits for fr-FR; assert on digits and currency
+    // rather than on the exact whitespace codepoints.
+    const out = formatMoney(240000, "FR");
+    expect(out).toContain("240");
+    expect(out).toContain("\u20ac");
+    expect(out).not.toContain("\u20b9");
+  });
+
+  it("labels the large unit per market without converting the number", () => {
+    expect(formatTurnover(8.2, "IN")).toBe("\u20b98.2 Cr");
+    expect(formatTurnover(8.2, "FR")).toBe("8,2 M\u20ac");
   });
 });

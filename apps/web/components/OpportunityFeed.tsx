@@ -25,7 +25,8 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
-import { formatINR } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
+import { translator, type Locale } from "@/lib/i18n";
 
 type ParsedEligibility = {
   min_avg_annual_turnover_inr?: number | null;
@@ -45,6 +46,7 @@ type Opportunity = {
   published_at: string | null;
   document_urls: string[];
   last_seen_at: string;
+  market: string | null;
   eligibility: ParsedEligibility | null;
 };
 
@@ -95,10 +97,17 @@ const VERDICT: Record<Match["eligibility"], { label: string; cls: string }> = {
 /** `unknown` covers two genuinely different states and one label for both was a lie in one of
  *  them: 56 rows read as "NEEDS THE NIT" when the NIT had already been read and simply stated
  *  no turnover requirement. Distinguish by whether the document was parsed. */
-function unknownLabel(parsed: ParsedEligibility | null): { label: string; cls: string } {
+function unknownLabel(
+  parsed: ParsedEligibility | null,
+  market: string,
+): { label: string; cls: string } {
   if (!parsed) {
     // Genuinely unknown — we have not read the document. Amber is right.
-    return { label: "NIT NOT READ", cls: "border-warning text-warning bg-warning-bg" };
+    // "NIT" is the Indian term of art; a French buyer publishes an avis, not a NIT.
+    return {
+      label: market === "IN" ? "NIT NOT READ" : "NOTICE NOT READ",
+      cls: "border-warning text-warning bg-warning-bg",
+    };
   }
   if (parsed.min_avg_annual_turnover_inr == null) {
     // We read it and it sets no financial bar. For a smaller bidder that is GOOD NEWS, so it
@@ -116,10 +125,11 @@ const BAND_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 /** Fit is a BAND, never a score. F-FR11 is explicit that a decimal implies a precision this
  *  signal does not have — a bidder shown 0.62 will reason about the second digit. Three filled
  *  marks, three empty, and the matched terms underneath doing the actual explaining. */
-function Fit({ band, reason, source }: {
+function Fit({ band, reason, source, t }: {
   band: Match["relevance_band"];
   reason: string | null;
   source: Match["relevance_source"];
+  t: (key: string) => string;
 }) {
   const filled = band === "high" ? 3 : band === "medium" ? 2 : band === "low" ? 1 : 0;
   if (!band) return <span className="text-[13px] text-muted">—</span>;
@@ -143,7 +153,7 @@ function Fit({ band, reason, source }: {
           while still showing bands is telling the user something untrue about its own ranking. */}
       {source === "keyword" && (
         <span className="mt-0.5 block text-[10px] uppercase tracking-wide text-muted opacity-70">
-          keyword match
+          {t("keyword match")}
         </span>
       )}
     </span>
@@ -166,26 +176,58 @@ function daysUntil(iso: string | null, now: number): number | null {
   return Number.isNaN(ms) ? null : Math.ceil(ms / 86_400_000);
 }
 
-/** Deterministic across server and client: fixed locale, fixed timezone, no host defaults. */
-const STAMP = new Intl.DateTimeFormat("en-IN", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZone: "Asia/Kolkata",
-});
+/** Deterministic across server and client: an explicit locale and timezone, never host defaults.
+ *
+ *  Both follow the MARKET, not the reader's language. A closing date is an instant in the
+ *  buyer's own working day — 15:00 IST on GeM, 12:00 CEST on TED — and rendering a French
+ *  notice's deadline in Asia/Kolkata would silently move it by half a day. */
+/** The portal's short name. Interpolated into copy rather than written into it, because
+ *  "Swept from GeM" above a feed of TED notices is a false statement in ANY language — and the
+ *  English dictionary was the one still saying it after the French one had been fixed. */
+const PORTAL: Record<string, string> = { IN: "GeM", FR: "TED" };
+const DEFAULT_PORTAL = "GeM";
 
-const DAY = new Intl.DateTimeFormat("en-IN", {
-  day: "2-digit",
-  month: "short",
-  timeZone: "Asia/Kolkata",
-});
+/** Named provenance per market (S14-D3). */
+const SOURCE: Record<string, string> = {
+  IN: "Government e-Marketplace (bidplus.gem.gov.in)",
+  FR: "Tenders Electronic Daily — Journal officiel de l'Union européenne (ted.europa.eu)",
+};
+
+const IN_ZONE = { locale: "en-IN", tz: "Asia/Kolkata", label: "IST" };
+const ZONE: Record<string, { locale: string; tz: string; label: string }> = {
+  IN: IN_ZONE,
+  FR: { locale: "fr-FR", tz: "Europe/Paris", label: "CET" },
+};
+
+function clockFor(market: string, locale: string) {
+  const z = ZONE[market] ?? IN_ZONE;
+  // The TIMEZONE follows the market — a closing time means the buyer's working day, and
+  // shifting it is a factual error. The FORMATTING follows the reader, so an English-reading
+  // user in a French workspace gets "31 Jul, 10:47 CET", not "31 juil." in English chrome.
+  const display = locale === "fr" ? "fr-FR" : "en-IN";
+  return {
+    label: z.label,
+    stamp: new Intl.DateTimeFormat(display, {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: z.tz,
+    }),
+    day: new Intl.DateTimeFormat(display, { day: "2-digit", month: "short", timeZone: z.tz }),
+  };
+}
 
 /** C6 escalation: neutral, amber at T-48h, red at T-24h. Text carries the meaning too. */
-function Deadline({ closingAt, now }: { closingAt: string | null; now: number }) {
+function Deadline({ closingAt, now, t, day }: {
+  closingAt: string | null;
+  now: number;
+  t: (key: string) => string;
+  day: Intl.DateTimeFormat;
+}) {
   const days = daysUntil(closingAt, now);
-  if (days === null) return <span className="text-xs text-muted">not published</span>;
+  if (days === null) return <span className="text-xs text-muted">{t("not published")}</span>;
   // C6 escalation. Only the last step gets a filled background: on a feed where most tenders
   // close within the week, filling the amber step too paints every row the same colour and the
   // escalation stops being a signal at all. Fill is reserved for the row you must act on today.
@@ -200,11 +242,15 @@ function Deadline({ closingAt, now }: { closingAt: string | null; now: number })
       <span
         className={`inline-block whitespace-nowrap rounded-control border px-2 py-1 text-[13px] font-semibold tabular-nums ${tone}`}
       >
-        {days < 0 ? "closed" : days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"}`}
+        {days < 0
+          ? t("closed")
+          : days === 0
+            ? t("today")
+            : `${days} ${t(days === 1 ? "day" : "days")}`}
       </span>
       {closingAt && (
         <span className="mt-1 block text-[11px] tabular-nums text-muted">
-          {DAY.format(new Date(closingAt))}
+          {day.format(new Date(closingAt))}
         </span>
       )}
     </span>
@@ -238,12 +284,21 @@ export function OpportunityFeed({
   data,
   state,
   nowIso,
+  locale = "en",
 }: {
   data: FeedData;
   state: string;
   nowIso: string;
+  locale?: Locale;
 }) {
   const now = new Date(nowIso).getTime();
+  const t = translator(locale);
+  // The market comes from the tenders themselves, not from the reader's language: an
+  // English-reading user in a French workspace must still see euros and Paris deadlines.
+  const market = (data.items ?? []).find((m) => m.opportunities?.market)?.opportunities?.market
+    ?? (locale === "fr" ? "FR" : "IN");
+  const clock = clockFor(market, locale);
+  const portal = PORTAL[market] ?? DEFAULT_PORTAL;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [sweeping, setSweeping] = useState(false);
@@ -331,16 +386,18 @@ export function OpportunityFeed({
       <header className="flex flex-wrap items-start gap-x-6 gap-y-3">
         <div className="min-w-0">
           <h1 className="font-heading text-2xl font-semibold tracking-tight text-ink">
-            Opportunities
+            {t("Opportunities")}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Live public tenders on GeM, deduplicated and matched against your rules and profile.
+            {t(
+              "Live public tenders on {portal}, deduplicated and matched against your rules and profile.",
+            ).replace("{portal}", portal)}
           </p>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {lastSwept && (
             <span className="hidden font-mono text-xs text-muted sm:inline">
-              swept {STAMP.format(new Date(lastSwept))} IST
+              {t("swept")} {clock.stamp.format(new Date(lastSwept))} {clock.label}
             </span>
           )}
           <button
@@ -349,7 +406,7 @@ export function OpportunityFeed({
             disabled={busy}
             className="rounded-control border border-hairline bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-surface-alt disabled:opacity-50"
           >
-            {busy ? "Sweeping GeM…" : "Refresh"}
+            {busy ? t("Sweeping {portal}…").replace("{portal}", portal) : t("Refresh")}
           </button>
         </div>
       </header>
@@ -359,26 +416,34 @@ export function OpportunityFeed({
         aria-label="Feed coverage"
         className="mt-6 grid grid-cols-2 overflow-hidden rounded-card border border-hairline bg-surface md:grid-cols-4"
       >
-        <Coverage value={swept} label="Swept from GeM" note="deduplicated by bid number" />
+        <Coverage
+          value={swept}
+          label={t("Swept from {portal}").replace("{portal}", portal)}
+          note={t("deduplicated by reference number")}
+        />
         <Coverage
           value={data.counts?.in_scope ?? 0}
-          label="In your feed"
+          label={t("In your feed")}
           note={
             activeRules.length
-              ? `${activeRules.length} rule${activeRules.length > 1 ? "s" : ""} applied`
-              : "no rules yet"
+              ? `${activeRules.length} ${t(activeRules.length > 1 ? "rules applied" : "rule applied")}`
+              : t("no rules yet")
           }
         />
         <Coverage
           value={eligibleCount}
-          label="Clear the turnover bar"
-          note={profileLine ? `against your ${profileLine} · turnover only` : "needs your turnover on file"}
+          label={t("Clear the turnover bar")}
+          note={
+            profileLine
+              ? `${t("against your")} ${profileLine} · ${t("turnover only")}`
+              : t("needs your turnover on file")
+          }
           tone={eligibleCount > 0 ? "text-success" : "text-ink"}
         />
         <Coverage
           value={data.counts?.excluded ?? 0}
-          label="Hidden by your rules"
-          note="never by the system"
+          label={t("Hidden by your rules")}
+          note={t("never by the system")}
         />
       </section>
 
@@ -386,8 +451,8 @@ export function OpportunityFeed({
         <nav className="flex gap-2" data-feed-tabs>
           {(
             [
-              ["in_scope", "In scope", data.counts?.in_scope ?? 0],
-              ["excluded", "Excluded", data.counts?.excluded ?? 0],
+              ["in_scope", t("In scope"), data.counts?.in_scope ?? 0],
+              ["excluded", t("Excluded"), data.counts?.excluded ?? 0],
             ] as const
           ).map(([key, label, count]) => (
             <a
@@ -416,22 +481,22 @@ export function OpportunityFeed({
             onChange={(e) => toggleGate(e.target.checked)}
             className="h-4 w-4 rounded border-hairline accent-[color:var(--color-primary)]"
           />
-          Only my keywords
+          {t("Only my keywords")}
         </label>
 
         {items.length > 0 && (
           <label className="ml-auto flex items-center gap-2 text-sm text-muted">
-            Sort
+            {t("Sort")}
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortKey)}
               className="rounded-control border border-hairline bg-surface px-2 py-1.5 text-sm text-ink"
             >
-              <option value="fit">Best fit</option>
-              <option value="closing">Closing soonest</option>
-              <option value="verdict">Eligibility</option>
-              <option value="turnover">Turnover bar</option>
-              <option value="value">Estimated value</option>
+              <option value="fit">{t("Best fit")}</option>
+              <option value="closing">{t("Closing soonest")}</option>
+              <option value="verdict">{t("Eligibility")}</option>
+              <option value="turnover">{t("Turnover bar")}</option>
+              <option value="value">{t("Estimated value")}</option>
             </select>
           </label>
         )}
@@ -439,14 +504,14 @@ export function OpportunityFeed({
 
       {state === "excluded" && activeRules.length > 0 && (
         <p className="mt-3 text-sm text-muted">
-          Hidden by{" "}
+          {t("Hidden by")}{" "}
           {activeRules.map((r, i) => (
             <span key={r.id}>
               {i > 0 && ", "}
               <span className="font-medium text-ink">{r.name}</span>
             </span>
           ))}
-          . Nothing here was hidden by the system — every row names the rule you wrote.
+          . {t("Nothing here was hidden by the system — every row names the rule you wrote.")}
         </p>
       )}
 
@@ -456,12 +521,14 @@ export function OpportunityFeed({
           className="mt-6 rounded-card border border-hairline bg-surface p-card"
         >
           <p className="font-medium text-ink">
-            {state === "excluded" ? "Nothing is hidden" : "No opportunities yet"}
+            {t(state === "excluded" ? "Nothing is hidden" : "No opportunities yet")}
           </p>
           <p className="mt-2 max-w-prose text-sm text-muted">
-            {state === "excluded"
-              ? "Your rules have not excluded anything. Every tender we found is in the in-scope list."
-              : "Refresh to sweep GeM for live tenders and match them against your rules and vendor profile."}
+            {t(
+              state === "excluded"
+                ? "Your rules have not excluded anything. Every tender we found is in the in-scope list."
+                : "Refresh to sweep {portal} for live tenders and match them against your rules and vendor profile.",
+            ).replace("{portal}", portal)}
           </p>
           {state !== "excluded" && (
             <button
@@ -470,7 +537,9 @@ export function OpportunityFeed({
               disabled={busy}
               className="mt-4 rounded-control bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
             >
-              {busy ? "Sweeping GeM…" : "Sweep GeM now"}
+              {busy
+                ? t("Sweeping {portal}…").replace("{portal}", portal)
+                : t("Sweep {portal} now").replace("{portal}", portal)}
             </button>
           )}
         </div>
@@ -488,14 +557,16 @@ export function OpportunityFeed({
             </colgroup>
             <thead className="border-b border-hairline bg-surface-alt text-left text-[11px] uppercase tracking-wider text-muted">
               <tr>
-                <th className="px-4 py-2.5 font-medium">Tender</th>
-                <th className="px-4 py-2.5 font-medium">Buyer</th>
-                <th className="px-4 py-2.5 font-medium">Fit</th>
-                <th className="px-4 py-2.5 font-medium">Closes</th>
-                <th className="px-4 py-2.5 text-right font-medium">Turnover bar</th>
-                <th className="px-4 py-2.5 text-right font-medium">EMD</th>
+                <th className="px-4 py-2.5 font-medium">{t("Tender")}</th>
+                <th className="px-4 py-2.5 font-medium">{t("Buyer")}</th>
+                <th className="px-4 py-2.5 font-medium">{t("Fit")}</th>
+                <th className="px-4 py-2.5 font-medium">{t("Closes")}</th>
+                <th className="px-4 py-2.5 text-right font-medium">{t("Turnover required")}</th>
+                <th className="px-4 py-2.5 text-right font-medium">
+                  {t(market === "IN" ? "EMD" : "Deposit")}
+                </th>
                 <th className="px-4 py-2.5 font-medium">
-                  {state === "excluded" ? "Excluded by" : "Eligibility"}
+                  {t(state === "excluded" ? "Excluded by" : "Eligibility")}
                 </th>
               </tr>
             </thead>
@@ -520,7 +591,7 @@ export function OpportunityFeed({
                         className="line-clamp-2 font-medium leading-snug text-ink hover:text-primary"
                         title={opp.title ?? undefined}
                       >
-                        {opp.title ?? "Untitled tender"}
+                        {opp.title ?? t("Untitled tender")}
                       </a>
                       {/* Mono is measurement here, not costume: a bid number gets read back
                           against the portal character by character. */}
@@ -530,7 +601,7 @@ export function OpportunityFeed({
                     </td>
                     <td className="px-4 py-2.5 align-top">
                       <span className="line-clamp-2 text-[13px] leading-snug text-muted">
-                        {opp.authority ?? "Not published"}
+                        {opp.authority ?? t("Not published")}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 align-top">
@@ -538,34 +609,35 @@ export function OpportunityFeed({
                         band={match.relevance_band}
                         reason={match.relevance_reason}
                         source={match.relevance_source}
+                        t={t}
                       />
                     </td>
                     <td className="px-4 py-2.5 align-top">
-                      <Deadline closingAt={opp.closing_at} now={now} />
+                      <Deadline closingAt={opp.closing_at} now={now} t={t} day={clock.day} />
                     </td>
                     <td className="px-4 py-2.5 text-right align-top tabular-nums">
                       {parsed.min_avg_annual_turnover_inr != null ? (
                         <>
                           <span className="text-ink">
-                            {formatINR(parsed.min_avg_annual_turnover_inr)}
+                            {formatMoney(parsed.min_avg_annual_turnover_inr, market)}
                           </span>
                           {parsed.estimated_value_inr != null && (
                             <span className="mt-0.5 block whitespace-nowrap text-[11px] text-muted">
-                              est. {formatINR(parsed.estimated_value_inr)}
+                              est. {formatMoney(parsed.estimated_value_inr, market)}
                             </span>
                           )}
                         </>
                       ) : (
                         /* "none stated" rather than a dash: a tender with no financial bar is
                             good news for a small bidder, and a dash reads as missing data. */
-                        <span className="text-[13px] text-muted">none stated</span>
+                        <span className="text-[13px] text-muted">{t("none stated")}</span>
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-right align-top tabular-nums">
                       {parsed.emd_amount_inr != null ? (
-                        <span className="text-ink">{formatINR(parsed.emd_amount_inr)}</span>
+                        <span className="text-ink">{formatMoney(parsed.emd_amount_inr, market)}</span>
                       ) : parsed.emd_required === false ? (
-                        <span className="text-[13px] text-muted">none</span>
+                        <span className="text-[13px] text-muted">{t("none")}</span>
                       ) : (
                         <span className="text-[13px] text-muted">—</span>
                       )}
@@ -582,7 +654,7 @@ export function OpportunityFeed({
                         (() => {
                           const shown =
                             match.eligibility === "unknown"
-                              ? unknownLabel(opp.eligibility)
+                              ? unknownLabel(opp.eligibility, market)
                               : verdict;
                           return (
                             <span
@@ -590,7 +662,7 @@ export function OpportunityFeed({
                               title={match.eligibility_reason ?? undefined}
                               className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold tracking-wide ${shown.cls}`}
                             >
-                              {shown.label}
+                              {t(shown.label)}
                             </span>
                           );
                         })()
@@ -605,9 +677,13 @@ export function OpportunityFeed({
       )}
 
       <p className="mt-4 max-w-prose text-xs leading-relaxed text-muted">
-        Source: Government e-Marketplace (bidplus.gem.gov.in). Tender content stays on GeM and is
-        linked, not reproduced. Turnover and EMD are read from each bid document by a
-        deterministic parser; eligibility is provisional until the tender is fully analysed.
+        {/* The source names the portal actually swept for THIS market — claiming GeM under a
+            feed of French notices would be a false provenance statement, not a label bug. */}
+        {t("Source")}: {SOURCE[market] ?? SOURCE.IN}.{" "}
+        {t("Tender content stays on the source portal and is linked, not reproduced.")}{" "}
+        {t(
+          "Turnover and deposit figures are read from each notice by a deterministic parser; eligibility is provisional until the tender is fully analysed.",
+        )}
       </p>
     </main>
   );

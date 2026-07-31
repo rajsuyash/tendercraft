@@ -917,15 +917,18 @@ def upsert_opportunities(records: list[dict]) -> list[dict]:
     )
 
 
-def get_opportunities(limit: int = 500) -> list[dict]:
-    return (
-        _rest(
-            "GET",
-            "opportunities",
-            params={"select": "*", "order": "closing_at.asc", "limit": str(limit)},
-        )
-        or []
-    )
+def get_opportunities(limit: int = 500, market: str | None = None) -> list[dict]:
+    params = {"select": "*", "order": "closing_at.asc", "limit": str(limit)}
+    if market:
+        params["market"] = f"eq.{market}"
+    return _rest("GET", "opportunities", params=params) or []
+
+
+def get_workspace_market(workspace_id: str) -> str:
+    rows = _rest(
+        "GET", "workspaces", params={"id": f"eq.{workspace_id}", "select": "market"}
+    ) or []
+    return (rows[0].get("market") if rows else None) or "IN"
 
 
 def set_opportunity_eligibility(opportunity_id: str, fields: dict, at_iso: str) -> None:

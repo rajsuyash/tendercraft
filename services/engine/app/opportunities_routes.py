@@ -79,7 +79,8 @@ async def refresh(
     """
 
     def work() -> dict:
-        swept = ingest.refresh_corpus(max_pages=max_pages, query=q)
+        market = db.get_workspace_market(user.workspace_id)
+        swept = ingest.refresh_corpus(max_pages=max_pages, query=q, market=market)
         matched = ingest.recompute_matches(user.workspace_id)
         return {"swept": swept, "matched": matched}
 

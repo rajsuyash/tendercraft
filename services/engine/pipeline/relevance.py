@@ -66,17 +66,27 @@ def _tender_line(opportunity: dict) -> dict:
     }
 
 
+LANGUAGE_NAMES = {"fr": "French", "en": "English", "de": "German", "es": "Spanish"}
+
+
 def score_batch(
     capability_statement: str,
     keywords: list[str],
     opportunities: list[dict],
+    language: str = "en",
 ) -> list[RelevanceResult]:
-    """Band one batch of tenders. Raises ModelError; never returns a guess."""
+    """Band one batch of tenders. Raises ModelError; never returns a guess.
+
+    `language` is the language the RATIONALE is written in — our commentary to the bidder. It is
+    deliberately not the tender's language: a French workspace reads French explanations beside
+    French tender text, and the tender text itself is never translated.
+    """
     if not opportunities:
         return []
 
     prompt = (
         _PROMPT.replace("{capability_statement}", capability_statement.strip() or "(not provided)")
+        .replace("{output_language}", LANGUAGE_NAMES.get(language, "English"))
         .replace("{keywords}", ", ".join(keywords) or "(none)")
         .replace(
             "{tenders}",
@@ -125,6 +135,7 @@ def score(
     capability_statement: str,
     keywords: list[str],
     opportunities: list[dict],
+    language: str = "en",
 ) -> dict[str, RelevanceResult]:
     """Band a list of tenders, batched. Partial failure is partial output, never an exception —
     a batch that fails leaves those tenders unbanded for the caller's deterministic fallback."""
@@ -132,7 +143,7 @@ def score(
     for start in range(0, len(opportunities), BATCH_SIZE):
         batch = opportunities[start : start + BATCH_SIZE]
         try:
-            for result in score_batch(capability_statement, keywords, batch):
+            for result in score_batch(capability_statement, keywords, batch, language):
                 out[result.opportunity_id] = result
         except ModelError as exc:
             log.warning("relevance: batch of %d failed (%s) — falling back", len(batch), exc)

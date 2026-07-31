@@ -32,7 +32,12 @@ class DraftedResponse:
     flags: list[dict]
 
 
-def draft_response(criterion_text: str, evidence_chunks: list[dict]) -> DraftedResponse:
+LANGUAGE_NAMES = {"fr": "French", "en": "English", "de": "German", "es": "Spanish"}
+
+
+def draft_response(
+    criterion_text: str, evidence_chunks: list[dict], language: str = "en"
+) -> DraftedResponse:
     """Draft one response. evidence_chunks: [{id, name, text}]. Never raises."""
     if not evidence_chunks:
         return DraftedResponse(_PLACEHOLDER, "placeholder", [], [])
@@ -40,7 +45,13 @@ def draft_response(criterion_text: str, evidence_chunks: list[dict]) -> DraftedR
     evidence_str = "\n".join(
         f"[{c['id']}] {c.get('name', '')}: {c.get('text', '')[:1200]}" for c in evidence_chunks
     )
-    prompt = _PROMPT.replace("{{CRITERION}}", criterion_text).replace("{{EVIDENCE}}", evidence_str)
+    prompt = (
+        _PROMPT.replace("{{CRITERION}}", criterion_text)
+        .replace("{{EVIDENCE}}", evidence_str)
+        # The tender's language, never the reader's UI toggle: a French buyer receives a French
+        # bid however the bid manager set their chrome (docs/multi-market.md).
+        .replace("{{LANGUAGE}}", LANGUAGE_NAMES.get(language, "English"))
+    )
 
     try:
         r = generate_json(prompt, DRAFT_SCHEMA)

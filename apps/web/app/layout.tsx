@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 
+import { getLocale } from "@/lib/locale";
+
 import tokens from "../../../design/tokens.json";
 
 import "./globals.css";
@@ -26,9 +28,13 @@ export const viewport: Viewport = {
   themeColor: tokens.color["surface-alt"],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// `lang` is not decoration: a screen reader picks its voice from it, so French copy under
+// lang="en" is read aloud with English phonemes. Async because the locale is a cookie/profile
+// read — this layout has no other data dependency, so it costs nothing on the critical path.
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang={locale} className={inter.variable}>
       <body>{children}</body>
     </html>
   );

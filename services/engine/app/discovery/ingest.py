@@ -26,6 +26,7 @@ import httpx
 from .. import db, http, service_auth
 from ..deterministic.discovery import Rule, evaluate_eligibility, evaluate_gate
 from . import relevance
+from .registry import for_market
 
 log = logging.getLogger("tendercraft.engine")
 
@@ -39,17 +40,27 @@ DEFAULT_PAGES = int(os.environ.get("GEM_SWEEP_PAGES", "12"))
 # Fetching all 48k would be pointless and rude; this is §4.1's escalation ladder, capped.
 DEFAULT_DOC_BUDGET = int(os.environ.get("GEM_DOC_BUDGET", "25"))
 
+# The language our own explanations are written in, per market.
+#
+# It follows the MARKET rather than the reader's EN/FR toggle, which corrects what
+# docs/multi-market.md originally claimed: a relevance rationale is stored once per (workspace,
+# opportunity), so it cannot be per-user without storing it twice. A French workspace therefore
+# gets French explanations sitting beside French tender text, whichever way a given reader has
+# set their chrome. Only static interface strings follow the toggle.
+MARKET_LANGUAGE = {"IN": "en", "FR": "fr", "DE": "de", "ES": "es"}
 
-def _connector(path: str, params: dict[str, Any] | None = None) -> dict:
-    if not CONNECTOR_URL:
-        raise RuntimeError("GEM_CONNECTOR_URL is not configured")
+
+def _connector(path: str, params: dict[str, Any] | None = None, base: str = "") -> dict:
+    base = (base or CONNECTOR_URL).rstrip("/")
+    if not base:
+        raise RuntimeError("no connector configured for this market")
     # Identity headers are built outside this tree (see app/service_auth.py) so the guardrail
     # forbidding portal-bound credentials here stays literal and unweakened.
     response = http.client.request(
         "GET",
-        f"{CONNECTOR_URL}{path}",
+        f"{base}{path}",
         params=params,
-        headers=service_auth.headers_for(CONNECTOR_URL),
+        headers=service_auth.headers_for(base),
         timeout=180,
     )
     response.raise_for_status()
@@ -60,9 +71,17 @@ def _connector(path: str, params: dict[str, Any] | None = None) -> dict:
 
 
 def _to_row(record: dict[str, Any]) -> dict[str, Any]:
-    """Connector record → `opportunities` row. Absent stays absent (F-FR1)."""
+    """Connector record → `opportunities` row. Absent stays absent (F-FR1).
+
+    Market-agnostic on purpose: both connectors emit the same F-FR1 shape, so this function
+    does not know or care which country a tender came from.
+    """
     return {
         "source_id": record["source_id"],
+        "market": record.get("market", "IN"),
+        # What language the notice we stored is actually written in — chosen by the connector,
+        # never inferred here. It decides what language the drafter must write.
+        "notice_language": record.get("notice_language"),
         "portal_ref_no": record["portal_ref_no"],
         "title": record.get("title"),
         "authority": record.get("authority"),
@@ -80,7 +99,9 @@ def _to_row(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def refresh_corpus(max_pages: int = DEFAULT_PAGES, query: str = "") -> dict[str, Any]:
+def refresh_corpus(
+    max_pages: int = DEFAULT_PAGES, query: str = "", market: str = "IN"
+) -> dict[str, Any]:
     """Sweep the connector and upsert into the shared corpus. Workspace-agnostic.
 
     `query` runs GeM's own full-text search. It ACQUIRES more, it never filters: a chronological
@@ -89,19 +110,31 @@ def refresh_corpus(max_pages: int = DEFAULT_PAGES, query: str = "") -> dict[str,
     direction under ET-7 — the failure this module guards against is a tender never seen, and
     nothing here can hide one. The corpus stays shared; only the ranking is per workspace.
     """
-    data = _connector("/opportunities", {"max_pages": max_pages, "q": query})
-    rows = [_to_row(r) for r in data.get("records", []) if r.get("portal_ref_no")]
-    stored = db.upsert_opportunities(rows)
-    log.info(
-        "discovery: swept %d pages, upserted %d rows",
-        data.get("pages_fetched", 0),
-        len(stored),
-    )
-    return {
-        "portal_total_ongoing": data.get("portal_total_ongoing"),
-        "pages_fetched": data.get("pages_fetched"),
-        "upserted": len(stored),
-    }
+    sources = for_market(market)
+    if not sources:
+        # A market with no configured source is a deployment mistake. Returning an empty feed
+        # would look like "no tenders today", which is the ET-7 failure wearing a friendly face.
+        raise RuntimeError(f"no source configured for market {market!r}")
+
+    total = 0
+    pages = 0
+    upserted = 0
+    for source in sources:
+        params: dict[str, Any] = {"max_pages": max_pages, "q": query}
+        if source.source_id == "ted":
+            params["market"] = market
+        data = _connector("/opportunities", params, base=source.connector_url)
+        rows = [_to_row(r) for r in data.get("records", []) if r.get("portal_ref_no")]
+        stored = db.upsert_opportunities(rows)
+        total = data.get("portal_total_ongoing") or total
+        pages += data.get("pages_fetched", 0)
+        upserted += len(stored)
+        log.info(
+            "discovery[%s/%s]: swept %d pages, upserted %d rows",
+            market, source.source_id, data.get("pages_fetched", 0), len(stored),
+        )
+    return {"market": market, "portal_total_ongoing": total,
+            "pages_fetched": pages, "upserted": upserted}
 
 
 def _rules_for(workspace_id: str) -> list[Rule]:
@@ -151,7 +184,14 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
     """
     rules = _rules_for(workspace_id)
     profile = _profile_turnover_inr(workspace_id)
-    opportunities = db.get_opportunities(limit=1000)
+    # One lookup, used for BOTH the eligibility sentences and the relevance rationales — they
+    # are the same voice explaining the same row and must never end up in different languages.
+    market = db.get_workspace_market(workspace_id)
+    language = MARKET_LANGUAGE.get(market, "en")
+    # A workspace ranks its own market's corpus. This is a DEFAULT, not a gate: the rows still
+    # exist and a cross-border view is a query change, not a migration. Hiding a tender a bidder
+    # could legally pursue would be an exclusion no user authored (F-AC6).
+    opportunities = db.get_opportunities(limit=1000, market=market)
 
     matches: list[dict[str, Any]] = []
     in_scope: list[dict[str, Any]] = []
@@ -164,7 +204,7 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
             "computed_at": datetime.now(UTC).isoformat(),
         }
         if gate.in_scope:
-            verdict = evaluate_eligibility(opportunity.get("eligibility"), profile)
+            verdict = evaluate_eligibility(opportunity.get("eligibility"), profile, language)
             row["eligibility"] = verdict.signal
             row["eligibility_reason"] = verdict.reason
             in_scope.append(opportunity)
@@ -185,6 +225,7 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
             capability_statement=capability,
             keywords=keywords,
             existing=seen_hashes,
+            language=language,
         )
         by_id = {m["opportunity_id"]: m for m in matches}
         for opportunity_id, patch in patches.items():

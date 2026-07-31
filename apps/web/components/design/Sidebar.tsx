@@ -1,5 +1,7 @@
 "use client";
 
+import { LocaleToggle } from "@/components/LocaleToggle";
+import { translator, type Locale } from "@/lib/i18n";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -20,8 +22,9 @@ const NAV = [
  * round trip (~0.9s measured), and inlining it here made every navigation wait for data that
  * the nav links themselves do not need. The layout streams it in through a Suspense boundary.
  */
-export function Sidebar({ switcher }: { switcher?: React.ReactNode }) {
+export function Sidebar({ switcher, locale = "en" }: { switcher?: React.ReactNode; locale?: Locale }) {
   const pathname = usePathname();
+  const t = translator(locale);
   return (
     // Sticky + translucent: this is the one place the app uses glass, because it is chrome
     // sitting over scrolling content — exactly where iOS uses it. Data surfaces stay opaque.
@@ -55,12 +58,16 @@ export function Sidebar({ switcher }: { switcher?: React.ReactNode }) {
                     : "text-muted hover:bg-surface-alt hover:text-ink"
                 }`}
               >
-                {item.label}
+                {t(item.label)}
               </Link>
             </li>
           );
         })}
       </ul>
+      {/* Bottom of the rail: a preference, not a destination. */}
+      <div className="mt-auto px-2 pt-4">
+        <LocaleToggle locale={locale} />
+      </div>
     </nav>
   );
 }
