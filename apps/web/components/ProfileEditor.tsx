@@ -11,9 +11,11 @@ import { ProfileForm, type ProfileData } from "./ProfileForm";
 export function ProfileEditor({
   initial,
   locale = "en",
+  market = "IN",
 }: {
   initial: ProfileData;
   locale?: Locale;
+  market?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const t = translator(locale);
@@ -36,7 +38,12 @@ export function ProfileEditor({
         <h1 className="mb-4 font-heading text-xl font-semibold text-ink">
           {t("Update vendor profile")}
         </h1>
-        <ProfileForm initial={initial} onClose={() => setEditing(false)} />
+        <ProfileForm
+          initial={initial}
+          onClose={() => setEditing(false)}
+          locale={locale}
+          market={market}
+        />
       </div>
     </div>
   );

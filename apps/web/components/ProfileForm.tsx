@@ -3,13 +3,24 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { translator, type Locale } from "@/lib/i18n";
+
 export type Financial = { fy_label: string; turnover_cr: number | string };
-export type Certification = { name: string; cert_no?: string | null; valid_to?: string | null };
+export type Certification = {
+  name: string;
+  cert_no?: string | null;
+  valid_from?: string | null;
+  valid_to?: string | null;
+};
 export type Experience = {
   project_name: string;
   client_type?: string | null;
   value_cr?: number | string | null;
   completion_date?: string | null;
+  /** Not editable here, but it MUST round-trip. `replace_profile_collection` is
+   *  DELETE-then-INSERT, so a field this form omits is a field every save deletes — and
+   *  scope_tags is what drives similar-works matching. */
+  scope_tags?: string[] | null;
 };
 
 export type ProfileData = {
@@ -66,11 +77,37 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export function ProfileForm({
   initial,
   onClose,
+  locale = "en",
+  market = "IN",
 }: {
   initial: ProfileData;
   onClose: () => void;
+  locale?: Locale;
+  market?: string;
 }) {
   const router = useRouter();
+  const t = translator(locale);
+  // The unit label, not a conversion: `turnover_cr` holds a number in the market's own large
+  // unit (see lib/format.ts). Labelling a French figure "₹ Cr" would be asking for the wrong
+  // number, which is worse than an untranslated word.
+  const unit = market === "FR" ? "M€" : "₹ Cr";
+  // Placeholders are example copy, and an example is only useful if it looks like the reader's
+  // own work. An Indian IT-infrastructure example under a French consultancy's capability box
+  // teaches the wrong thing about what to write here, in a field that decides their whole feed.
+  const example =
+    market === "FR"
+      ? {
+          capability:
+            "ex. Cabinet de conseil spécialisé dans l'accompagnement des acheteurs publics — assistance à maîtrise d'ouvrage, audit interne, transformation numérique et formation des agents.",
+          keywords: "conseil, assistance à maîtrise d'ouvrage, amo, audit, formation",
+          year: "2025",
+        }
+      : {
+          capability:
+            "e.g. We design, supply and maintain IT infrastructure for state government departments — CCTV and surveillance networks, structured cabling, data-centre hardware, and annual maintenance contracts.",
+          keywords: "cctv, surveillance, networking, structured cabling, amc",
+          year: "FY25",
+        };
   const [d, setD] = useState<ProfileData>({
     ...initial,
     financials: [...initial.financials],
@@ -110,6 +147,7 @@ export function ProfileForm({
             .map((c) => ({
               name: c.name,
               cert_no: c.cert_no || null,
+              valid_from: c.valid_from || null,
               valid_to: c.valid_to || null,
             })),
           experience_records: d.experience_records
@@ -119,12 +157,15 @@ export function ProfileForm({
               client_type: x.client_type || "govt",
               value_cr: x.value_cr === "" || x.value_cr == null ? null : Number(x.value_cr),
               completion_date: x.completion_date || null,
+              // Echoed back untouched. Omitting it does not "leave it alone" — the server
+              // replaces the whole collection, so an omitted field is a deleted one.
+              scope_tags: x.scope_tags ?? [],
             })),
         }),
       });
       const body = await res.json();
       if (!body.ok) {
-        setError(body.error?.message ?? "Could not save the profile");
+        setError(body.error?.message ?? t("Could not save the profile"));
         return;
       }
       // Eligibility is recomputed from these rows, so any open bid must be re-matched.
@@ -144,63 +185,83 @@ export function ProfileForm({
       ) : null}
 
       <section className="rounded-card border border-border bg-surface p-card">
-        <h2 className="mb-1 font-heading text-base font-medium text-ink">What you bid on</h2>
+        <h2 className="mb-1 font-heading text-base font-medium text-ink">{t("What you bid on")}</h2>
         <p className="mb-3 text-xs text-muted">
-          Used to rank your opportunity feed. Nothing is hidden because of what you write here
-          unless you switch on the narrow feed yourself.
+          {t(
+            "Used to rank your opportunity feed. Nothing is hidden because of what you write here unless you switch on the narrow feed yourself.",
+          )}
         </p>
         <div className="grid grid-cols-1 gap-3">
-          <Row label="Capability and expertise">
+          <Row label={t("Capability and expertise")}>
             <textarea
               data-field-capability
               rows={4}
               className={INPUT}
               value={d.capability_statement ?? ""}
               onChange={(e) => set("capability_statement", e.target.value)}
-              placeholder="e.g. We design, supply and maintain IT infrastructure for state government departments — CCTV and surveillance networks, structured cabling, data-centre hardware, and annual maintenance contracts."
+              placeholder={example.capability}
             />
           </Row>
-          <Row label="Keywords you bid on (comma separated)">
+          <Row label={t("Keywords you bid on (comma separated)")}>
             <input
               data-field-capability-keywords
               className={INPUT}
               value={d.capability_keywords_raw ?? ""}
               onChange={(e) => set("capability_keywords_raw", e.target.value)}
-              placeholder="cctv, surveillance, networking, structured cabling, amc"
+              placeholder={example.keywords}
             />
           </Row>
         </div>
       </section>
 
       <section className="rounded-card border border-border bg-surface p-card">
-        <h2 className="mb-3 font-heading text-base font-medium text-ink">Legal identity</h2>
+        <h2 className="mb-3 font-heading text-base font-medium text-ink">{t("Legal identity")}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Row label="Registered company name">
+          <Row label={t("Registered company name")}>
             <input
               data-field-legal-name
               className={INPUT}
               value={d.legal_name ?? ""}
               onChange={(e) => set("legal_name", e.target.value)}
-              placeholder="As it appears on the certificate of incorporation"
+              placeholder={t("As it appears on the certificate of incorporation")}
             />
           </Row>
-          <Row label="CIN">
-            <input className={INPUT} value={d.cin ?? ""} onChange={(e) => set("cin", e.target.value)} />
-          </Row>
-          <Row label="PAN">
-            <input className={INPUT} value={d.pan ?? ""} onChange={(e) => set("pan", e.target.value)} />
-          </Row>
-          <Row label="GST">
-            <input className={INPUT} value={d.gst ?? ""} onChange={(e) => set("gst", e.target.value)} />
-          </Row>
-          <Row label="Udyam registration">
-            <input
-              className={INPUT}
-              value={d.udyam_registration ?? ""}
-              onChange={(e) => set("udyam_registration", e.target.value)}
-            />
-          </Row>
-          <Row label="Net worth (₹ Cr)">
+          {/* Asking a French vendor for a CIN, PAN, GST or Udyam number is asking for
+              documents that do not exist in their jurisdiction. The read view already hides
+              them; leaving them collectable here made the modal contradict the page behind it. */}
+          {market === "IN" && (
+            <>
+              <Row label="CIN">
+                <input
+                  className={INPUT}
+                  value={d.cin ?? ""}
+                  onChange={(e) => set("cin", e.target.value)}
+                />
+              </Row>
+              <Row label="PAN">
+                <input
+                  className={INPUT}
+                  value={d.pan ?? ""}
+                  onChange={(e) => set("pan", e.target.value)}
+                />
+              </Row>
+              <Row label="GST">
+                <input
+                  className={INPUT}
+                  value={d.gst ?? ""}
+                  onChange={(e) => set("gst", e.target.value)}
+                />
+              </Row>
+              <Row label={t("Udyam registration")}>
+                <input
+                  className={INPUT}
+                  value={d.udyam_registration ?? ""}
+                  onChange={(e) => set("udyam_registration", e.target.value)}
+                />
+              </Row>
+            </>
+          )}
+          <Row label={`${t("Net worth")} (${unit})`}>
             <input
               type="number"
               step="0.01"
@@ -211,22 +272,23 @@ export function ProfileForm({
           </Row>
         </div>
         <p className="mt-2 text-xs text-muted">
-          The registered name is written into the proposal directly. It is never taken from an
-          uploaded document.
+          {t(
+            "The registered name is written into the proposal directly. It is never taken from an uploaded document.",
+          )}
         </p>
       </section>
 
       <section className="rounded-card border border-border bg-surface p-card">
-        <h2 className="mb-1 font-heading text-base font-medium text-ink">Annual turnover</h2>
+        <h2 className="mb-1 font-heading text-base font-medium text-ink">{t("Annual turnover")}</h2>
         <p className="mb-3 text-xs text-muted">
-          Turnover thresholds are checked against these figures.
+          {t("Turnover thresholds are checked against these figures.")}
         </p>
         <div className="space-y-2">
           {d.financials.map((f, i) => (
             <div key={i} className="flex gap-2">
               <input
-                aria-label="Financial year"
-                placeholder="FY25"
+                aria-label={t("Financial year")}
+                placeholder={example.year}
                 className={`${INPUT} w-28`}
                 value={f.fy_label}
                 onChange={(e) => {
@@ -236,10 +298,10 @@ export function ProfileForm({
                 }}
               />
               <input
-                aria-label="Turnover in crore"
+                aria-label={t("Annual turnover")}
                 type="number"
                 step="0.01"
-                placeholder="₹ Cr"
+                placeholder={unit}
                 className={INPUT}
                 value={f.turnover_cr}
                 onChange={(e) => {
@@ -253,7 +315,7 @@ export function ProfileForm({
                 onClick={() => set("financials", d.financials.filter((_, j) => j !== i))}
                 className="shrink-0 rounded border border-border px-2 text-xs text-muted hover:border-danger hover:text-danger"
               >
-                Remove
+                {t("Remove")}
               </button>
             </div>
           ))}
@@ -264,21 +326,22 @@ export function ProfileForm({
           onClick={() => set("financials", [...d.financials, { fy_label: "", turnover_cr: "" }])}
           className="mt-2 text-sm font-medium text-primary"
         >
-          + Add a financial year
+          + {t("Add a financial year")}
         </button>
       </section>
 
       <section className="rounded-card border border-border bg-surface p-card">
-        <h2 className="mb-1 font-heading text-base font-medium text-ink">Certifications</h2>
+        <h2 className="mb-1 font-heading text-base font-medium text-ink">{t("Certifications")}</h2>
         <p className="mb-3 text-xs text-muted">
-          An expired certificate fails its criterion and is excluded from retrieval — keep the
-          validity date current.
+          {t(
+            "An expired certificate fails its criterion and is excluded from retrieval — keep the validity date current.",
+          )}
         </p>
         <div className="space-y-2">
           {d.certifications.map((c, i) => (
             <div key={i} className="flex flex-wrap gap-2">
               <input
-                aria-label="Certification name"
+                aria-label={t("Certification name")}
                 placeholder="ISO 9001:2015"
                 className={`${INPUT} min-w-40 flex-1`}
                 value={c.name}
@@ -289,7 +352,7 @@ export function ProfileForm({
                 }}
               />
               <input
-                aria-label="Valid until"
+                aria-label={t("Valid until")}
                 type="date"
                 className={`${INPUT} w-44`}
                 value={c.valid_to ?? ""}
@@ -304,7 +367,7 @@ export function ProfileForm({
                 onClick={() => set("certifications", d.certifications.filter((_, j) => j !== i))}
                 className="shrink-0 rounded border border-border px-2 text-xs text-muted hover:border-danger hover:text-danger"
               >
-                Remove
+                {t("Remove")}
               </button>
             </div>
           ))}
@@ -317,21 +380,21 @@ export function ProfileForm({
           }
           className="mt-2 text-sm font-medium text-primary"
         >
-          + Add a certification
+          + {t("Add a certification")}
         </button>
       </section>
 
       <section className="rounded-card border border-border bg-surface p-card">
-        <h2 className="mb-1 font-heading text-base font-medium text-ink">Past projects</h2>
+        <h2 className="mb-1 font-heading text-base font-medium text-ink">{t("Past projects")}</h2>
         <p className="mb-3 text-xs text-muted">
-          Similar-works criteria are matched against these, by scope and value.
+          {t("Similar-works criteria are matched against these, by scope and value.")}
         </p>
         <div className="space-y-2">
           {d.experience_records.map((x, i) => (
             <div key={i} className="flex flex-wrap gap-2">
               <input
-                aria-label="Project name"
-                placeholder="Project name"
+                aria-label={t("Project name")}
+                placeholder={t("Project name")}
                 className={`${INPUT} min-w-48 flex-1`}
                 value={x.project_name}
                 onChange={(e) => {
@@ -341,10 +404,10 @@ export function ProfileForm({
                 }}
               />
               <input
-                aria-label="Value in crore"
+                aria-label={t("Value")}
                 type="number"
                 step="0.01"
-                placeholder="₹ Cr"
+                placeholder={unit}
                 className={`${INPUT} w-28`}
                 value={x.value_cr ?? ""}
                 onChange={(e) => {
@@ -354,7 +417,7 @@ export function ProfileForm({
                 }}
               />
               <input
-                aria-label="Completion date"
+                aria-label={t("Completion date")}
                 type="date"
                 className={`${INPUT} w-44`}
                 value={x.completion_date ?? ""}
@@ -371,7 +434,7 @@ export function ProfileForm({
                 }
                 className="shrink-0 rounded border border-border px-2 text-xs text-muted hover:border-danger hover:text-danger"
               >
-                Remove
+                {t("Remove")}
               </button>
             </div>
           ))}
@@ -387,7 +450,7 @@ export function ProfileForm({
           }
           className="mt-2 text-sm font-medium text-primary"
         >
-          + Add a project
+          + {t("Add a project")}
         </button>
       </section>
 
@@ -398,17 +461,17 @@ export function ProfileForm({
           data-save-profile
           className="rounded bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {busy ? "Saving…" : "Save profile"}
+          {busy ? t("Saving…") : t("Save profile")}
         </button>
         <button
           type="button"
           onClick={onClose}
           className="rounded border border-border px-4 py-2 text-sm text-ink"
         >
-          Cancel
+          {t("Cancel")}
         </button>
         <span className="text-xs text-muted">
-          Re-match any open bid afterwards so its eligibility is recalculated.
+          {t("Re-match any open bid afterwards so its eligibility is recalculated.")}
         </span>
       </div>
     </form>

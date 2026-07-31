@@ -78,9 +78,24 @@ Four categories, three different languages, and they are decided by three differ
 | What | Language follows | Why |
 |---|---|---|
 | Interface chrome — nav, labels, buttons, empty states, errors | **the EN/FR toggle** | it is ours, and it is a preference |
-| Our explanations — relevance rationales, eligibility reasons, gap notes | **the EN/FR toggle** | also ours: commentary *about* a tender, addressed to the user |
+| Portal names, statutory registers, currency and timezone | **the workspace's market** | "Swept from GeM" above TED notices is false in every language; a French vendor has no GSTIN to enter |
+| Our explanations — relevance rationales, eligibility reasons, gap notes | **the workspace's market** | also ours, but stored ONCE per (workspace, opportunity) — see the correction below |
 | Tender content — titles, requirement text, clauses, source anchors, citations | **the source, always** | it is the legal document; verbatim or not at all (A-AC3, cite-or-flag) |
 | Generated deliverables — the proposal, the exported matrix | **the tender's language** | a French buyer receives a French bid. This does NOT follow the toggle |
+
+> **Correction, made while building it (2026-07-31).** This table originally put our
+> explanations under the EN/FR toggle. That is not implementable as specified: a relevance
+> rationale and an eligibility reason are **generated once and stored on
+> `opportunity_matches`**, one row per (workspace, opportunity). Making them follow a per-USER
+> toggle would mean either storing every explanation twice, or regenerating a hundred rationales
+> on every toggle click — a model bill for a preference change. They follow the workspace's
+> market instead: a French workspace gets French explanations beside French tender text,
+> whichever way a given reader has set their chrome. Only static interface strings follow the
+> toggle. The visible consequence is small and correct: in EN chrome on a French workspace, the
+> `NOTICE NOT READ` chip carries a French tooltip, because that sentence is stored data, not a
+> label. Implemented as `MARKET_LANGUAGE` in `app/discovery/ingest.py` and the `PHRASES` table
+> in `app/deterministic/discovery.py`; the language is part of the relevance cache key, so a
+> market change re-generates rather than serving stale-language text forever.
 
 That last row is the one that surprises people. **The drafter's output language is a property of
 the tender, not of the reader.** A French bid manager who prefers an English interface still
@@ -94,8 +109,8 @@ backwards produces a fluent, well-cited, unsubmittable proposal.
   workspace may want different interfaces; neither choice may change what the tender says.
   It belongs on `profiles`, beside `active_workspace_id`.
 - **Prompts gain an output-language parameter, and it is not one flag.** The relevance prompt
-  writes its rationale in the *UI* locale; the drafter writes in the *tender's* language. Two
-  different inputs, and `evals/` needs cases for both — a French drafter eval is the commercial
+  writes its rationale in the *market's* language (see the correction above); the drafter writes
+  in the *tender's* language. Two different inputs, and `evals/` needs cases for both — a French drafter eval is the commercial
   gate (assumption 3), while a French rationale eval is cosmetic by comparison.
 - **Keyword matching needs accent folding.** `app/deterministic/discovery.py` matches by
   substring and bounded stem, which is language-agnostic in principle — but a vendor typing

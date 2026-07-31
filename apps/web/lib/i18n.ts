@@ -153,6 +153,64 @@ const FR: Record<string, string> = {
   "No expiry on file": "Aucune échéance enregistrée",
   "No certifications on file": "Aucune certification enregistrée",
 
+  // ── dashboard ──────────────────────────────────────────────
+  "Your active tenders and what needs attention.":
+    "Vos consultations en cours et les points à traiter.",
+  "Active tenders": "Consultations en cours",
+  "Awaiting verification": "En attente de vérification",
+  "Drafts in review": "Projets en relecture",
+  "Analyses left": "Analyses restantes",
+  Unlimited: "Illimitées",
+  "Find opportunities": "Trouver des opportunités",
+  "Live public tenders from {portal}, matched against your rules and profile":
+    "Marchés publics en cours sur {portal}, rapprochés de vos règles et de votre profil",
+  "Start a new bid": "Démarrer une candidature",
+  "Upload the tender document and we'll extract the requirements":
+    "Déposez le dossier de consultation et nous en extrairons les exigences",
+  Deadlines: "Échéances",
+  "No deadline set": "Aucune échéance définie",
+  Closed: "Clôturé",
+  "Due in": "Dans",
+  Due: "Le",
+  "No tenders yet": "Aucune consultation pour le moment",
+  "Upload a tender package to get a verified criteria checklist the same afternoon.":
+    "Déposez un dossier de consultation pour obtenir une grille de critères vérifiée dans la journée.",
+  "Upload your first tender": "Déposer votre première consultation",
+
+  // ── profile edit form ──────────────────────────────────────
+  "Used to rank your opportunity feed. Nothing is hidden because of what you write here unless you switch on the narrow feed yourself.":
+    "Sert à classer votre flux d'opportunités. Rien n'est masqué à cause de ce que vous écrivez ici, sauf si vous activez vous-même le flux restreint.",
+  "Keywords you bid on (comma separated)":
+    "Mots-clés de vos candidatures (séparés par des virgules)",
+  "Registered company name": "Raison sociale",
+  "As it appears on the certificate of incorporation":
+    "Telle qu'elle figure sur l'extrait Kbis",
+  "The registered name is written into the proposal directly. It is never taken from an uploaded document.":
+    "La raison sociale est reprise telle quelle dans la proposition. Elle n'est jamais extraite d'un document déposé.",
+  "Annual turnover": "Chiffre d'affaires annuel",
+  "Turnover thresholds are checked against these figures.":
+    "Les seuils de chiffre d'affaires sont vérifiés à partir de ces montants.",
+  "Financial year": "Exercice",
+  "Udyam registration": "Immatriculation Udyam",
+  "An expired certificate fails its criterion and is excluded from retrieval — keep the validity date current.":
+    "Une certification expirée échoue à son critère et est exclue de la recherche documentaire — tenez la date de validité à jour.",
+  "Certification name": "Intitulé de la certification",
+  "Past projects": "Références",
+  "Similar-works criteria are matched against these, by scope and value.":
+    "Les critères de prestations similaires sont rapprochés de ces références, par périmètre et par montant.",
+  "Project name": "Intitulé du projet",
+  "Completion date": "Date d'achèvement",
+  Remove: "Supprimer",
+  "Add a financial year": "Ajouter un exercice",
+  "Add a certification": "Ajouter une certification",
+  "Add a project": "Ajouter une référence",
+  "Saving…": "Enregistrement…",
+  "Save profile": "Enregistrer le profil",
+  Cancel: "Annuler",
+  "Re-match any open bid afterwards so its eligibility is recalculated.":
+    "Relancez ensuite le rapprochement de vos candidatures en cours pour recalculer leur éligibilité.",
+  "Could not save the profile": "Le profil n'a pas pu être enregistré",
+
   // ── provenance footer ──────────────────────────────────────
   "Tender content stays on the source portal and is linked, not reproduced.":
     "Le contenu des avis reste sur le portail source : il est lié, jamais reproduit.",

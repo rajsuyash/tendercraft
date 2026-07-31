@@ -164,6 +164,7 @@ export default async function ProfilePage() {
         </div>
         <ProfileEditor
           locale={locale}
+          market={market}
           initial={{
             legal_name: profile?.legal_name ?? orgName,
             capability_statement: profile?.capability_statement,
@@ -181,6 +182,7 @@ export default async function ProfilePage() {
             certifications: certifications.map((c) => ({
               name: c.name,
               cert_no: c.cert_no,
+              valid_from: c.valid_from,
               valid_to: c.valid_to,
             })),
             experience_records: experience.map((x) => ({
@@ -188,6 +190,10 @@ export default async function ProfilePage() {
               client_type: x.client_type,
               value_cr: x.value_cr,
               completion_date: x.completion_date,
+              // Round-tripped, not edited: the save replaces the whole collection, so a field
+              // the form never receives is a field every save silently deletes. scope_tags is
+              // what similar-works matching runs on.
+              scope_tags: x.scope_tags,
             })),
           }}
         />
