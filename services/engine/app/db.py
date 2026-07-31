@@ -917,18 +917,59 @@ def upsert_opportunities(records: list[dict]) -> list[dict]:
     )
 
 
-def get_opportunities(limit: int = 500, market: str | None = None) -> list[dict]:
+def get_opportunities(limit: int = 500, markets: list[str] | None = None) -> list[dict]:
+    """The shared corpus, scoped to the countries the caller watches.
+
+    A LIST rather than a single market: a bidder registered in one country routinely pursues
+    tenders in another, and GeM's own listings carry `ba_is_global_tendering`. The caller
+    always passes at least one — an empty list would silently mean "everything", which is the
+    opposite of what a caller who lost their scope wants.
+    """
     params = {"select": "*", "order": "closing_at.asc", "limit": str(limit)}
-    if market:
-        params["market"] = f"eq.{market}"
+    if markets:
+        params["market"] = "in.({})".format(",".join(sorted(set(markets))))
     return _rest("GET", "opportunities", params=params) or []
 
 
 def get_workspace_market(workspace_id: str) -> str:
+    """The HOME market: currency, statutory registers, timezone, explanation language.
+
+    Exactly one, and not the same question as which feeds the workspace watches — see
+    `get_workspace_markets` and migration 0022.
+    """
     rows = _rest(
         "GET", "workspaces", params={"id": f"eq.{workspace_id}", "select": "market"}
     ) or []
     return (rows[0].get("market") if rows else None) or "IN"
+
+
+def get_workspace_markets(workspace_id: str) -> list[str]:
+    """Which countries feed this workspace's opportunity list.
+
+    Falls back to the home market rather than to an empty list. A workspace that resolved to
+    "watch nothing" would render an empty feed that looks exactly like "no tenders today" —
+    the ET-7 failure with a friendly face — so there is no code path that can produce one.
+    """
+    rows = _rest(
+        "GET",
+        "workspaces",
+        params={"id": f"eq.{workspace_id}", "select": "market,discovery_markets"},
+    ) or []
+    if not rows:
+        return ["IN"]
+    watched = rows[0].get("discovery_markets") or []
+    return list(watched) or [rows[0].get("market") or "IN"]
+
+
+def set_workspace_markets(workspace_id: str, markets: list[str]) -> list[str]:
+    """Replace the watched set. The caller validates membership and the values."""
+    rows = _rest(
+        "PATCH",
+        "workspaces",
+        params={"id": f"eq.{workspace_id}"},
+        json={"discovery_markets": markets},
+    ) or []
+    return list(rows[0].get("discovery_markets") or []) if rows else markets
 
 
 def set_opportunity_eligibility(opportunity_id: str, fields: dict, at_iso: str) -> None:
@@ -998,7 +1039,32 @@ def upsert_opportunity_matches(workspace_id: str, rows: list[dict]) -> int:
     return len(payload)
 
 
-def get_feed(workspace_id: str, state: str, limit: int = 100) -> list[dict]:
+def _market_scope(markets: list[str] | None) -> dict[str, str]:
+    """PostgREST params that scope a `opportunity_matches` read to the watched countries.
+
+    Scoping happens at READ time, not by deleting match rows when a country is unticked.
+    That is deliberate: a match row carries the user's own state — whether they starred the
+    tender, who it is assigned to — and deleting it would silently destroy a shortlist the
+    moment someone toggled a country off, with no way back. An inner join costs one filter and
+    keeps that state intact for when they toggle it on again.
+
+    Every caller passes the SAME list, which is the actual defect this replaces: the recompute
+    was scoped and the read was not, so narrowing the scope re-ranked the feed and filtered
+    nothing, and 335 stale Indian rows outlived the choice to stop watching India.
+    """
+    if not markets:
+        return {"select": "*,opportunities(*)"}
+    return {
+        # !inner turns the embed into a join, so the filter below can actually exclude a row
+        # rather than merely nulling its embedded object.
+        "select": "*,opportunities!inner(*)",
+        "opportunities.market": "in.({})".format(",".join(sorted(set(markets)))),
+    }
+
+
+def get_feed(
+    workspace_id: str, state: str, limit: int = 100, markets: list[str] | None = None
+) -> list[dict]:
     """Feed rows with their shared-corpus opportunity embedded.
 
     One query, not N+1: a 50-row feed that lazily loaded each opportunity would be 51 round
@@ -1012,7 +1078,7 @@ def get_feed(workspace_id: str, state: str, limit: int = 100) -> list[dict]:
             params={
                 "workspace_id": f"eq.{workspace_id}",
                 "state": f"eq.{state}",
-                "select": "*,opportunities(*)",
+                **_market_scope(markets),
                 # Best fit first, then the deadline that forces the decision. `nullsfirst` is
                 # wrong here: an unbanded row is not the best match, it is an unknown one.
                 "order": "relevance_band.asc.nullslast,computed_at.desc",
@@ -1023,7 +1089,7 @@ def get_feed(workspace_id: str, state: str, limit: int = 100) -> list[dict]:
     )
 
 
-def count_feed(workspace_id: str, state: str) -> int:
+def count_feed(workspace_id: str, state: str, markets: list[str] | None = None) -> int:
     """Exact count for the Excluded bucket. F-FR12 requires the number to be always visible —
     "142 hidden by 3 of your rules" is the affordance that stops the feed feeling like a
     black box, so it cannot be approximated or omitted."""
@@ -1033,7 +1099,15 @@ def count_feed(workspace_id: str, state: str) -> int:
             "GET",
             f"{s.supabase_url}/rest/v1/opportunity_matches",
             headers={**_headers(), "Prefer": "count=exact", "Range": "0-0"},
-            params={"workspace_id": f"eq.{workspace_id}", "state": f"eq.{state}", "select": "id"},
+            params={
+                "workspace_id": f"eq.{workspace_id}",
+                "state": f"eq.{state}",
+                # Same scope as the rows themselves. A count that counts a wider set than the
+                # list beneath it is the "four counters describing one object" failure in
+                # docs/known-pitfalls.md, and here it would claim tenders the user cannot see.
+                **{k: v for k, v in _market_scope(markets).items() if k != "select"},
+                "select": "id,opportunities!inner(id)" if markets else "id",
+            },
             timeout=15,
         )
         r.raise_for_status()
@@ -1064,7 +1138,7 @@ def get_relevance_hashes(workspace_id: str) -> dict[str, str]:
     return {r["opportunity_id"]: r["relevance_input_hash"] for r in rows}
 
 
-def count_eligible(workspace_id: str) -> int:
+def count_eligible(workspace_id: str, markets: list[str] | None = None) -> int:
     """Workspace-wide count of Depth-1 `likely_eligible` items.
 
     Computed here rather than by counting the rows on the page. The coverage strip describes the
@@ -1081,7 +1155,8 @@ def count_eligible(workspace_id: str) -> int:
             params={
                 "workspace_id": f"eq.{workspace_id}",
                 "eligibility": "eq.likely_eligible",
-                "select": "id",
+                **{k: v for k, v in _market_scope(markets).items() if k != "select"},
+                "select": "id,opportunities!inner(id)" if markets else "id",
             },
             timeout=15,
         )

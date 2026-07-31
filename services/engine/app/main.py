@@ -66,6 +66,9 @@ def create_app() -> FastAPI:
                 "workspace_id": user.workspace_id,
                 "role": user.role,
                 "market": db.get_workspace_market(user.workspace_id),
+                # Home market and watched markets are different questions — one governs
+                # currency and statutory registers, the other governs the feed (0022).
+                "discovery_markets": db.get_workspace_markets(user.workspace_id),
             }
         )
 

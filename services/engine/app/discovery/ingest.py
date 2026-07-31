@@ -137,6 +137,32 @@ def refresh_corpus(
             "pages_fetched": pages, "upserted": upserted}
 
 
+def refresh_markets(
+    markets: list[str], max_pages: int = DEFAULT_PAGES, query: str = ""
+) -> dict[str, Any]:
+    """Sweep every country a workspace watches, and report each one separately.
+
+    Per-market failures are collected rather than raised. One unreachable connector must not
+    cost the user the other country's sweep — and it must not be silent either, so the failure
+    travels back in the response and the coverage strip can say which source is stale. A feed
+    that quietly stops including a country is the ET-7 failure, whichever country it is.
+    """
+    swept: list[dict[str, Any]] = []
+    failed: list[dict[str, str]] = []
+    for market in markets:
+        try:
+            swept.append(refresh_corpus(max_pages=max_pages, query=query, market=market))
+        except Exception as exc:  # noqa: BLE001 — reported, never swallowed
+            log.warning("discovery[%s]: sweep failed (%s)", market, exc)
+            failed.append({"market": market, "error": str(exc)})
+    return {
+        "markets": swept,
+        "failed": failed,
+        "upserted": sum(m["upserted"] for m in swept),
+        "pages_fetched": sum(m["pages_fetched"] for m in swept),
+    }
+
+
 def _rules_for(workspace_id: str) -> list[Rule]:
     return [
         Rule(
@@ -188,10 +214,14 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
     # are the same voice explaining the same row and must never end up in different languages.
     market = db.get_workspace_market(workspace_id)
     language = MARKET_LANGUAGE.get(market, "en")
-    # A workspace ranks its own market's corpus. This is a DEFAULT, not a gate: the rows still
-    # exist and a cross-border view is a query change, not a migration. Hiding a tender a bidder
-    # could legally pursue would be an exclusion no user authored (F-AC6).
-    opportunities = db.get_opportunities(limit=1000, market=market)
+    # WATCHED markets, not the home one: which countries appear in the feed is a choice the
+    # bidder makes on their profile, and it is routinely more than the country they are
+    # registered in (migration 0022).
+    watched = db.get_workspace_markets(workspace_id)
+    # Scoped to the countries the bidder ticked. That IS a user-authored scope — the profile
+    # names it and the coverage strip states it — which is what F-AC6 requires. What the rule
+    # forbids is a scope nobody chose, which is precisely what a single hardcoded market was.
+    opportunities = db.get_opportunities(limit=1000, markets=watched)
 
     matches: list[dict[str, Any]] = []
     in_scope: list[dict[str, Any]] = []

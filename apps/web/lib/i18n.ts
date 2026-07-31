@@ -211,6 +211,22 @@ const FR: Record<string, string> = {
     "Relancez ensuite le rapprochement de vos candidatures en cours pour recalculer leur éligibilité.",
   "Could not save the profile": "Le profil n'a pas pu être enregistré",
 
+  // ── watched markets ────────────────────────────────────────
+  India: "Inde",
+  "your chosen countries": "vos pays sélectionnés",
+  // France: "France" needs no entry — identical in both, and a self-mapping key is noise.
+  "Where you bid": "Où vous candidatez",
+  "See your feed →": "Voir votre flux →",
+  "Which countries' tenders appear in your opportunity list. Unticking one hides its tenders from you and nobody else — your workspace's currency and statutory fields follow where you are registered, not this choice.":
+    "Les pays dont les avis apparaissent dans votre liste d'opportunités. Décocher un pays en masque les avis pour vous seul — la devise et les champs légaux de votre espace de travail suivent votre pays d'immatriculation, pas ce choix.",
+  "registered here": "immatriculé ici",
+  "Choose at least one country — an empty feed would look like no tenders.":
+    "Choisissez au moins un pays — un flux vide donnerait l'impression qu'aucun avis n'est publié.",
+  "Could not change which countries you watch.":
+    "Impossible de modifier les pays suivis.",
+  "Updating your feed…": "Mise à jour de votre flux…",
+  "Save and re-match": "Enregistrer et relancer le rapprochement",
+
   // ── provenance footer ──────────────────────────────────────
   "Tender content stays on the source portal and is linked, not reproduced.":
     "Le contenu des avis reste sur le portail source : il est lié, jamais reproduit.",

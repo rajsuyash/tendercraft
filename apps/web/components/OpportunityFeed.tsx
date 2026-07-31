@@ -69,6 +69,10 @@ type FeedData = {
   state: string;
   items: Match[];
   counts: { in_scope: number; excluded: number; likely_eligible: number };
+  /** The countries this workspace watches, from the server. NOT inferred from the rendered
+   *  rows: an inferred scope described the page instead of the choice, so the coverage strip
+   *  went on naming a country the user had just switched off until the rows caught up. */
+  markets?: string[];
   rules: Rule[];
 };
 
@@ -185,6 +189,8 @@ function daysUntil(iso: string | null, now: number): number | null {
  *  "Swept from GeM" above a feed of TED notices is a false statement in ANY language — and the
  *  English dictionary was the one still saying it after the French one had been fixed. */
 const PORTAL: Record<string, string> = { IN: "GeM", FR: "TED" };
+/** Only for the coverage strip's scope line — the picker on /profile owns the real labels. */
+const COUNTRY: Record<string, string> = { IN: "India", FR: "France" };
 const DEFAULT_PORTAL = "GeM";
 
 /** Named provenance per market (S14-D3). */
@@ -293,12 +299,23 @@ export function OpportunityFeed({
 }) {
   const now = new Date(nowIso).getTime();
   const t = translator(locale);
-  // The market comes from the tenders themselves, not from the reader's language: an
-  // English-reading user in a French workspace must still see euros and Paris deadlines.
-  const market = (data.items ?? []).find((m) => m.opportunities?.market)?.opportunities?.market
-    ?? (locale === "fr" ? "FR" : "IN");
+  // A workspace can watch more than one country (migration 0022), so the feed can legitimately
+  // hold Indian and French rows at once. Currency and timezone are therefore properties of the
+  // ROW, not of the page — ₹ beside a TED notice would be a wrong number, not a wrong label.
+  // The page-level value is only for chrome that has to say something singular.
+  const markets =
+    data.markets?.length
+      ? data.markets
+      : ([
+          ...new Set((data.items ?? []).map((m) => m.opportunities?.market).filter(Boolean)),
+        ] as string[]);
+  const market = markets[0] ?? (locale === "fr" ? "FR" : "IN");
   const clock = clockFor(market, locale);
-  const portal = PORTAL[market] ?? DEFAULT_PORTAL;
+  // Every portal actually represented, so the coverage strip and the provenance line can never
+  // claim a source the rows did not come from.
+  const portal = markets.length
+    ? markets.map((m) => PORTAL[m] ?? DEFAULT_PORTAL).join(" + ")
+    : (PORTAL[market] ?? DEFAULT_PORTAL);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [sweeping, setSweeping] = useState(false);
@@ -419,7 +436,11 @@ export function OpportunityFeed({
         <Coverage
           value={swept}
           label={t("Swept from {portal}").replace("{portal}", portal)}
-          note={t("deduplicated by reference number")}
+          note={
+            markets.length > 1
+              ? `${markets.map((m) => t(COUNTRY[m] ?? m)).join(" + ")} · ${t("your chosen countries")}`
+              : t("deduplicated by reference number")
+          }
         />
         <Coverage
           value={data.counts?.in_scope ?? 0}
@@ -574,6 +595,8 @@ export function OpportunityFeed({
               {items.map((match) => {
                 const opp = match.opportunities!;
                 const parsed = opp.eligibility ?? {};
+                // Per row, not per page: a mixed feed must not render euros as rupees.
+                const rowMarket = opp.market ?? market;
                 const verdict = VERDICT[match.eligibility];
                 return (
                   <tr
@@ -613,17 +636,22 @@ export function OpportunityFeed({
                       />
                     </td>
                     <td className="px-4 py-2.5 align-top">
-                      <Deadline closingAt={opp.closing_at} now={now} t={t} day={clock.day} />
+                      <Deadline
+                        closingAt={opp.closing_at}
+                        now={now}
+                        t={t}
+                        day={clockFor(rowMarket, locale).day}
+                      />
                     </td>
                     <td className="px-4 py-2.5 text-right align-top tabular-nums">
                       {parsed.min_avg_annual_turnover_inr != null ? (
                         <>
                           <span className="text-ink">
-                            {formatMoney(parsed.min_avg_annual_turnover_inr, market)}
+                            {formatMoney(parsed.min_avg_annual_turnover_inr, rowMarket)}
                           </span>
                           {parsed.estimated_value_inr != null && (
                             <span className="mt-0.5 block whitespace-nowrap text-[11px] text-muted">
-                              est. {formatMoney(parsed.estimated_value_inr, market)}
+                              est. {formatMoney(parsed.estimated_value_inr, rowMarket)}
                             </span>
                           )}
                         </>
@@ -635,7 +663,7 @@ export function OpportunityFeed({
                     </td>
                     <td className="px-4 py-2.5 text-right align-top tabular-nums">
                       {parsed.emd_amount_inr != null ? (
-                        <span className="text-ink">{formatMoney(parsed.emd_amount_inr, market)}</span>
+                        <span className="text-ink">{formatMoney(parsed.emd_amount_inr, rowMarket)}</span>
                       ) : parsed.emd_required === false ? (
                         <span className="text-[13px] text-muted">{t("none")}</span>
                       ) : (
@@ -654,7 +682,7 @@ export function OpportunityFeed({
                         (() => {
                           const shown =
                             match.eligibility === "unknown"
-                              ? unknownLabel(opp.eligibility, market)
+                              ? unknownLabel(opp.eligibility, rowMarket)
                               : verdict;
                           return (
                             <span
@@ -679,7 +707,8 @@ export function OpportunityFeed({
       <p className="mt-4 max-w-prose text-xs leading-relaxed text-muted">
         {/* The source names the portal actually swept for THIS market — claiming GeM under a
             feed of French notices would be a false provenance statement, not a label bug. */}
-        {t("Source")}: {SOURCE[market] ?? SOURCE.IN}.{" "}
+        {t("Source")}:{" "}
+        {(markets.length ? markets : [market]).map((m) => SOURCE[m] ?? SOURCE.IN).join(" · ")}.{" "}
         {t("Tender content stays on the source portal and is linked, not reproduced.")}{" "}
         {t(
           "Turnover and deposit figures are read from each notice by a deterministic parser; eligibility is provisional until the tender is fully analysed.",

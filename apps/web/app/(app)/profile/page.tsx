@@ -1,3 +1,4 @@
+import { MarketPicker, type MarketOption } from "@/components/MarketPicker";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import { engineFetch } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
@@ -83,6 +84,13 @@ export default async function ProfilePage() {
   // a translation miss — those registers do not exist there, and a blank required-field helper
   // beside them would be telling the user to go and fetch a document they can never have.
   const market: string = me?.market ?? "IN";
+
+  // Which countries feed the opportunity list. Separate from `market`, which is the ONE country
+  // this workspace is registered in and which governs currency and statutory registers.
+  const marketsRes = await engineFetch("/api/opportunities/markets").catch(() => null);
+  const marketsBody = marketsRes?.ok ? await marketsRes.json() : null;
+  const availableMarkets: MarketOption[] = marketsBody?.data?.available ?? [];
+  const watchedMarkets: string[] = marketsBody?.data?.watched ?? [market];
   const { data: workspace } = activeId
     ? await supabase.from("workspaces").select("name").eq("id", activeId).maybeSingle()
     : { data: null };
@@ -204,6 +212,30 @@ export default async function ProfilePage() {
           {/* First, because it is the thing that decides what the opportunity feed shows. A
               profile section that only exists inside the edit modal is invisible to the person
               who has to trust the ranking — the same trap `oem_status` already fell into. */}
+          {availableMarkets.length > 0 && (
+            <section className="rounded-card border border-border bg-surface p-card">
+              <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="font-heading text-lg font-semibold text-ink">
+                  {t("Where you bid")}
+                </h2>
+                <a href="/opportunities" className="text-sm text-primary hover:underline">
+                  {t("See your feed →")}
+                </a>
+              </div>
+              <p className="mb-3 max-w-prose text-xs text-muted">
+                {t(
+                  "Which countries' tenders appear in your opportunity list. Unticking one hides its tenders from you and nobody else — your workspace's currency and statutory fields follow where you are registered, not this choice.",
+                )}
+              </p>
+              <MarketPicker
+                available={availableMarkets}
+                watched={watchedMarkets}
+                home={market}
+                locale={locale}
+              />
+            </section>
+          )}
+
           <section className="rounded-card border border-border bg-surface p-card">
             <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="font-heading text-lg font-semibold text-ink">{t("What you bid on")}</h2>

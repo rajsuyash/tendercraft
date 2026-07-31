@@ -18,6 +18,7 @@ from . import db
 from .auth import AuthedUser, get_current_user
 from .deterministic.discovery import RULE_KINDS
 from .discovery import ingest
+from .discovery.registry import REGISTRY, for_market
 from .envelope import ApiError, ok
 
 router = APIRouter()
@@ -50,15 +51,19 @@ async def list_opportunities(
     """The feed. Always returns BOTH counts, whichever bucket was asked for."""
 
     def work() -> dict:
-        rows = db.get_feed(user.workspace_id, state, limit=limit)
+        # One scope, read once and passed to every query below. Deriving it separately in each
+        # would let the list and its own counters disagree the first time one of them changed.
+        markets = db.get_workspace_markets(user.workspace_id)
+        rows = db.get_feed(user.workspace_id, state, limit=limit, markets=markets)
         return {
             "state": state,
             "items": rows,
             "counts": {
-                "in_scope": db.count_feed(user.workspace_id, "in_scope"),
-                "excluded": db.count_feed(user.workspace_id, "excluded"),
-                "likely_eligible": db.count_eligible(user.workspace_id),
+                "in_scope": db.count_feed(user.workspace_id, "in_scope", markets),
+                "excluded": db.count_feed(user.workspace_id, "excluded", markets),
+                "likely_eligible": db.count_eligible(user.workspace_id, markets),
             },
+            "markets": markets,
             "rules": db.get_discovery_rules(user.workspace_id),
         }
 
@@ -69,7 +74,9 @@ async def list_opportunities(
 async def refresh(
     user: CurrentUser,
     max_pages: int = Query(default=8, ge=1, le=60),
-    q: str = Query(default="", max_length=80, description="GeM full-text query; widens coverage"),
+    q: str = Query(
+        default="", max_length=80, description="portal full-text query; widens coverage"
+    ),
 ) -> dict:
     """Sweep the connector, then re-run this workspace's gate.
 
@@ -79,8 +86,9 @@ async def refresh(
     """
 
     def work() -> dict:
-        market = db.get_workspace_market(user.workspace_id)
-        swept = ingest.refresh_corpus(max_pages=max_pages, query=q, market=market)
+        # Every country the workspace watches, not just the one it is registered in.
+        markets = db.get_workspace_markets(user.workspace_id)
+        swept = ingest.refresh_markets(markets, max_pages=max_pages, query=q)
         matched = ingest.recompute_matches(user.workspace_id)
         return {"swept": swept, "matched": matched}
 
@@ -88,6 +96,61 @@ async def refresh(
         return ok(await run_in_threadpool(work))
     except RuntimeError as exc:
         raise ApiError(503, "CONNECTOR_UNAVAILABLE", str(exc)) from exc
+
+
+class MarketsIn(BaseModel):
+    #: Validated against the registry below, not against a Literal: a market with no configured
+    #: source would be a country the user can tick and never receive a tender from, which reads
+    #: as a broken feed rather than as a missing connector.
+    markets: list[str] = Field(min_length=1, max_length=8)
+
+
+@router.get("/api/opportunities/markets")
+async def list_markets(user: CurrentUser) -> dict:
+    """Which countries can be watched, and which this workspace currently watches."""
+
+    def work() -> dict:
+        return {
+            "available": [
+                {"market": m, "sources": [s.source_id for s in for_market(m)]}
+                for m in sorted({s.market for s in REGISTRY if s.connector_url})
+            ],
+            "watched": db.get_workspace_markets(user.workspace_id),
+            "home": db.get_workspace_market(user.workspace_id),
+        }
+
+    return ok(await run_in_threadpool(work))
+
+
+@router.put("/api/opportunities/markets")
+async def set_markets(user: CurrentUser, body: MarketsIn) -> dict:
+    """Choose which countries feed this workspace's opportunity list.
+
+    Widening takes effect on the next sweep; narrowing takes effect immediately, because the
+    match recompute below re-reads the corpus through the new scope. Both are re-run here so
+    the user never has to know which of the two they just did.
+    """
+    requested = sorted({m.strip().upper() for m in body.markets if m.strip()})
+    configured = {s.market for s in REGISTRY if s.connector_url}
+    unknown = [m for m in requested if m not in configured]
+    if unknown:
+        raise ApiError(
+            422,
+            "MARKET_NOT_AVAILABLE",
+            f"No source is configured for {', '.join(unknown)}. "
+            f"Available: {', '.join(sorted(configured)) or 'none'}.",
+        )
+    if not requested:
+        # Belt and braces with the DB check constraint. An empty feed reached by configuration
+        # is indistinguishable from a broken one, and produces no error anywhere (ET-7).
+        raise ApiError(422, "MARKET_REQUIRED", "Choose at least one country.")
+
+    def work() -> dict:
+        saved = db.set_workspace_markets(user.workspace_id, requested)
+        matched = ingest.recompute_matches(user.workspace_id)
+        return {"watched": saved, "matched": matched}
+
+    return ok(await run_in_threadpool(work))
 
 
 @router.post("/api/opportunities/keyword-gate")
