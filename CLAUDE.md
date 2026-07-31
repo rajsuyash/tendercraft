@@ -142,3 +142,4 @@ Assumptions surfaced: <none | list>
 - @docs/conventions.md — code style, patterns, styling rules
 - @docs/test-strategy.md — which layer owns which verify-tag
 - @docs/known-pitfalls.md — read BEFORE writing code; append when you hit a new one
+- @docs/multi-market.md — proposed architecture for a second market (France); read before any i18n or new-source work
