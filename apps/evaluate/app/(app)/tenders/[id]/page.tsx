@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { ArchiveTender } from "@/components/ArchiveTender";
 import { StageRail } from "@/components/StageRail";
 import { getTender, getTechnical } from "@/lib/engine";
 import { formatDate } from "@/lib/format";
@@ -78,6 +79,11 @@ export default async function TenderHub({ params }: { params: Promise<{ id: stri
         </section>
       </div>
 
+      {/* Last on the page and visually quiet on purpose. Archiving is the only removal this
+          product has, and nothing here should invite an officer to reach for it. */}
+      <section className="mt-8 border-t border-border pt-4">
+        <ArchiveTender tenderId={id} archived={ev.state === "archived"} />
+      </section>
     </main>
   );
 }

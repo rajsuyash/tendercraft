@@ -57,6 +57,7 @@ export type TenderDetail = {
     tie_break_rule: string | null;
     framework_locked_at: string | null;
     technical_locked_at: string | null;
+    state: string;
   };
   criteria: {
     id: string; kind: string; text: string; max_marks: number;

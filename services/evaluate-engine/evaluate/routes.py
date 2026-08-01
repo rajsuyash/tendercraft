@@ -606,6 +606,55 @@ def tie_break(tender_id: str, body: TieBreakIn, user: CurrentUser) -> dict:
     return ok(service.result(tender_id, user.authority_id))
 
 
+# ── archive ────────────────────────────────────────────────────────────────────
+class ArchiveIn(BaseModel):
+    archived: bool
+    # A reason is required to archive and ignored to restore. Removing a live procurement from
+    # the officer's board is a decision someone should have to justify in one line, and an audit
+    # row that records only "archived" explains nothing to whoever reads it a year later.
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+@router.post("/api/tenders/{tender_id}/archive")
+def archive(tender_id: str, body: ArchiveIn, user: CurrentUser) -> dict:
+    """Archive or restore a tender.
+
+    Archiving is the ONLY removal this product has, and it existed as a database state with no
+    way to reach it: `db.tenders()` has always filtered `state != 'archived'` and nothing could
+    set that value. The dashboard therefore accumulated abandoned tenders with no product-level
+    way to clear them — the demo's own board had one, and it had to be archived with hand-written
+    SQL.
+
+    It is deliberately not a delete. `audit_events` is append-only, so a tender that has been
+    audited cannot be removed at all — the cascade is refused even to the service role — and a
+    procurement record that could be erased is not a record. Archiving hides it from the board
+    and keeps every row.
+
+    Reversible, and the restore is audited too: a tender that quietly reappeared would be as
+    hard to explain as one that quietly vanished.
+    """
+    require_write(user)
+    if not user.is_officer:
+        raise ApiError(403, "NOT_OFFICER", "only an officer or chair may archive a tender")
+    ev = _tender_or_404(tender_id, user)
+
+    reason = (body.reason or "").strip()
+    if body.archived and not reason:
+        raise ApiError(422, "REASON_REQUIRED", "state why this tender is being archived")
+
+    if bool(ev.get("state") == "archived") == body.archived:
+        # Already in the requested state. Report it rather than writing a second audit row that
+        # says nothing happened.
+        return ok({"state": ev.get("state"), "changed": False})
+
+    state = "archived" if body.archived else "active"
+    db.update_tender(tender_id, user.authority_id, {"state": state})
+    db.audit(user.authority_id, tender_id, user.user_id,
+             "tender_archived" if body.archived else "tender_restored",
+             "tender", tender_id, {"reason": reason} if body.archived else {})
+    return ok({"state": state, "changed": True})
+
+
 # ── audit ──────────────────────────────────────────────────────────────────────
 @router.get("/api/tenders/{tender_id}/audit")
 def audit_trail(tender_id: str, user: CurrentUser) -> dict:

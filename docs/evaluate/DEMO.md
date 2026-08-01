@@ -111,6 +111,12 @@ one that fails on turnover, an expired certificate and project count).
 Two evaluations, deliberately at different stages so both halves of the story are visible
 immediately.
 
+A tender that should not be on the board — cancelled, superseded, abandoned — can be archived
+from the bottom of its own page. It asks for a reason, records it against the officer's name in
+the audit trail, and is reversible. It is deliberately **not** a delete, and the copy says so:
+the evaluation record and the audit trail survive, because a procurement record that could be
+erased is not a record.
+
 **1. e-Governance Platform — parked just before the technical lock.** This is where the
 product's argument lives.
 
@@ -200,16 +206,32 @@ that can be quietly deleted is not an audit trail.
 ## Resetting the demo
 
 ```
-psql "$CONN" -f services/evaluate-engine/migrations/0002_seed.sql
-psql "$CONN" -f services/evaluate-engine/migrations/0005_demo_deference.sql
+psql "$CONN" -f services/evaluate-engine/migrations/0006_demo_seed.sql
 ```
-Then re-run the member/score seed. Evaluation 2's lock is applied through the API.
 
-`0005` is idempotent and safe to run at any time: it only adjusts `ai_proposed_mark`, never a
-human's mark, so totals, qualification and the QCBS ranking are unchanged by construction. It
-exists because the original seed had the model proposing exactly what both evaluators wrote,
-30 times out of 30 — which showed the chair at a deference rate of 1.00 on the very screen the
-demo invites an auditor to inspect. It raises an exception if any rate is still 0.9 or above.
+One file, safe to run at any time, including minutes before the demo. It restores both
+evaluations, the committee, every mark, the COI declarations, the sealed prices and the
+deliberately-bad draft. Verified by wrecking the live data on purpose — every mark zeroed, all
+COI declarations deleted — and watching it come back identical. Running it three times in a row
+produces the same state.
+
+It **upserts and never deletes**, which is not a style choice: `audit_events` is append-only and
+its trigger refuses a delete even to the service role, so a cascade from `delete from tenders`
+is refused and a delete-then-insert reset would fail outright. Upserting also means the audit
+trail survives a reset, which is the correct behaviour for an audit trail.
+
+It raises rather than committing a half-empty demo, so a bad reset fails in the terminal instead
+of on screen.
+
+> The previous instruction here — run `0002_seed.sql` — could not work. That file inserts into
+> `evaluations` with `evaluation_id` columns, both renamed by `0003_rename.sql`; it is correct
+> **in the migration chain** (0001 creates, 0002 seeds, 0003 renames) and errors the moment it
+> is run on its own. It also never seeded the committee, the scores, the second evaluation or the
+> COI declarations — those were loaded out of band and existed nowhere in the repository, so
+> until now the demo could not be rebuilt from source at all.
+
+Auth accounts are not created by the seed: it restores data on top of the existing
+`officer@pmc.test` and friends. Standing up a brand-new project needs those users first.
 
 ## Running it locally
 
