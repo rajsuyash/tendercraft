@@ -23,8 +23,9 @@ export default async function FinancialPage({ params }: { params: Promise<{ id: 
           </h1>
           <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
             Prices cannot be opened until the technical evaluation is complete and locked. This is
-            the two-bid rule, and it is enforced by the database policy and the API — not by hiding
-            this page.
+            the two-bid rule, and it is enforced at the API — every endpoint that could reach a
+            price refuses, and a test asserts no amount appears in any response. A row-level
+            database policy backs up direct database access. Not by hiding this page.
           </p>
           <p className="mx-auto mt-4 max-w-lg rounded border border-border bg-surface-alt p-3 text-sm text-ink">
             {res.message}

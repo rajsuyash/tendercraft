@@ -195,10 +195,16 @@ jobs:
             echo "::error::model import inside evaluate/deterministic — code decides, models do not"
             exit 1
           fi
-      - name: sealed-bid gate must be covered
-        # F9 is the one gate whose failure invalidates a tender. If its test file is missing,
-        # the suite can be green while the gate is unproven.
+      - name: sealed-bid gate must be covered at BOTH layers
+        # F9 is the one gate whose failure invalidates a tender. Two files, because they prove
+        # different things and the second was missing while the product claimed to have it:
+        #   test_sealed_bid_gate.py — the predicate is correct
+        #   test_sealed_bid_api.py  — no HTTP response carries a price before the lock, which
+        #                             is the actual requirement (docs/evaluate/test-strategy.md)
+        # The engine reaches PostgREST with the service role and so bypasses RLS; in the serving
+        # path the Python guard is the only layer, and the API test is its only regression net.
         if: steps.exists.outputs.go == 'yes'
         run: |
-          test -f tests/test_sealed_bid_gate.py || {
-            echo "::error::tests/test_sealed_bid_gate.py missing — F9 is unproven"; exit 1; }
+          for f in tests/test_sealed_bid_gate.py tests/test_sealed_bid_api.py; do
+            test -f "$f" || { echo "::error::$f missing — F9 is unproven"; exit 1; }
+          done

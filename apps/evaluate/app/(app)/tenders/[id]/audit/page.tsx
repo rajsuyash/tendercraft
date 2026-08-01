@@ -4,7 +4,14 @@ import { engineJson } from "@/lib/engine";
 
 type Audit = {
   events: { id: string; action: string; entity: string | null; created_at: string; detail: Record<string, unknown> | null }[];
-  deference: { evaluator_id: string; scored: number; with_proposal: number; matched_proposal: number; rate: number | null }[];
+  deference: {
+    evaluator_id: string;
+    evaluator?: string;
+    scored: number;
+    with_proposal: number;
+    matched_proposal: number;
+    rate: number | null;
+  }[];
 };
 
 export default async function AuditPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,10 +39,21 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
           {a.deference.length === 0 && <li className="text-sm text-muted">No scores submitted yet.</li>}
           {a.deference.map((d) => (
             <li key={d.evaluator_id} data-deference className="flex justify-between text-sm">
-              <span className="font-mono text-xs text-muted">{d.evaluator_id.slice(0, 8)}…</span>
+              {/* A name, not a UUID. This panel is the one an auditor is pointed at, and
+                  accountability that reads "97208a6c…" is not accountability. */}
+              <span className="text-ink">{d.evaluator ?? `${d.evaluator_id.slice(0, 8)}…`}</span>
               <span className="text-ink tabular-nums">
                 {d.matched_proposal}/{d.with_proposal} matched
-                {d.rate !== null && <span className="ml-2 text-muted">rate {d.rate.toFixed(2)}</span>}
+                {d.rate !== null && (
+                  // Colour only above the threshold the copy above already names. A rate that
+                  // is fine should look like nothing; the eye should be drawn to 0.9+ alone.
+                  <span
+                    data-deference-rate={d.rate}
+                    className={`ml-2 tabular-nums ${d.rate >= 0.9 ? "font-semibold text-danger" : "text-muted"}`}
+                  >
+                    rate {d.rate.toFixed(2)}
+                  </span>
+                )}
               </span>
             </li>
           ))}

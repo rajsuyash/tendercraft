@@ -86,26 +86,69 @@ else
   echo "wall: one or both Supabase URLs absent from the environment — host comparison skipped"
 fi
 
-# A shared service key is a shared database by another name.
-if [ -n "${SUPABASE_SERVICE_JWT:-}" ] && [ -n "${EVAL_SUPABASE_SERVICE_JWT:-}" ]; then
-  if [ "$SUPABASE_SERVICE_JWT" = "$EVAL_SUPABASE_SERVICE_JWT" ]; then
-    err "the two products share a service key (F13-AC2)"
-  fi
-fi
+# ── credential comparisons ────────────────────────────────────────────────────
+#
+# These two checks used to be written as `if [ -n "$A" ] && [ -n "$B" ]; then compare; fi`,
+# which reads as "compare when we can". In CI neither variable is ever set, so the whole block
+# was skipped and the wall printed "intact" having verified NOTHING about credentials. That is
+# how the shared model credential survived: the comment above the old F13-AC3 block said it
+# "stays visible in every CI run", and it had in fact never run once.
+#
+# So: compare wherever the credentials can be reached — the environment first, then Secret
+# Manager if gcloud is authenticated (which covers every deploy) — and when neither is
+# available, SAY SO. An unverifiable check must announce itself; silence reads as a pass.
 
-# F13-AC3 wants a separate MODEL credential so usage and telemetry never commingle. The demo
-# currently waives that deliberately (see PRD §12). The waiver is checked rather than assumed:
-# it fails by default and requires EVAL_WALL_ALLOW_SHARED_KEY=1 to pass, so it stays visible in
-# every CI run instead of quietly becoming permanent. Retire it before production.
-if [ -n "${GEMINI_API_KEY:-}" ] && [ -n "${EVAL_MODEL_API_KEY:-}" ]; then
-  if [ "$GEMINI_API_KEY" = "$EVAL_MODEL_API_KEY" ]; then
-    if [ "${EVAL_WALL_ALLOW_SHARED_KEY:-}" = "1" ]; then
-      echo "wall: WAIVED — evaluate shares the bidder's model credential (F13-AC3, demo only)"
-    else
-      err "evaluate shares the bidder's model credential (F13-AC3). Set EVAL_WALL_ALLOW_SHARED_KEY=1 to waive."
-    fi
+# Hash rather than compare raw, so nothing sensitive can ever reach a log.
+fingerprint() { printf '%s' "$1" | shasum -a 256 | cut -c1-16; }
+
+# Best-effort read of a Secret Manager version. Empty on any failure, including no gcloud,
+# no auth and no such secret — all of which mean "cannot verify here", never "verified".
+secret_fp() {
+  command -v gcloud >/dev/null 2>&1 || return 0
+  local v
+  v=$(gcloud secrets versions access latest --secret="$1" \
+        --project="${WALL_GCP_PROJECT:-resonant-tube-280016}" 2>/dev/null) || return 0
+  [ -n "$v" ] && fingerprint "$v"
+}
+
+# $1 label · $2 AC id · $3,$4 env values · $5,$6 secret names · $7 waiver env var name
+compare_credential() {
+  local label="$1" ac="$2" a="$3" b="$4" sa="$5" sb="$6" waiver="$7" fa fb src
+  if [ -n "$a" ] && [ -n "$b" ]; then
+    fa=$(fingerprint "$a"); fb=$(fingerprint "$b"); src="environment"
+  else
+    fa=$(secret_fp "$sa"); fb=$(secret_fp "$sb"); src="Secret Manager"
   fi
-fi
+  if [ -z "$fa" ] || [ -z "$fb" ]; then
+    # Loud, and deliberately not an error: a contributor without deploy credentials must still
+    # be able to run the wall. What must never happen is this passing silently.
+    echo "wall: $ac NOT VERIFIED HERE — $label not in scope (no env value, no Secret Manager access)."
+    echo "wall:   run with the credentials present, or from a machine with gcloud auth, to check it."
+    return 0
+  fi
+  if [ "$fa" = "$fb" ]; then
+    if [ "${!waiver:-}" = "1" ]; then
+      echo "wall: WAIVED — the two products share their $label ($ac). Waiver: $waiver=1"
+    else
+      err "the two products share their $label ($ac), fingerprint $fa (via $src). Set $waiver=1 to waive."
+    fi
+  else
+    echo "wall: $ac ok — separate $label ($fa / $fb via $src)"
+  fi
+}
+
+# A shared service key is a shared database by another name.
+compare_credential "database service key" "F13-AC2" \
+  "${SUPABASE_SERVICE_JWT:-}" "${EVAL_SUPABASE_SERVICE_JWT:-}" \
+  "tendercraft-supabase-service-key" "tendercraft-eval-service-jwt" \
+  "EVAL_WALL_ALLOW_SHARED_SERVICE_KEY"
+
+# F13-AC3 wants a separate MODEL credential so usage and telemetry never commingle, and so
+# either product's key can be revoked without taking the other down.
+compare_credential "model credential" "F13-AC3" \
+  "${GEMINI_API_KEY:-}" "${EVAL_MODEL_API_KEY:-}" \
+  "tendercraft-gemini-api-key" "tendercraft-eval-model-key" \
+  "EVAL_WALL_ALLOW_SHARED_KEY"
 
 echo "── F13-AC3: no bidder data reaches the evaluation model ────────────"
 

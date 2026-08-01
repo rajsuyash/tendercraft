@@ -611,6 +611,10 @@ def tie_break(tender_id: str, body: TieBreakIn, user: CurrentUser) -> dict:
 def audit_trail(tender_id: str, user: CurrentUser) -> dict:
     _tender_or_404(tender_id, user)
     sc = db.scores(tender_id, user.authority_id)
+    # Resolved to names here rather than in the page: this panel is the one an auditor is
+    # invited to read, and "97208a6c…" is not an accountable person. The report already joins
+    # members for exactly this reason; the audit trail was the screen that never did.
+    names = {m["user_id"]: m.get("full_name") for m in db.members(user.authority_id)}
     by_evaluator: dict[str, list] = {}
     for s in sc:
         by_evaluator.setdefault(s["evaluator_id"], []).append(s)
@@ -620,10 +624,15 @@ def audit_trail(tender_id: str, user: CurrentUser) -> dict:
         same = [r for r in with_ai
                 if Decimal(str(r["pre_reveal_mark"])) == Decimal(str(r["ai_proposed_mark"]))]
         deference.append({
-            "evaluator_id": uid, "scored": len(rows), "with_proposal": len(with_ai),
+            "evaluator_id": uid,
+            # Falls back to the id rather than to blank: an unnamed row must still be traceable.
+            "evaluator": names.get(uid) or uid,
+            "scored": len(rows), "with_proposal": len(with_ai),
             "matched_proposal": len(same),
             "rate": round(len(same) / len(with_ai), 2) if with_ai else None,
         })
+    # Loudest first — the whole point of the panel is to surface an evaluator who is deferring.
+    deference.sort(key=lambda d: (d["rate"] is None, -(d["rate"] or 0)))
     return ok({"events": db.audit_events(tender_id, user.authority_id), "deference": deference})
 
 

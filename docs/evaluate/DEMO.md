@@ -129,9 +129,18 @@ Two blockers are shown: quorum (2 of 3) and the outstanding consensus.
 
 **3 · Financial — the sealed-bid gate**
 Open it. The prices are sealed, and the screen names exactly what is outstanding.
-This is worth stating plainly to the officer: the prices are **not merely hidden**. They are
-unreachable — enforced by the database policy, the API, and a test. There is no URL, export
-or error path that returns a figure before technical scores are locked.
+This is worth stating plainly to the officer: the prices are **not merely hidden**, they are
+unreachable. Every endpoint that can reach a price — financial, result, report and the outcome
+letters — refuses before the technical lock, and `tests/test_sealed_bid_api.py` asserts that the
+sealed amount appears **nowhere in the response bytes**, not in a field and not in an error
+message. A further test fails the build if anyone adds a new reader of the price table without
+that guard.
+
+Be precise about the layers if asked, because the honest answer is stronger than a vague one:
+the engine reaches the database with the service role, which **bypasses RLS by design** so it can
+serve several authorities. So in the path that serves this screen the API guard is the enforcing
+layer, and the `financial_sealed` row-level policy is the backstop for any direct database
+access. Claiming "three layers" invites a question the architecture answers differently.
 
 **4 · Evaluation 2 — the other end**
 Ranked on QCBS 70:30. *Nexus* wins on both technical merit and price. Every figure traces
@@ -141,7 +150,10 @@ back: technical marks → normalised → weighted → combined.
 Every action with actor and timestamp, append-only — the database refuses an update or delete
 even to an administrator. Note the **AI deference** panel: how often each evaluator's own
 mark, recorded *before* the AI proposal was revealed, matched that proposal. A rate near 1.00
-would mean the model is really deciding. That is the metric an auditor should ask for.
+would mean the model is really deciding. That is the metric an auditor should ask for — and you
+should invite them to, because the demo data answers it well: the committee sits between 0.27
+and 0.60, and no mark in the record was amended after a proposal was revealed. Rates at 0.9+
+render in red on that screen.
 
 **6 · Evaluation report** (Evaluation 2)
 The defensible document. Every mark attributed to a named evaluator with their rationale,
@@ -159,6 +171,15 @@ Different database, different authentication, different model credential, no sha
 data-access code, and a CI check (`tools/check-wall.sh`) that fails the build if anything
 crosses. It is architecture, not a policy statement.
 
+The credential separation is verified rather than asserted: the wall hashes both the database
+service keys and both model API keys — from the environment, or from Secret Manager on any
+machine with deploy access — and fails if either pair matches. It reports the two fingerprints
+so the separation is visible in the run, not merely claimed by it. (Until 2026-08-01 the two
+products did share one Gemini key, and the check that was supposed to surface that had never
+executed, because it silently skipped whenever the variables were absent — which was every CI
+run. Both are fixed: separate keys, and an unverifiable check now announces itself instead of
+passing quietly.)
+
 **"Where is our data?"**
 Currently EU (Stockholm) — this is a **demo**. India-region hosting is a prerequisite before
 any real bid data: database, compute and the model endpoint all in India. See
@@ -173,8 +194,15 @@ that can be quietly deleted is not an audit trail.
 
 ```
 psql "$CONN" -f services/evaluate-engine/migrations/0002_seed.sql
+psql "$CONN" -f services/evaluate-engine/migrations/0005_demo_deference.sql
 ```
 Then re-run the member/score seed. Evaluation 2's lock is applied through the API.
+
+`0005` is idempotent and safe to run at any time: it only adjusts `ai_proposed_mark`, never a
+human's mark, so totals, qualification and the QCBS ranking are unchanged by construction. It
+exists because the original seed had the model proposing exactly what both evaluators wrote,
+30 times out of 30 — which showed the chair at a deference rate of 1.00 on the very screen the
+demo invites an auditor to inspect. It raises an exception if any rate is still 0.9 or above.
 
 ## Running it locally
 

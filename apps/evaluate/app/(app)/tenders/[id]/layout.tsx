@@ -77,7 +77,7 @@ export default async function TenderLayout({
       label: "Financial",
       state: sealed ? "sealed" : "done",
       title: sealed
-        ? "Sealed until technical scores are locked — enforced by the database policy and the API"
+        ? "Sealed until technical scores are locked — every endpoint that could reach a price refuses"
         : undefined,
     },
     { href: `${base}/result`, label: "Result", state: sealed ? "sealed" : "done" },
