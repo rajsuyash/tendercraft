@@ -94,3 +94,33 @@ def test_a_tender_in_another_authority_cannot_be_archived(monkeypatch):
         r = c.post(f"/api/tenders/{TENDER}/archive", json={"archived": True, "reason": "x"})
     assert r.status_code == 404
     assert r.json()["error"]["code"] == "TENDER_NOT_FOUND"
+
+
+def test_the_audit_trail_names_the_actor(monkeypatch):
+    """Every audit row rendered without an actor until this was wired.
+
+    The id was always persisted and `db.audit_events` always returned it — nothing resolved it,
+    and the page never read it. The demo points at this screen and says "every action with actor
+    and timestamp", which was true of the database and false of the product. An append-only log
+    that cannot say who is not an audit trail.
+    """
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: AuthedUser(
+        user_id="u1", authority_id=AUTH, role="officer")
+    monkeypatch.setattr(db, "tender", lambda *a, **k: {"id": TENDER, "state": "active"})
+    monkeypatch.setattr(db, "scores", lambda *a, **k: [])
+    monkeypatch.setattr(db, "members", lambda *a, **k: [
+        {"user_id": "u9", "full_name": "S. Deshmukh (Procurement Officer)", "role": "officer"}])
+    monkeypatch.setattr(db, "audit_events", lambda *a, **k: [
+        {"id": "1", "action": "tender_archived", "entity": "tender", "actor_id": "u9",
+         "created_at": "2026-08-01T00:00:00Z", "detail": {"reason": "cancelled"}},
+        # An actor whose membership has since been removed must still be traceable.
+        {"id": "2", "action": "framework_locked", "entity": "tender", "actor_id": "gone",
+         "created_at": "2026-07-01T00:00:00Z", "detail": {}},
+    ])
+    with TestClient(app, raise_server_exceptions=False) as c:
+        events = c.get(f"/api/tenders/{TENDER}/audit").json()["data"]["events"]
+
+    assert events[0]["actor"] == "S. Deshmukh (Procurement Officer)"
+    # Falls back to the id rather than to blank: an unresolvable actor is still an actor.
+    assert events[1]["actor"] == "gone"

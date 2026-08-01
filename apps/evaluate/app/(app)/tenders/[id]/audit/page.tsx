@@ -3,7 +3,15 @@ import Link from "next/link";
 import { engineJson } from "@/lib/engine";
 
 type Audit = {
-  events: { id: string; action: string; entity: string | null; created_at: string; detail: Record<string, unknown> | null }[];
+  events: {
+    id: string;
+    action: string;
+    entity: string | null;
+    created_at: string;
+    /** Resolved to a name by the engine; falls back to the raw id if a member row is gone. */
+    actor?: string | null;
+    detail: Record<string, unknown> | null;
+  }[];
   deference: {
     evaluator_id: string;
     evaluator?: string;
@@ -68,6 +76,11 @@ export default async function AuditPage({ params }: { params: Promise<{ id: stri
               <span className="font-mono text-xs text-muted">{e.created_at.replace("T", " ").slice(0, 19)}</span>
               <span className="font-medium text-ink">{e.action.replace(/_/g, " ")}</span>
               <span className="text-muted">{e.entity}</span>
+              {/* The actor. Every row rendered without one until now — an append-only log that
+                  cannot say WHO is not an audit trail, and this screen is the one an auditor is
+                  shown. Falls back to the em dash rather than hiding the column, so a row with
+                  no recorded actor is visibly that rather than silently indistinguishable. */}
+              <span data-audit-actor className="text-ink">{e.actor || "—"}</span>
               {e.detail ? (
                 <span className="ml-auto max-w-md truncate font-mono text-xs text-muted">
                   {JSON.stringify(e.detail)}

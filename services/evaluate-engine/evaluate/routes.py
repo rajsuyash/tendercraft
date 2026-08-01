@@ -682,7 +682,15 @@ def audit_trail(tender_id: str, user: CurrentUser) -> dict:
         })
     # Loudest first — the whole point of the panel is to surface an evaluator who is deferring.
     deference.sort(key=lambda d: (d["rate"] is None, -(d["rate"] or 0)))
-    return ok({"events": db.audit_events(tender_id, user.authority_id), "deference": deference})
+    # The events carry actor_id; nothing was resolving it, so every row on the audit screen
+    # rendered without an actor at all. An append-only log that cannot say WHO is not an audit
+    # trail — and this is the screen the demo points at when it says "every action with actor
+    # and timestamp". Same `names` map the deference panel above already uses.
+    events = [
+        {**e, "actor": names.get(e.get("actor_id")) or e.get("actor_id")}
+        for e in db.audit_events(tender_id, user.authority_id)
+    ]
+    return ok({"events": events, "deference": deference})
 
 
 # ── report ─────────────────────────────────────────────────────────────────────
