@@ -9,7 +9,7 @@ browser-verify AC; a green eval never satisfies a deterministic-gate AC.
 | integration | `uv run pytest tests/` + `/verify-eval-api` | endpoint contracts vs PRD §6.1, error taxonomy, authz from JWT, audit writes, **and the sealed-bid gate at the API layer (F9-AC1)** |
 | browser-verify | `/verify-eval` | J-ACs on a fresh account, screen states, console/network cleanliness |
 | evals | `/evals` | extraction recall (F2), evidence-locator anchor resolvability, score-proposal schema + range (F7) |
-| isolation | `uv run pytest tests/isolation` | authority A never sees authority B (FIX-8), CI-blocking |
+| isolation | `uv run pytest tests/isolation` | authority A never sees authority B (FIX-8), CI-blocking. **Asserted where it is enforced:** this engine reaches PostgREST with the service role, so RLS is bypassed and the `authority_id` filter in every `db.py` function IS the control. The suite proves (a) every authority-scoped function puts the id in its query, (b) `rest()` is the only route out to the database, and (c) another authority's tender is refused at the API with 404 — not 403, because 403 confirms the tender exists. **Open gap:** no live-stack replay of the RLS policies themselves, which are the backstop for direct database access. The bidder side has one (ephemeral Supabase in CI); this product does not yet. Recorded here rather than implied by a green suite. |
 | **wall** | `./tools/check-wall.sh` | **F13 — runs on every push, before anything else** |
 | **throughput guards** | `./tools/check-throughput-guardrails.sh` | **T-1/T-2/T-3 — money-valued columns outside `bid_financials`, disclosure-before-generation (F28-AC3), rulepack presence. Runs on every push; skips cleanly until F14–F28 exist.** |
 

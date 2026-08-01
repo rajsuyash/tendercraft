@@ -298,3 +298,37 @@ def test_indian_grouping_in_findings_across_magnitudes(pack):
                        compare_value=value * 10)]
         got = _findings(pack, draft, crits, "R1")
         assert expected in got[0].expected, f"{value} rendered wrong"
+
+
+# ── R4 also reads the scope, not only the criteria ─────────────────────────────
+def test_r4_flags_a_brand_named_in_the_scope(pack):
+    """The rule read criteria only, so a brand-locked line in the tender's scope — the box an
+    officer actually writes a specification into — produced no finding. Found while seeding a
+    demo draft whose scope said "Core switches shall be Cisco Catalyst 9300" and watching R4
+    stay silent."""
+    draft = {"category": "goods",
+             "scope": "Core switches shall be Cisco Catalyst 9300 series."}
+    got = _findings(pack, draft, [], "R4")
+    assert len(got) == 1
+    assert "cisco" in got[0].observed.lower()
+    assert got[0].target_kind == "draft"
+
+
+def test_r4_accepts_a_scope_that_says_or_equivalent(pack):
+    draft = {"category": "goods",
+             "scope": "Core switches shall be Cisco Catalyst 9300 series or equivalent."}
+    assert _findings(pack, draft, [], "R4") == []
+
+
+def test_r4_reports_the_scope_and_a_criterion_separately(pack):
+    """Two clauses, two findings: fixing one must not silence the other."""
+    draft = {"category": "goods", "scope": "Firewalls shall be Fortinet FortiGate."}
+    crits = [{"id": "c1", "text": "Access points shall be Cisco Meraki", "kind": "technical"}]
+    got = _findings(pack, draft, crits, "R4")
+    assert len(got) == 2
+    assert {f.target_kind for f in got} == {"draft", "criterion"}
+
+
+def test_r4_is_silent_on_a_scope_with_no_brand(pack):
+    draft = {"category": "goods", "scope": "Core switches shall support 48 ports at 1 Gbps."}
+    assert _findings(pack, draft, [], "R4") == []

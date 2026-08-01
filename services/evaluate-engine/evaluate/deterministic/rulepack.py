@@ -145,7 +145,9 @@ def _required_above_threshold(rule: dict, draft: dict, _criteria) -> list[Findin
     return []
 
 
-def _text_pattern_requires_qualifier(rule: dict, _draft, criteria: list[dict]) -> list[Finding]:
+def _text_pattern_requires_qualifier(
+    rule: dict, draft: dict, criteria: list[dict]
+) -> list[Finding]:
     """R4 — a brand name with no 'or equivalent'. The clause most often cited in a challenge."""
     c = rule["check"]
     qualifier = c["qualifier"].lower()
@@ -153,11 +155,22 @@ def _text_pattern_requires_qualifier(rule: dict, _draft, criteria: list[dict]) -
         r"\b(cisco|dell|hp|hpe|lenovo|oracle|microsoft|ibm|juniper|fortinet|vmware|"
         r"intel|amd|nvidia|samsung|sony|bosch|siemens|schneider|honeywell|hikvision|dahua)\b",
         re.IGNORECASE)
+
+    def _named(text: str):
+        found = brands.search(text or "")
+        return found if found and qualifier not in (text or "").lower() else None
+
     out = []
+    # The scope, not only the criteria. This rule read criteria alone, so a brand-locked line
+    # in the tender's own scope text — which is where a specification is actually written, and
+    # where the demo script tells an officer to type one — produced no finding at all. A
+    # challenge does not care which box the clause was typed into.
+    if scope_hit := _named(draft.get("scope") or ""):
+        out.append(_hit(rule, f"scope names “{scope_hit.group(0)}” with no “{c['qualifier']}”",
+                        f"describe the requirement generically, or add “{c['qualifier']}”",
+                        "draft", None))
     for crit in criteria:
-        text = crit.get("text") or ""
-        found = brands.search(text)
-        if found and qualifier not in text.lower():
+        if found := _named(crit.get("text") or ""):
             out.append(_hit(rule, f"names “{found.group(0)}” with no “{c['qualifier']}”",
                             f"describe the requirement generically, or add “{c['qualifier']}”",
                             "criterion", crit.get("id")))

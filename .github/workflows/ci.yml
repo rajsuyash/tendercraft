@@ -155,6 +155,33 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
         run: pnpm build
 
+  evaluate-web:
+    name: evaluate web (typecheck, lint, test, build)
+    runs-on: ubuntu-latest
+    # There was no job for this app at all. The bidder web app has been typechecked, linted,
+    # tested and built on every push since M0; the government-facing one — the product with a
+    # sealed-bid gate and an audit trail — had none of that, so a type error or a broken build
+    # would have reached production undetected.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck:evaluate
+      - run: pnpm lint:evaluate
+      - name: unit tests
+        # `pnpm test:evaluate` exited silently for months: the package had no `test` script, so
+        # the filter matched nothing and returned 0. A command that cannot fail is not a check.
+        run: pnpm test:evaluate
+      - name: build
+        env:
+          NEXT_PUBLIC_EVAL_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_EVAL_SUPABASE_ANON_KEY: placeholder
+        run: pnpm build:evaluate
+
   evaluate-engine:
     name: evaluate engine (unit + gates)
     runs-on: ubuntu-latest
@@ -181,6 +208,14 @@ jobs:
       - name: unit tests
         if: steps.exists.outputs.go == 'yes'
         run: uv run pytest tests --ignore=tests/isolation -q
+
+      - name: authority isolation (FIX-8, CI-blocking)
+        # The service role bypasses RLS, so isolation here is enforced by the authority_id
+        # filter in every db.py function rather than by a policy. This suite asserts that
+        # property directly and refuses another authority's tender at the API. It needs no
+        # database, which is why there is no excuse for it not to run on every push.
+        if: steps.exists.outputs.go == 'yes'
+        run: uv run pytest tests/isolation -q
       - name: deterministic gates — 100% branch coverage
         # Same rule as the bidder side, and it matters more here: these gates decide
         # responsiveness, qualification and whether a financial envelope may open.

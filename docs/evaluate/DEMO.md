@@ -36,16 +36,21 @@ one is a screen you can point at.
 get written in Word from a reused template, emailed round, and reviewed by the legal cell after
 the ambiguity is already baked in.
 
-*New draft* → title, number, category. Then enter the money and the criteria and **watch the
-right-hand panel**. The checks run against GFR 2017 and the 2022 Procurement Manuals as you
-type. A good live demo is to type a deliberately bad tender:
+**A draft is already seeded for this**, deliberately bad, so the panel is populated the moment
+you open it: *Drafts → "Supply and Commissioning of Campus Network Infrastructure, Zone 4"*.
+Six blocking findings and two that could not run. Use it if the room is short of time, or as a
+fallback if typing live goes wrong.
+
+To demo it live instead: *New draft* → title, number, category. Then enter the money and the
+criteria and **watch the right-hand panel**. The checks run against GFR 2017 and the 2022
+Procurement Manuals as you type. A good live demo is to type a deliberately bad tender:
 
 | Enter this | What fires |
 |---|---|
 | Turnover bar of ₹20 Cr on a ₹5 Cr tender | **R1** — at most ₹10,00,00,000 (2× the estimated value) |
 | Submission window of 10 days | **R2** — at least 21 days |
 | Single envelope | **R3** — two-envelope required above the threshold |
-| “Core switches shall be Cisco Catalyst 9300” | **R4** — names a brand with no “or equivalent” |
+| “Core switches shall be Cisco Catalyst 9300” — in the **scope**, or in any criterion | **R4** — names a brand with no “or equivalent” |
 | EMD of 8%, no exemption clause | **R6** — twice: outside the 1–3% band, and no MSE/startup exemption |
 | A technical criterion with no marking scheme | **R9** — state how it will be evaluated |
 
@@ -62,7 +67,9 @@ empties. Three things to land while you are here:
   drift apart.
 
 Checks that cannot run (because a figure has not been entered yet) are listed separately and
-**never** count as passes. A draft must not acquire a clean bill of health it did not earn.
+**never** count as passes. A draft must not acquire a clean bill of health it did not earn. On
+the seeded draft two are in that state: R1 needs an estimated *annual* value, and R10's check
+kind is not implemented in this rulepack — both say so rather than showing green.
 
 **1. Drop the whole folder (TP6 — Bids tab).** Drag the entire portal download, or one ZIP, at
 the dropzone. It unpacks, reads PDFs, scans and spreadsheets alike, works out which bidder sent

@@ -42,10 +42,22 @@ def screening_matrix(tender_id: str, authority_id: str) -> dict:
             } for c in cells],
         })
     return {
+        # PQ only — this is the screening surface, and a technical criterion has no place in a
+        # responsiveness matrix. Callers that want "how many criteria does this tender publish"
+        # must use `criteria_counts` below, NOT len() of this list.
         "criteria": [{"id": c["id"], "text": c["text"], "compare_kind": c.get("compare_kind"),
                       "compare_op": c.get("compare_op"), "compare_value": c.get("compare_value"),
                       "anchor_page": c.get("anchor_page"), "anchor_clause": c.get("anchor_clause")}
                      for c in crits if c["kind"] == "pq"],
+        # Counted here rather than re-queried by the caller, so the dashboard and this screen
+        # cannot disagree. The officer's tender list said "0 published criteria" for a concluded
+        # tender with five of them, because it measured the PQ list and called it the total —
+        # the same one-object-two-counters trap `dashboard()` was written to avoid.
+        "criteria_counts": {
+            "pq": sum(1 for c in crits if c["kind"] == "pq"),
+            "technical": sum(1 for c in crits if c["kind"] == "technical"),
+            "total": len(crits),
+        },
         "bids": rows,
     }
 
@@ -182,7 +194,9 @@ def dashboard(authority_id: str) -> list[dict]:
             "created_at": t.get("created_at"),
             "framework_locked_at": t.get("framework_locked_at"),
             "technical_locked_at": t.get("technical_locked_at"),
-            "criteria_total": len(matrix["criteria"]),
+            "criteria_total": matrix["criteria_counts"]["total"],
+            "criteria_pq": matrix["criteria_counts"]["pq"],
+            "criteria_technical": matrix["criteria_counts"]["technical"],
             "bids_received": len(bids),
             "responsive": sum(1 for b in bids if b["responsive"] is True),
             "non_responsive": sum(1 for b in bids if b["responsive"] is False),
