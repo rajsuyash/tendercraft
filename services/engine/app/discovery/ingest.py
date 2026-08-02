@@ -163,13 +163,39 @@ def refresh_markets(
     }
 
 
-def _rules_for(workspace_id: str) -> list[Rule]:
+#: The opt-in narrow feed's well-known name. Duplicated from `app/opportunities_routes.py`
+#: rather than imported, because a route module importing into the discovery pipeline (or the
+#: reverse) is the coupling that makes the guardrail script's job ambiguous. Two constants, one
+#: comment at each end saying they must agree — the same discipline the UI/engine enum pair uses.
+CAPABILITY_RULE_NAME = "Only my capability keywords"
+
+
+def _rules_for(workspace_id: str, keywords: list[str] | None = None) -> list[Rule]:
+    """This workspace's rules, with the capability gate's keywords refreshed from the profile.
+
+    The gate's `spec` is written once, when the toggle is switched on, and was never updated
+    afterwards — so editing your capability keywords changed the ranking and left the RULE
+    filtering on the terms you first typed. A vendor whose feed had gone empty would fix their
+    keywords, see nothing change, and have no way to discover why. The stored spec is refreshed
+    on drift so the Excluded bucket keeps describing what actually happened.
+    """
+    rows = db.get_discovery_rules(workspace_id)
+    if keywords is not None:
+        for r in rows:
+            if r["name"] != CAPABILITY_RULE_NAME or r.get("kind") != "keyword_match_required":
+                continue
+            stored = list((r.get("spec") or {}).get("keywords") or [])
+            if stored != keywords:
+                r["spec"] = {**(r.get("spec") or {}), "keywords": keywords}
+                db.update_discovery_rule(r["id"], workspace_id, {"spec": r["spec"]})
+                log.info("discovery: refreshed %s from the profile (%d terms)",
+                         CAPABILITY_RULE_NAME, len(keywords))
     return [
         Rule(
             name=r["name"], kind=r["kind"],
             spec=r.get("spec") or {}, enabled=r.get("enabled", True),
         )
-        for r in db.get_discovery_rules(workspace_id)
+        for r in rows
     ]
 
 
@@ -208,7 +234,10 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
     across the feed immediately, and C-FR10 wants a profile change to surface newly-eligible
     tenders without waiting for the next sweep.
     """
-    rules = _rules_for(workspace_id)
+    # Read first: the gate rule filters on these, so a stale copy in its spec would hide
+    # tenders the vendor's current keywords would have kept.
+    capability, keywords = _capability(workspace_id)
+    rules = _rules_for(workspace_id, keywords)
     profile = _profile_turnover_inr(workspace_id)
     # One lookup, used for BOTH the eligibility sentences and the relevance rationales — they
     # are the same voice explaining the same row and must never end up in different languages.
@@ -254,7 +283,6 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
 
     # Relevance bands the IN-SCOPE items only: the excluded bucket is ordered by nothing anyone
     # reads, and scoring it would pay a model to rank tenders the user asked not to see.
-    capability, keywords = _capability(workspace_id)
     if in_scope:
         seen_hashes = db.get_relevance_hashes(workspace_id)
         patches = relevance.bands_for(

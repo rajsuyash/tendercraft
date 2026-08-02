@@ -1008,6 +1008,18 @@ def create_discovery_rule(workspace_id: str, rule: dict) -> dict:
     return rows[0] if rows else {}
 
 
+def update_discovery_rule(rule_id: str, workspace_id: str, patch: dict) -> None:
+    """Scoped by workspace as well as id — a rule id from another workspace must not be
+    patchable, and the service role bypasses RLS."""
+    _rest(
+        "PATCH",
+        "discovery_rules",
+        params={"id": f"eq.{rule_id}", "workspace_id": f"eq.{workspace_id}"},
+        json=patch,
+        prefer="return=minimal",
+    )
+
+
 def delete_discovery_rule(rule_id: str, workspace_id: str) -> None:
     _rest(
         "DELETE",

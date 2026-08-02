@@ -40,16 +40,36 @@ export type ProfileData = {
   experience_records: Experience[];
 };
 
-/** One comma-separated input, one string[] on the wire. De-duplicated and lower-cased because
- *  matching is case-insensitive anyway, and "CCTV, cctv" in the list would show the same term
- *  twice in the evidence chip on every row it matched. */
+/** One text input, one string[] on the wire. De-duplicated and lower-cased because matching is
+ *  case-insensitive anyway, and "CCTV, cctv" in the list would show the same term twice in the
+ *  evidence chip on every row it matched.
+ *
+ *  Splits on slashes and newlines as well as commas. A live workspace entered
+ *  "expertise in elevator / crane / oil indutry/ mines / general engineering" as ONE keyword
+ *  and matching is per whole keyword, so it matched nothing, the opt-in gate hid all 335 swept
+ *  tenders, and the feed read as empty. Someone separating terms with slashes is listing them,
+ *  not writing one term containing slashes — there is no reading of that string where the whole
+ *  sentence is a keyword. Multi-word terms still work ("wire rope", "structured cabling"): only
+ *  the separators changed. */
 export function splitKeywords(raw: string): string[] {
   const seen = new Set<string>();
-  for (const part of raw.split(",")) {
+  for (const part of raw.split(/[,/\n;]/)) {
     const term = part.trim().toLowerCase();
     if (term) seen.add(term);
   }
   return [...seen];
+}
+
+/** Terms unlikely to ever match, so the form can say so BEFORE the feed silently empties.
+ *
+ *  A tender title is a product description; a keyword of five words is a sentence and will not
+ *  appear verbatim in one. This warns rather than blocks — a long term is legal and the vendor
+ *  may know something we do not — but it must not be possible to hide your whole feed behind a
+ *  rule and be told nothing. */
+export const LONG_KEYWORD_WORDS = 4;
+
+export function unlikelyKeywords(terms: string[]): string[] {
+  return terms.filter((t) => t.split(/\s+/).length > LONG_KEYWORD_WORDS);
 }
 
 const INPUT =
@@ -210,6 +230,19 @@ export function ProfileForm({
               onChange={(e) => set("capability_keywords_raw", e.target.value)}
               placeholder={example.keywords}
             />
+            {(() => {
+              const terms = splitKeywords(d.capability_keywords_raw ?? "");
+              const unlikely = unlikelyKeywords(terms);
+              if (!unlikely.length) return null;
+              return (
+                <p data-keyword-warning className="mt-1 text-xs text-warning">
+                  {t(
+                    "These are sentences rather than keywords and will match almost nothing — a term is matched whole against a tender's title:",
+                  )}{" "}
+                  <span className="font-medium">{unlikely.map((k) => `“${k}”`).join(", ")}</span>
+                </p>
+              );
+            })()}
           </Row>
         </div>
       </section>

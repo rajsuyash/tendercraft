@@ -379,3 +379,64 @@ class TestOurExplanationsFollowTheMarketLanguage:
     def test_an_unknown_language_falls_back_to_english_rather_than_raising(self):
         # A 500 on the feed would be a worse failure than an untranslated sentence.
         assert evaluate_eligibility(None, {}, "xx").reason == "Bid document not read yet"
+
+
+class TestTheCapabilityGateFollowsTheProfile:
+    """The opt-in narrow feed filters on a SNAPSHOT of the keywords taken when it was switched
+    on, and nothing refreshed it.
+
+    Reported from production: a workspace entered two prose "keywords", switched the gate on,
+    and all 335 swept tenders were excluded. The repair — fix the keywords — changed the
+    relevance ranking and left the RULE filtering on the original terms, so the feed stayed
+    empty and nothing on screen explained why. Two copies of one value, and the stale one
+    decided what the user saw.
+    """
+
+    RULE = {"id": "r1", "name": "Only my capability keywords",
+            "kind": "keyword_match_required", "enabled": True,
+            "spec": {"keywords": ["an old phrase nobody would ever match"]}}
+
+    def test_the_stored_spec_is_refreshed_from_the_profile(self, monkeypatch):
+        from app.discovery import ingest
+
+        written: list = []
+        monkeypatch.setattr(ingest.db, "get_discovery_rules", lambda w: [dict(self.RULE)])
+        monkeypatch.setattr(ingest.db, "update_discovery_rule",
+                            lambda rid, w, patch: written.append((rid, patch)))
+
+        rules = ingest._rules_for("w1", ["wire rope", "crane"])
+        assert rules[0].spec["keywords"] == ["wire rope", "crane"]
+        # And persisted, so the Excluded bucket keeps describing what actually happened.
+        assert written == [("r1", {"spec": {"keywords": ["wire rope", "crane"]}})]
+
+    def test_an_unchanged_spec_is_not_rewritten(self, monkeypatch):
+        from app.discovery import ingest
+
+        written: list = []
+        rule = dict(self.RULE, spec={"keywords": ["crane"]})
+        monkeypatch.setattr(ingest.db, "get_discovery_rules", lambda w: [rule])
+        monkeypatch.setattr(ingest.db, "update_discovery_rule",
+                            lambda rid, w, patch: written.append(rid))
+        ingest._rules_for("w1", ["crane"])
+        assert written == [], "a no-op refresh must not write on every recompute"
+
+    def test_other_rules_are_never_touched(self, monkeypatch):
+        from app.discovery import ingest
+
+        other = {"id": "r2", "name": "No defence tenders", "kind": "authority_excludes",
+                 "enabled": True, "spec": {"contains": "defence"}}
+        monkeypatch.setattr(ingest.db, "get_discovery_rules", lambda w: [dict(other)])
+        monkeypatch.setattr(ingest.db, "update_discovery_rule",
+                            lambda *a, **k: pytest.fail("a user's own rule was rewritten"))
+        rules = ingest._rules_for("w1", ["crane"])
+        assert rules[0].spec == {"contains": "defence"}
+
+    def test_no_keywords_argument_leaves_every_rule_alone(self, monkeypatch):
+        """Callers that do not know the profile must not blank the gate."""
+        from app.discovery import ingest
+
+        monkeypatch.setattr(ingest.db, "get_discovery_rules", lambda w: [dict(self.RULE)])
+        monkeypatch.setattr(ingest.db, "update_discovery_rule",
+                            lambda *a, **k: pytest.fail("rewrote the spec with no profile read"))
+        rules = ingest._rules_for("w1")
+        assert rules[0].spec["keywords"] == ["an old phrase nobody would ever match"]

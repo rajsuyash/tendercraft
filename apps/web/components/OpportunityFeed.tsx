@@ -528,27 +528,86 @@ export function OpportunityFeed({
           data-empty-state
           className="mt-6 rounded-card border border-hairline bg-surface p-card"
         >
-          <p className="font-medium text-ink">
-            {t(state === "excluded" ? "Nothing is hidden" : "No opportunities yet")}
-          </p>
-          <p className="mt-2 max-w-prose text-sm text-muted">
-            {t(
-              state === "excluded"
-                ? "Your rules have not excluded anything. Every tender we found is in the in-scope list."
-                : "Refresh to sweep {portal} for live tenders and match them against your rules and vendor profile.",
-            ).replace("{portal}", portal)}
-          </p>
-          {state !== "excluded" && (
-            <button
-              type="button"
-              onClick={refresh}
-              disabled={busy}
-              className="mt-4 rounded-control bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {busy
-                ? t("Sweeping {portal}…").replace("{portal}", portal)
-                : t("Sweep {portal} now").replace("{portal}", portal)}
-            </button>
+          {/* Three different empty states, because they need three different actions and the
+              product used to give all of them the same one. A workspace whose rules hid every
+              swept tender was told "No opportunities yet — Refresh to sweep GeM", with a sweep
+              button: the one action that cannot possibly help, since the sweep had already
+              found 335 and the rules had hidden all 335. A user following that advice loops
+              forever. This is the ET-7 shape — a feed that is silently empty for a reason it
+              does not state. */}
+          {state !== "excluded" && swept > 0 && (data.counts?.excluded ?? 0) >= swept ? (
+            <>
+              <p data-all-hidden className="font-medium text-ink">
+                {t("Your rules hid every tender we found")}
+              </p>
+              <p className="mt-2 max-w-prose text-sm text-muted">
+                {`${swept} ${t("tenders were swept and all of them were hidden by:")} `}
+                {activeRules.map((r, i) => (
+                  <span key={r.id}>
+                    {i > 0 && ", "}
+                    <span className="font-medium text-ink">{r.name}</span>
+                  </span>
+                ))}
+                {"."}
+              </p>
+              {gateOn && (
+                <p className="mt-2 max-w-prose text-sm text-muted">
+                  {t(
+                    "That rule keeps only tenders matching your capability keywords. If none match, check the keywords are single terms a tender title would actually contain — a whole sentence matches nothing.",
+                  )}
+                </p>
+              )}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {gateOn && (
+                  <button
+                    type="button"
+                    data-turn-off-gate
+                    onClick={() => toggleGate(false)}
+                    disabled={gating || busy}
+                    className="rounded-control bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    {t("Show everything again")}
+                  </button>
+                )}
+                <a
+                  href="/profile"
+                  className="rounded-control border border-hairline px-3 py-1.5 text-sm text-ink"
+                >
+                  {t("Edit my keywords")}
+                </a>
+                <a
+                  href="/opportunities?state=excluded"
+                  className="text-sm text-primary hover:underline"
+                >
+                  {t("See what was hidden")}
+                </a>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-ink">
+                {t(state === "excluded" ? "Nothing is hidden" : "No opportunities yet")}
+              </p>
+              <p className="mt-2 max-w-prose text-sm text-muted">
+                {t(
+                  state === "excluded"
+                    ? "Your rules have not excluded anything. Every tender we found is in the in-scope list."
+                    : "Refresh to sweep {portal} for live tenders and match them against your rules and vendor profile.",
+                ).replace("{portal}", portal)}
+              </p>
+              {state !== "excluded" && (
+                <button
+                  type="button"
+                  onClick={refresh}
+                  disabled={busy}
+                  className="mt-4 rounded-control bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                >
+                  {busy
+                    ? t("Sweeping {portal}…").replace("{portal}", portal)
+                    : t("Sweep {portal} now").replace("{portal}", portal)}
+                </button>
+              )}
+            </>
           )}
         </div>
       ) : (

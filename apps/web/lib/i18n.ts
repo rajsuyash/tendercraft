@@ -223,6 +223,18 @@ const FR: Record<string, string> = {
   "Updating your feed…": "Mise à jour de votre flux…",
   "Save and re-match": "Enregistrer et relancer le rapprochement",
 
+  // ── the feed emptied by your own rule ──────────────────────
+  "Your rules hid every tender we found": "Vos règles ont masqué tous les avis trouvés",
+  "tenders were swept and all of them were hidden by:":
+    "avis ont été collectés et tous ont été masqués par :",
+  "That rule keeps only tenders matching your capability keywords. If none match, check the keywords are single terms a tender title would actually contain — a whole sentence matches nothing.":
+    "Cette règle ne conserve que les avis correspondant à vos mots-clés. Si aucun ne correspond, vérifiez que ce sont bien des termes simples qu'un intitulé d'avis peut contenir — une phrase entière ne correspond à rien.",
+  "Show everything again": "Réafficher tous les avis",
+  "Edit my keywords": "Modifier mes mots-clés",
+  "See what was hidden": "Voir les avis masqués",
+  "These are sentences rather than keywords and will match almost nothing — a term is matched whole against a tender's title:":
+    "Ce sont des phrases et non des mots-clés : elles ne correspondront presque à rien, car chaque terme est comparé en entier à l'intitulé de l'avis :",
+
   // ── provenance footer ──────────────────────────────────────
   "Tender content stays on the source portal and is linked, not reproduced.":
     "Le contenu des avis reste sur le portail source : il est lié, jamais reproduit.",
