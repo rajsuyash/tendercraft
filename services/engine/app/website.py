@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -146,13 +147,25 @@ def read_site(url: str, max_pages: int = MAX_PAGES) -> tuple[str, list[str]]:
             candidates.append(link)
     candidates.sort(key=_rank)
 
+    # Concurrently. The subpages have no dependency on each other, and the reader takes ~11s a
+    # page — read one after another, four pages is ~45s of a person watching a spinner on a
+    # profile form. Measured on this repo before: awaiting independent reads in sequence
+    # multiplies the slowest hop by the number of hops, and it is always the same fix.
+    todo = candidates[: max_pages - 1]
     parts = [entry[:MAX_CHARS_PER_PAGE]]
-    for link in candidates[: max_pages - 1]:
-        try:
-            parts.append(_fetch(link)[:MAX_CHARS_PER_PAGE])
-            read.append(link)
-        except (ApiError, httpx.HTTPError) as exc:
-            log.info("website: skipped %s (%s)", link, exc)
+    if todo:
+        with ThreadPoolExecutor(max_workers=len(todo)) as pool:
+            # Submitted in rank order and read back in the same order, so the text the model
+            # sees stays deterministic — a products page before an about page — regardless of
+            # which request happened to finish first.
+            futures = [(link, pool.submit(_fetch, link)) for link in todo]
+            for link, future in futures:
+                try:
+                    parts.append(future.result()[:MAX_CHARS_PER_PAGE])
+                    read.append(link)
+                except (ApiError, httpx.HTTPError) as exc:
+                    # One bad subpage is not worth the whole read; partial vocabulary beats none.
+                    log.info("website: skipped %s (%s)", link, exc)
 
     log.info("website: read %d page(s) from %s", len(read), host)
     return "\n\n".join(parts), read

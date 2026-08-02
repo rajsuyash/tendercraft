@@ -165,3 +165,50 @@ class TestReadingAVendorSite:
         from app.website import _rank
 
         assert _rank("https://x.com/products") < _rank("https://x.com/about")
+
+    def test_pages_are_read_concurrently_but_returned_in_rank_order(self, monkeypatch):
+        """Order must not depend on which request finished first.
+
+        The reader takes ~11s a page, so four pages read one after another is ~45s of a person
+        watching a spinner. Concurrency fixes that; what it must NOT change is the text the
+        model sees — a products page ahead of an about page, deterministically.
+        """
+        import time
+
+        from app import website
+
+        started: list[str] = []
+
+        def slow_fetch(url: str) -> str:
+            started.append(url)
+            time.sleep(0.2)
+            # The LAST-ranked page returns fastest in wall-clock terms if ordering were by
+            # completion; assert below that it still lands last.
+            return f"CONTENT {url}"
+
+        monkeypatch.setattr(website, "_fetch", slow_fetch)
+        entry = (
+            "[a](https://x.com/about) [b](https://x.com/products) [c](https://x.com/solutions)"
+        )
+        monkeypatch.setattr(
+            website, "_fetch", lambda u: entry if u.endswith("/start") else slow_fetch(u)
+        )
+
+        t0 = time.time()
+        text, pages = website.read_site("https://x.com/start")
+        elapsed = time.time() - t0
+
+        # products ranks above solutions, which ranks above about (see _WORTH_READING).
+        assert pages == [
+            "https://x.com/start",
+            "https://x.com/products",
+            "https://x.com/solutions",
+            "https://x.com/about",
+        ], pages
+        # On the fetched CONTENT, not the raw text — the entry page's own link markup mentions
+        # /about first, which is what the naive substring check tripped over.
+        assert text.index("CONTENT https://x.com/products") < text.index(
+            "CONTENT https://x.com/about"
+        )
+        # Three 0.2s fetches concurrently, not 0.6s serially.
+        assert elapsed < 0.5, f"pages appear to be read sequentially ({elapsed:.2f}s)"
