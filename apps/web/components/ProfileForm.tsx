@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { AnnualReportUpload } from "@/components/AnnualReportUpload";
+import { KeywordSuggestions } from "@/components/KeywordSuggestions";
 import { translator, type Locale } from "@/lib/i18n";
 
 export type Financial = { fy_label: string; turnover_cr: number | string };
@@ -30,6 +32,9 @@ export type ProfileData = {
   capability_keywords?: string[] | null;
   /** The comma-separated text the input actually holds, seeded from the array by the page. */
   capability_keywords_raw?: string | null;
+  website_url?: string | null;
+  annual_report_document_id?: string | null;
+  annual_report_name?: string | null;
   cin?: string | null;
   pan?: string | null;
   gst?: string | null;
@@ -154,6 +159,9 @@ export function ProfileForm({
           // null is DROPPED instead of written and the field could never be cleared once set.
           capability_statement: d.capability_statement ?? "",
           capability_keywords: splitKeywords(d.capability_keywords_raw ?? ""),
+          // "" rather than null so the field can be cleared — the engine drops nulls.
+          website_url: d.website_url ?? "",
+          annual_report_document_id: d.annual_report_document_id || null,
           cin: d.cin || null,
           pan: d.pan || null,
           gst: d.gst || null,
@@ -230,6 +238,16 @@ export function ProfileForm({
               onChange={(e) => set("capability_keywords_raw", e.target.value)}
               placeholder={example.keywords}
             />
+            <KeywordSuggestions
+              websiteUrl={d.website_url ?? ""}
+              locale={locale}
+              onAccept={(kw) => {
+                const raw = (d.capability_keywords_raw ?? "").trim();
+                // Appended, never replaced: accepting a suggestion must not quietly discard
+                // terms the vendor typed themselves.
+                set("capability_keywords_raw", raw ? `${raw}, ${kw}` : kw);
+              }}
+            />
             {(() => {
               const terms = splitKeywords(d.capability_keywords_raw ?? "");
               const unlikely = unlikelyKeywords(terms);
@@ -248,7 +266,37 @@ export function ProfileForm({
       </section>
 
       <section className="rounded-card border border-border bg-surface p-card">
-        <h2 className="mb-3 font-heading text-base font-medium text-ink">{t("Legal identity")}</h2>
+        <h2 className="mb-1 font-heading text-base font-medium text-ink">{t("Your company")}</h2>
+        <p className="mb-3 text-xs text-muted">
+          {t(
+            "Both are read only when you ask for keyword suggestions — never crawled on a schedule.",
+          )}
+        </p>
+        <div className="grid grid-cols-1 gap-3">
+          <Row label={t("Website")}>
+            <input
+              data-field-website
+              className={INPUT}
+              value={d.website_url ?? ""}
+              onChange={(e) => set("website_url", e.target.value)}
+              placeholder="https://www.example.com"
+              inputMode="url"
+            />
+          </Row>
+          <Row label={t("Annual report")}>
+            <AnnualReportUpload
+              documentId={d.annual_report_document_id ?? null}
+              documentName={d.annual_report_name ?? null}
+              locale={locale}
+              onUploaded={(id, name) =>
+                setD((p) => ({ ...p, annual_report_document_id: id, annual_report_name: name }))
+              }
+            />
+          </Row>
+        </div>
+        <h2 className="mb-3 mt-6 font-heading text-base font-medium text-ink">
+          {t("Legal identity")}
+        </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Row label={t("Registered company name")}>
             <input

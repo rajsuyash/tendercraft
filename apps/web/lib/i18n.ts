@@ -235,6 +235,35 @@ const FR: Record<string, string> = {
   "These are sentences rather than keywords and will match almost nothing — a term is matched whole against a tender's title:":
     "Ce sont des phrases et non des mots-clés : elles ne correspondront presque à rien, car chaque terme est comparé en entier à l'intitulé de l'avis :",
 
+  // ── company, website, annual report, keyword suggestions ───
+  "Your company": "Votre entreprise",
+  Website: "Site web",
+  "Annual report": "Rapport annuel",
+  "Both are read only when you ask for keyword suggestions — never crawled on a schedule.":
+    "Les deux ne sont lus que lorsque vous demandez des suggestions de mots-clés — jamais explorés automatiquement.",
+  "Annual report on file": "Rapport annuel enregistré",
+  "in your knowledge base": "dans votre base documentaire",
+  "Stored in your knowledge base with your other evidence. It is also read when you ask for keyword suggestions — an annual report names what you sell in the words the market uses.":
+    "Conservé dans votre base documentaire avec vos autres pièces. Il est également lu lorsque vous demandez des suggestions de mots-clés — un rapport annuel nomme ce que vous vendez dans les termes employés par le marché.",
+  "Reading the document…": "Lecture du document…",
+  "Could not read that file.": "Ce fichier n'a pas pu être lu.",
+  "This file still contains template placeholders":
+    "Ce fichier contient encore des champs de modèle non remplis",
+  "Suggest keywords from my profile": "Proposer des mots-clés à partir de mon profil",
+  "Reading your profile…": "Lecture de votre profil…",
+  "Could not read your profile for suggestions.":
+    "Impossible de lire votre profil pour établir des suggestions.",
+  Read: "Sources lues",
+  "your capability statement": "votre descriptif de compétences",
+  "existing keywords": "mots-clés existants",
+  "your website": "votre site web",
+  "your annual report": "votre rapport annuel",
+  "could not read the website": "site web illisible",
+  "suggestions came from splitting your existing terms only — the model was unavailable":
+    "suggestions issues du seul découpage de vos termes existants — le modèle était indisponible",
+  "Nothing to suggest — add a capability statement or a website first.":
+    "Rien à proposer — renseignez d'abord un descriptif de compétences ou un site web.",
+
   // ── provenance footer ──────────────────────────────────────
   "Tender content stays on the source portal and is linked, not reproduced.":
     "Le contenu des avis reste sur le portail source : il est lié, jamais reproduit.",

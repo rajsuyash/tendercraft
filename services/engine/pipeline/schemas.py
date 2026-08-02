@@ -183,3 +183,29 @@ RELEVANCE_SCHEMA = {
     },
     "required": ["results"],
 }
+
+
+#: Keyword suggestions (F-FR11 support). Bounded and closed: `source` is an enum so a proposal
+#: cannot claim an origin we did not give it, and `evidence` is required so every term can be
+#: checked against the text it came from before a human accepts it.
+KEYWORDS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "keywords": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string"},
+                    "source": {
+                        "type": "string",
+                        "enum": ["statement", "existing", "website"],
+                    },
+                    "evidence": {"type": "string"},
+                },
+                "required": ["keyword", "source", "evidence"],
+            },
+        }
+    },
+    "required": ["keywords"],
+}

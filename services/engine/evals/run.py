@@ -14,7 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-COMPONENTS = ("extractor", "drafter", "drafter-fr", "relevance")
+COMPONENTS = ("extractor", "drafter", "drafter-fr", "relevance", "keywords")
 
 
 def load_cases(component: str) -> list[dict]:
@@ -217,6 +217,81 @@ def _raise(*_a, **_k):
     raise ModelError("injected failure")
 
 
+def score_keywords() -> int:
+    """Keyword suggestions — the terms a vendor may accept into the feed gate.
+
+    Scored on what makes a suggestion safe rather than on how good it sounds:
+
+      * **Shape.** Matched whole against a tender title, so anything over three words matches
+        nothing. A proposal longer than that is the very defect this component repairs.
+      * **Cite or drop.** Every term carries the words it came from; one that cannot be traced
+        was invented, and an invented keyword can hide tenders the vendor wanted.
+      * **No commerce words.** "services", "supply", "goods" match a large fraction of a
+        national portal alone and would make the gate useless.
+      * **G-6.** Website text is untrusted. A page instructing the model is data being read.
+
+    Never asserts an exact set: which terms are best is a judgement, and pinning them would make
+    this a change-detector for the prompt rather than a check on the property.
+    """
+    from pipeline import keywords as kw
+
+    cases = load_cases("keywords")
+    normal = [c for c in cases if not c.get("inject")]
+    inject = [c for c in cases if c.get("inject")]
+
+    passed = 0
+    print("\n== Keyword suggestion golden set (live) ==")
+    for c in normal:
+        i = c["input"]
+        exp = c["expected"]
+        try:
+            got = kw.suggest(i["capability_statement"], i["existing_keywords"], i["website_text"])
+        except Exception as exc:  # noqa: BLE001 — a raise here is a failed case, not a crash
+            print(f"  {c['id']:14} FAIL  ({type(exc).__name__}: {exc})")
+            continue
+        terms = [s.keyword for s in got]
+
+        shape_ok = all(len(t.split()) <= exp.get("max_words", 3) for t in terms)
+        cited_ok = all(s.evidence.strip() for s in got)
+        banned = [b for b in exp.get("must_not_include", []) if b.lower() in terms]
+        wanted = exp.get("must_include_any")
+        want_ok = (not wanted) or any(w.lower() in terms for w in wanted)
+        # A case with nothing to want is asserting the OPPOSITE — that nothing was proposed.
+        # "We supply various goods" has no product in it, and a page that instructs the model is
+        # data being read (G-6); in both, an empty result is the pass.
+        if not wanted:
+            want_ok = True
+
+        ok = shape_ok and cited_ok and not banned and want_ok
+        passed += ok
+        detail = []
+        if not shape_ok:
+            detail.append("over-long term")
+        if not cited_ok:
+            detail.append("uncited term")
+        if banned:
+            detail.append(f"banned: {banned}")
+        if not want_ok:
+            detail.append(f"missing all of {wanted}")
+        print(f"  {c['id']:14} {'PASS' if ok else 'FAIL'}  {len(terms):>2} terms"
+              f"{'  ' + '; '.join(detail) if detail else ''}")
+
+    for c in inject:
+        # Fault injection: the model is unusable, so the caller must still hand the vendor the
+        # deterministic split rather than an error page or an empty screen.
+        from app.deterministic.keywords import split_long_tail
+
+        terms = split_long_tail(c["input"]["existing_keywords"])
+        wanted = c["expected"].get("must_include_any", [])
+        ok = any(w.lower() in terms for w in wanted)
+        passed += ok
+        print(f"  {c['id']:14} {'PASS' if ok else 'FAIL'}  fallback -> {terms[:4]}")
+
+    total = len(normal) + len(inject)
+    print(f"  {passed}/{total} passed")
+    return 0 if passed == total else 1
+
+
 def score_relevance() -> int:
     """F-FR11 — the fit band.
 
@@ -305,6 +380,7 @@ _SCORERS = {
     "drafter": score_drafter,
     "relevance": score_relevance,
     "drafter-fr": score_drafter_fr,
+    "keywords": score_keywords,
 }
 
 

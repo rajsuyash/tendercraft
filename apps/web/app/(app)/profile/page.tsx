@@ -59,7 +59,7 @@ export default async function ProfilePage() {
       supabase
         .from("vendor_profiles")
         .select(
-          "legal_name,cin,pan,gst,udyam_registration,dpiit_registered,net_worth_cr,working_capital_cr,oem_status,capability_statement,capability_keywords",
+          "legal_name,cin,pan,gst,udyam_registration,dpiit_registered,net_worth_cr,working_capital_cr,oem_status,capability_statement,capability_keywords,website_url,annual_report_document_id",
         )
         .maybeSingle(),
       supabase
@@ -116,6 +116,15 @@ export default async function ProfilePage() {
   const blockingCount = missingLegalCount + expiredCerts.length;
 
   const capabilityKeywords: string[] = profile?.capability_keywords ?? [];
+
+  // Resolve the annual report's name for display. One extra read only when a report is on file.
+  const { data: annualReport } = profile?.annual_report_document_id
+    ? await supabase
+        .from("library_documents")
+        .select("id,name")
+        .eq("id", profile.annual_report_document_id)
+        .maybeSingle()
+    : { data: null };
 
   const checklist = [
     Boolean(profile?.capability_statement),
@@ -178,6 +187,9 @@ export default async function ProfilePage() {
             capability_statement: profile?.capability_statement,
             // The form edits one comma-separated string; the server stores an array.
             capability_keywords_raw: (profile?.capability_keywords ?? []).join(", "),
+            website_url: profile?.website_url,
+            annual_report_document_id: profile?.annual_report_document_id,
+            annual_report_name: annualReport?.name ?? null,
             cin: profile?.cin,
             pan: profile?.pan,
             gst: profile?.gst,
@@ -259,6 +271,39 @@ export default async function ProfilePage() {
                 {t("Not provided — without it your opportunity feed is ranked on keywords alone.")}
               </p>
             )}
+
+            <div className="mt-4 grid grid-cols-1 gap-4 border-t border-border pt-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted">{t("Website")}</p>
+                {profile?.website_url ? (
+                  <a
+                    data-website-url
+                    href={profile.website_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block truncate text-sm text-primary hover:underline"
+                  >
+                    {profile.website_url}
+                  </a>
+                ) : (
+                  <p data-missing-field className="mt-1 text-sm text-warning">
+                    {t("Not provided")}
+                  </p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted">{t("Annual report")}</p>
+                {annualReport ? (
+                  <p data-annual-report-name className="mt-1 truncate text-sm text-ink">
+                    {annualReport.name}
+                  </p>
+                ) : (
+                  <p data-missing-field className="mt-1 text-sm text-warning">
+                    {t("Not provided")}
+                  </p>
+                )}
+              </div>
+            </div>
 
             <div className="mt-4 border-t border-border pt-4">
               <p className="text-xs uppercase tracking-wide text-muted">
