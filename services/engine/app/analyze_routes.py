@@ -7,9 +7,10 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from . import analysis, authz, db, estimator, knowledge, rubric_service
+from . import analysis, authz, db, estimator, rubric_service, website
 from .auth import AuthedUser, get_current_user
 from .deterministic import keywords as det_keywords
 from .envelope import ApiError, ok
@@ -113,10 +114,12 @@ async def keyword_suggestions(body: KeywordSuggestIn, user: CurrentUser) -> dict
         )
         report_text = (doc or {}).get("text_content") or ""
 
-    site_text, site_error = "", None
+    site_text, site_error, pages_read = "", None, []
     if url:
         try:
-            site_text = knowledge.fetch_url_text(url)
+            # Several pages, not one: the entry page is usually navigation, and the product
+            # vocabulary lives one click in.
+            site_text, pages_read = await run_in_threadpool(website.read_site, url)
         except ApiError as exc:
             # A site that will not load must not fail the whole request — the statement and the
             # existing keywords are still worth reading. Report it so the screen can say which
@@ -167,6 +170,7 @@ async def keyword_suggestions(body: KeywordSuggestIn, user: CurrentUser) -> dict
             "website": bool(site_text),
             "website_url": url or None,
             "website_error": site_error,
+            "pages_read": pages_read,
             "annual_report": bool(report_text),
         },
         "deterministic_only": used_fallback,

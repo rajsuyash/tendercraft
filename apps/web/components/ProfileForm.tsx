@@ -145,6 +145,21 @@ export function ProfileForm({
   const set = <K extends keyof ProfileData>(k: K, v: ProfileData[K]) =>
     setD((p) => ({ ...p, [k]: v }));
 
+  /** Append terms to the keywords box, never replace it — a suggestion must not discard what
+   *  the vendor typed. De-duplicated against what is already there so accepting the same term
+   *  twice (once by auto-fill, once by clicking it) cannot double it up. */
+  const append = (terms: string[]) =>
+    setD((p) => {
+      const have = splitKeywords(p.capability_keywords_raw ?? "");
+      const fresh = terms.map((t) => t.trim().toLowerCase()).filter((t) => t && !have.includes(t));
+      if (!fresh.length) return p;
+      const raw = (p.capability_keywords_raw ?? "").trim();
+      return {
+        ...p,
+        capability_keywords_raw: raw ? `${raw}, ${fresh.join(", ")}` : fresh.join(", "),
+      };
+    });
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -240,13 +255,10 @@ export function ProfileForm({
             />
             <KeywordSuggestions
               websiteUrl={d.website_url ?? ""}
+              currentKeywords={d.capability_keywords_raw ?? ""}
               locale={locale}
-              onAccept={(kw) => {
-                const raw = (d.capability_keywords_raw ?? "").trim();
-                // Appended, never replaced: accepting a suggestion must not quietly discard
-                // terms the vendor typed themselves.
-                set("capability_keywords_raw", raw ? `${raw}, ${kw}` : kw);
-              }}
+              onAccept={(kw) => append([kw])}
+              onAcceptMany={append}
             />
             {(() => {
               const terms = splitKeywords(d.capability_keywords_raw ?? "");

@@ -7,6 +7,8 @@ switched on the opt-in gate, and all 335 swept tenders were hidden. Matching is 
 
 from __future__ import annotations
 
+import pytest
+
 from app.deterministic.keywords import split_long_tail
 
 
@@ -98,3 +100,68 @@ def test_the_model_component_is_importable_the_way_the_route_imports_it():
     assert "from ..pipeline import" not in src, (
         "relative import from app/ to pipeline/ raises at runtime and degrades silently"
     )
+
+
+class TestReadingAVendorSite:
+    """`app/website.py` — the multi-page read that feeds keyword suggestions."""
+
+    def test_the_ssrf_check_runs_before_the_third_party_reader_sees_the_url(self, monkeypatch):
+        """The trap this class exists for.
+
+        Handing an unvalidated URL to a hosted reader does not remove the SSRF risk, it moves it
+        somewhere we cannot see: r.jina.ai would fetch http://169.254.169.254/ on our behalf and
+        hand back the cloud metadata, with our own guard never consulted.
+        """
+        import httpx
+
+        from app import website
+        from app.envelope import ApiError
+
+        monkeypatch.setattr(
+            httpx, "get", lambda *a, **k: pytest.fail("the reader was called with a private host")
+        )
+        for blocked in (
+            "http://169.254.169.254/latest/meta-data/",
+            "http://localhost:8000/",
+            "http://metadata.google.internal/",
+        ):
+            with pytest.raises(ApiError):
+                website._fetch(blocked)
+
+    def test_a_non_http_scheme_is_refused(self):
+        from app import website
+        from app.envelope import ApiError
+
+        for bad in ("file:///etc/passwd", "gopher://x/", "ftp://example.com/"):
+            with pytest.raises(ApiError):
+                website._fetch(bad)
+
+    def test_www_and_bare_host_are_the_same_site(self):
+        """ushamartin.com links to itself without `www` while the vendor typed it with `www`.
+
+        A strict host comparison rejected every product subpage and the read silently collapsed
+        to one page — the entry page, which is mostly navigation.
+        """
+        from app.website import _same_site
+
+        assert _same_site("www.ushamartin.com", "ushamartin.com")
+        assert _same_site("ushamartin.com", "www.ushamartin.com")
+        assert not _same_site("ushamartin.com", "evil.com")
+        assert not _same_site(None, "ushamartin.com")
+
+    def test_only_product_shaped_pages_on_the_same_site_are_followed(self):
+        from app.website import _worth_reading
+
+        host = "example.com"
+        assert _worth_reading("https://example.com/products/wire-rope", host)
+        assert _worth_reading("https://www.example.com/what-we-do", host)
+        # Another site entirely — a vendor's LinkedIn is not their product catalogue.
+        assert not _worth_reading("https://linkedin.com/company/example/products", host)
+        # Big, generic, and no product vocabulary in them.
+        for skip in ("/careers", "/news/2026", "/investor-relations", "/privacy"):
+            assert not _worth_reading(f"https://example.com{skip}", host), skip
+
+    def test_a_products_page_outranks_an_about_page(self):
+        from app.website import _rank
+
+        assert _rank("https://x.com/products") < _rank("https://x.com/about")

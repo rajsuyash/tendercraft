@@ -264,6 +264,10 @@ const FR: Record<string, string> = {
   "Nothing to suggest — add a capability statement or a website first.":
     "Rien à proposer — renseignez d'abord un descriptif de compétences ou un site web.",
 
+  "Filled in from your website — edit or delete any of them in the box above before saving.":
+    "Renseignés à partir de votre site web — modifiez ou supprimez-en dans le champ ci-dessus avant d'enregistrer.",
+  "Add all": "Tout ajouter",
+
   // ── provenance footer ──────────────────────────────────────
   "Tender content stays on the source portal and is linked, not reproduced.":
     "Le contenu des avis reste sur le portail source : il est lié, jamais reproduit.",
