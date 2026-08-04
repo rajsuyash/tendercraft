@@ -800,11 +800,18 @@ def insert_unmapped(workspace_id: str, tender_id: str, rows: list[dict]) -> list
     service role, which bypasses RLS, so a conflict target that omits the scope column can
     reassign another workspace's row (known-pitfalls).
     """
-    payload = [{**r, "workspace_id": workspace_id, "tender_id": tender_id} for r in rows]
+    # `document` is part of the key (migration 0026): the same sentence on page 4 of two
+    # annexures is two unmapped requirements, and merging them undercounts the denominator.
+    # Never NULL — Postgres treats NULLs as distinct, which would defeat the re-ingest guard.
+    payload = [
+        {**r, "document": r.get("document") or "", "workspace_id": workspace_id,
+         "tender_id": tender_id}
+        for r in rows
+    ]
     return (
         _rest(
             "POST", "matrix_unmapped",
-            params={"on_conflict": "workspace_id,tender_id,page,sentence"},
+            params={"on_conflict": "workspace_id,tender_id,document,page,sentence"},
             json=payload,
             prefer="return=representation,resolution=merge-duplicates",
         )

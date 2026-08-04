@@ -18,7 +18,7 @@ from .deterministic.lock import evaluate_lock
 from .deterministic.tender_meta import display_title
 from .deterministic.types import Criterion, RequirementLevel, SourceAnchor
 from .envelope import ApiError, ok
-from .ingest import ingest_pages, parse_pdf_pages
+from .ingest import SourcePage, ingest_pages, number_package, parse_document_pages
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB guard
 
@@ -73,10 +73,34 @@ def _to_domain(row: dict) -> Criterion:
     )
 
 
-def _process_ingest(workspace_id: str, data: bytes, title: str) -> dict:
+def _relocate(row: dict, page_index: dict[int, SourcePage]) -> dict:
+    """Rewrite a global package page back to the document and page a human can open.
+
+    A criterion whose page fell outside the package keeps no anchor at all rather than a
+    plausible wrong one — the lock gate refuses unanchored criteria (A-AC5), which is the
+    correct outcome for an extraction nobody can check.
+    """
+    src = page_index.get(row.get("anchor_page") or 0)
+    return {**row, "anchor_page": src.page if src else None,
+            "anchor_document": src.document if src else None}
+
+
+def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title: str) -> dict:
     """CPU/IO-bound ingest pipeline — run off the event loop via a threadpool."""
-    pages = parse_pdf_pages(data)
+    source_pages: list[SourcePage] = []
+    for filename, data in documents:
+        source_pages.extend(parse_document_pages(filename, data))
+    if not source_pages:
+        raise ApiError(400, "BAD_DOCUMENT", "no readable pages in the uploaded package")
+    pages, page_index = number_package(source_pages)
     result = ingest_pages(pages)
+    result["criteria_rows"] = [_relocate(r, page_index) for r in result["criteria_rows"]]
+    result["unmapped_rows"] = [
+        {"sentence": r["sentence"],
+         "page": page_index[r["page"]].page if r["page"] in page_index else None,
+         "document": page_index[r["page"]].document if r["page"] in page_index else None}
+        for r in result["unmapped_rows"]
+    ]
     meta = result["meta"]
     # Name the bid after the TENDER, not the file. The filename survives only when the
     # document states no title of its own.
@@ -95,25 +119,43 @@ def _process_ingest(workspace_id: str, data: bytes, title: str) -> dict:
         "tender_number": meta.tender_number,
         "authority": meta.authority,
         "pages": len(pages),
+        "documents": [d for d, _ in documents],
         "extracted": result["extracted"],
         "low_confidence": result["low_confidence"],
-        "illegible_pages": result["illegible_pages"],
+        # Named where the user can find them: "Annexure-II.pdf p.4", not a package-wide count
+        # that matches no page number printed on any document they hold.
+        "illegible_pages": [
+            f"{page_index[p].document} p.{page_index[p].page}"
+            for p in result["illegible_pages"] if p in page_index
+        ],
     }
 
 
 @router.post("/api/tenders/ingest")
 async def ingest_tender(
-    user: CurrentUser, file: Annotated[UploadFile, File()], title: str = ""
+    user: CurrentUser, file: Annotated[list[UploadFile], File()], title: str = ""
 ) -> dict:
-    # Reject oversize BEFORE reading the whole body into memory (DoS guard).
-    if file.size and file.size > _MAX_UPLOAD_BYTES:
-        raise ApiError(413, "FILE_TOO_LARGE", "tender document exceeds 50 MB")
-    data = await file.read()
-    if len(data) > _MAX_UPLOAD_BYTES:
-        raise ApiError(413, "FILE_TOO_LARGE", "tender document exceeds 50 MB")
-    name = title or file.filename or "Untitled tender"
+    """Ingest a tender PACKAGE — NIT, annexures and BOQ sheets — as one tender.
+
+    The 50 MB ceiling is on the package, not per file: it exists to bound what one request
+    can pull into memory, and ten files evade a per-file check entirely.
+    """
+    if not file:
+        raise ApiError(400, "NO_FILE", "attach at least one document")
+    documents: list[tuple[str, bytes]] = []
+    total = 0
+    for upload in file:
+        # Reject oversize BEFORE reading the whole body into memory (DoS guard).
+        if upload.size and total + upload.size > _MAX_UPLOAD_BYTES:
+            raise ApiError(413, "FILE_TOO_LARGE", "tender package exceeds 50 MB")
+        data = await upload.read()
+        total += len(data)
+        if total > _MAX_UPLOAD_BYTES:
+            raise ApiError(413, "FILE_TOO_LARGE", "tender package exceeds 50 MB")
+        documents.append((upload.filename or "Untitled document", data))
+    name = title or documents[0][0] or "Untitled tender"
     # Parsing + extraction + inserts are blocking; keep the event loop free.
-    return ok(await run_in_threadpool(_process_ingest, user.workspace_id, data, name))
+    return ok(await run_in_threadpool(_process_ingest, user.workspace_id, documents, name))
 
 
 # Sync bodies (only blocking db calls) -> FastAPI runs them in a threadpool, off the loop.

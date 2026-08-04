@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { formatConfidence } from "@/lib/format";
+import { formatConfidence, sourceAnchor } from "@/lib/format";
 
 const CONFIRM_THRESHOLD = 0.8; // A-AC5: sub-0.80 must be confirmed before lock
 
@@ -16,11 +16,12 @@ export interface Criterion {
   confirmed: boolean;
   anchor_page: number | null;
   anchor_clause: string | null;
+  anchor_document: string | null;
 }
 
-function anchorLabel(c: Criterion): string {
+function anchorLabel(c: Criterion, withDocument: boolean): string {
   if (!c.anchor_page) return "no anchor";
-  return c.anchor_clause ? `p.${c.anchor_page} · Cl. ${c.anchor_clause}` : `p.${c.anchor_page}`;
+  return sourceAnchor(c.anchor_page, c.anchor_clause, withDocument ? c.anchor_document : null);
 }
 
 // S4 — verification queue. Lock is disabled while any sub-0.80 item is unconfirmed,
@@ -39,6 +40,8 @@ export function VerifyQueue({
   const [items, setItems] = useState<Criterion[]>(
     [...criteria].sort((a, b) => a.confidence - b.confidence),
   );
+  // A page number resolves on its own until the tender spans several documents.
+  const multiDocument = new Set(criteria.map((c) => c.anchor_document).filter(Boolean)).size > 1;
   const [lockError, setLockError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -132,7 +135,7 @@ export function VerifyQueue({
                 <span className="rounded border border-border px-2 py-0.5 text-xs text-ink">
                   {c.requirement_level}
                 </span>
-                <span className="text-xs text-muted">{anchorLabel(c)}</span>
+                <span className="text-xs text-muted">{anchorLabel(c, multiDocument)}</span>
                 <span
                   data-confidence
                   className={`ml-auto rounded-full px-2 py-0.5 font-mono text-xs ${

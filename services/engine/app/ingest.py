@@ -3,13 +3,23 @@
 Text-based PDFs are parsed with pypdf. Scanned PDFs (image-only pages) yield little text
 and route to manual review (EC-1); OCR of scans is a later step. Extraction runs per page
 so every criterion keeps its page anchor (A-AC3).
+
+A tender arrives as a PACKAGE, not a file: an NIT, a handful of annexures, and a BOQ
+spreadsheet, each of which can carry eligibility clauses. They ingest as ONE tender, because
+three separate tenders with three readiness checklists is not what the buyer published. That
+makes the page number alone an unresolvable anchor — "p.4" of which document? — so every page
+carries the label of the document it came from, and criteria keep the LOCAL page a human can
+actually turn to rather than a running count across the package.
 """
 
 from __future__ import annotations
 
+import csv
 import io
 import os
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 from pypdf import PdfReader
 
@@ -23,6 +33,23 @@ _MIN_CHARS_PER_PAGE = 20
 # Per-page extraction is one Gemini call each; sequential is minutes on a real RFP.
 # Fan out across pages, bounded so we don't hammer the API. Order restored after.
 _EXTRACT_WORKERS = int(os.environ.get("INGEST_EXTRACT_WORKERS", "8"))
+# Office formats are zips. A 2 MB xlsx can expand to gigabytes (knowledge.py hit this first).
+_MAX_UNCOMPRESSED = 100 * 1024 * 1024
+_SPREADSHEET_EXTS = ("xlsx", "xlsm")
+
+
+@dataclass(frozen=True)
+class SourcePage:
+    """One readable unit of the package, and where a human would go to find it.
+
+    `document` is the label shown beside the anchor — a filename, or "file · sheet" for a
+    spreadsheet, where the sheet name is the locator and the index alone would mean nothing.
+    `page` is local to that document: the page of the PDF, or the sheet's position.
+    """
+
+    document: str
+    page: int
+    text: str
 
 
 def parse_pdf_pages(data: bytes) -> list[tuple[int, str]]:
@@ -40,6 +67,83 @@ def parse_pdf_pages(data: bytes) -> list[tuple[int, str]]:
             text = ""
         pages.append((i, text))
     return pages
+
+
+def parse_spreadsheet_pages(filename: str, data: bytes) -> list[SourcePage]:
+    """One page per worksheet. BOQs and eligibility matrices live in sheets, not prose.
+
+    Cells are joined per row so the extractor reads a requirement table as lines rather than
+    a wall of values. Formulas are read as their last computed value (`data_only`) — a bid
+    desk's "=SUM(...)" is worth nothing to a reader who cannot recalculate it.
+    """
+    _guard_zip_bomb(data)
+    from openpyxl import load_workbook
+
+    try:
+        wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    except Exception as exc:  # noqa: BLE001 — any parse failure is a bad upload (400)
+        raise ApiError(400, "BAD_DOCUMENT", f"could not read spreadsheet: {exc}") from exc
+
+    pages: list[SourcePage] = []
+    try:
+        for index, sheet in enumerate(wb.worksheets, 1):
+            lines = [
+                " | ".join(str(v).strip() for v in row if v is not None and str(v).strip())
+                for row in sheet.iter_rows(values_only=True)
+            ]
+            pages.append(
+                SourcePage(f"{filename} · {sheet.title}", index, "\n".join(x for x in lines if x))
+            )
+    finally:
+        wb.close()  # read_only leaves file handles open otherwise
+    return pages
+
+
+def parse_csv_pages(filename: str, data: bytes) -> list[SourcePage]:
+    text = data.decode("utf-8", errors="replace")
+    rows = [
+        " | ".join(c.strip() for c in row if c.strip())
+        for row in csv.reader(io.StringIO(text))
+    ]
+    return [SourcePage(filename, 1, "\n".join(r for r in rows if r))]
+
+
+def parse_document_pages(filename: str, data: bytes) -> list[SourcePage]:
+    """Dispatch on extension. Unknown formats are rejected, never silently read as bytes."""
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    if ext == "pdf":
+        return [SourcePage(filename, page, text) for page, text in parse_pdf_pages(data)]
+    if ext in _SPREADSHEET_EXTS:
+        return parse_spreadsheet_pages(filename, data)
+    if ext == "csv":
+        return parse_csv_pages(filename, data)
+    raise ApiError(
+        400, "UNSUPPORTED_FORMAT",
+        f"{filename}: only PDF, XLSX, XLSM and CSV can be read as tender documents",
+    )
+
+
+def _guard_zip_bomb(data: bytes) -> None:
+    """Reject office files whose uncompressed size would blow up memory."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            if sum(i.file_size for i in z.infolist()) > _MAX_UNCOMPRESSED:
+                raise ApiError(413, "FILE_TOO_LARGE", "document expands to an unsafe size")
+    except zipfile.BadZipFile:
+        pass  # not a zip — the format parser rejects it with a better message
+
+
+def number_package(
+    documents: list[SourcePage],
+) -> tuple[list[tuple[int, str]], dict[int, SourcePage]]:
+    """Give the package one running page sequence, and keep the way back.
+
+    The extractor needs a page number that is unique across the whole package (two documents
+    both have a page 3), while the criterion a human reads must name the document and its own
+    page. So: number globally for extraction, map back before anything is persisted.
+    """
+    pages = [(i, doc.text) for i, doc in enumerate(documents, 1)]
+    return pages, {i: doc for i, doc in enumerate(documents, 1)}
 
 
 def ingest_pages(pages: list[tuple[int, str]]) -> dict:

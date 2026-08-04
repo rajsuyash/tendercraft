@@ -6,8 +6,13 @@ magic numbers). Each is cited to the PRD clause that fixes it.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
+
+# The extractor often returns a clause that already says what it is ("Annexure-VII",
+# "Clause 4.1"). Prefixing "Cl." onto those produced "Cl. Annexure-VII" on real tenders.
+_CLAUSE_PREFIXED = re.compile(r"^(cl\.?|clause|annexure|section|para)\b", re.I)
 
 # --- Thresholds (single source of truth, cited to tendercraft-PRD.md) ---
 # A-FR4 / A-AC5: sub-0.80 extractions must be human-confirmed before a TOM can lock
@@ -84,9 +89,20 @@ class SourceAnchor:
 
     page: int
     clause: str
+    #: Which document of the package the page belongs to ("Annexure-II.pdf", "BOQ.xlsx · Sheet1").
+    #: Empty on single-document tenders, where the page alone already resolves.
+    document: str = ""
 
     def is_resolvable(self) -> bool:
         return self.page > 0
+
+    def label(self) -> str:
+        """"Annexure-II.pdf · p.4 · Cl. 3.1" — the parts the document actually supplied."""
+        parts = [p for p in (self.document, f"p.{self.page}" if self.page else "") if p]
+        if self.clause:
+            prefixed = _CLAUSE_PREFIXED.match(self.clause)
+            parts.append(self.clause if prefixed else f"Cl. {self.clause}")
+        return " · ".join(parts) or "no anchor"
 
 
 @dataclass(frozen=True)

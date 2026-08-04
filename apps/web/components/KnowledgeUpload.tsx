@@ -60,7 +60,7 @@ export function KnowledgeUpload({
         <label className="inline-flex cursor-pointer items-center rounded border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary-tint">
           <input
             type="file"
-            accept=".pdf,.docx,.pptx,.txt"
+            accept=".pdf,.docx,.pptx,.txt,.xlsx,.xlsm,.csv"
             className="hidden"
             disabled={busy}
             onChange={(e) => {
@@ -68,7 +68,7 @@ export function KnowledgeUpload({
               if (f) onFile(f);
             }}
           />
-          {busy ? "Uploading…" : "Upload file (PDF / DOCX / PPTX)"}
+          {busy ? "Uploading…" : "Upload file (PDF / DOCX / PPTX / XLSX)"}
         </label>
         <span className="text-xs text-muted">or</span>
         <div className="flex flex-1 gap-2">

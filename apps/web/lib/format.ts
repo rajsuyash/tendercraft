@@ -88,3 +88,25 @@ export function formatTurnover(value: number, market?: string | null): string {
   }
   return formatCrore(value);
 }
+
+/**
+ * "Annexure-II.pdf · p.4 · Cl. 3.1" — where a human turns to check this requirement.
+ *
+ * A tender ingests as a package, so the page alone stops being resolvable once more than one
+ * document is involved (they all have a page 4). Callers pass `document` only when the tender
+ * actually spans several — a filename on every row of a single-document tender is noise, and
+ * the anchor contract (A-AC3) is already satisfied by the page there.
+ *
+ * Never doubles a "Cl." the extractor already put in the clause ("Cl. Annexure-VII" was real).
+ */
+export function sourceAnchor(
+  page: number | null,
+  clause: string | null,
+  document?: string | null,
+): string {
+  if (!page) return "—";
+  const c = (clause ?? "").trim();
+  const head = document ? `${document} · p.${page}` : `p.${page}`;
+  if (!c) return head;
+  return /^(cl\.?|clause|annexure|section|para)\b/i.test(c) ? `${head} · ${c}` : `${head} · Cl. ${c}`;
+}

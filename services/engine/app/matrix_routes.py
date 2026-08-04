@@ -53,7 +53,9 @@ class ResolveIn(BaseModel):
 
 def _anchor(row: dict) -> SourceAnchor | None:
     page, clause = row.get("anchor_page"), row.get("anchor_clause")
-    return SourceAnchor(page=page, clause=clause or "") if page else None
+    if not page:
+        return None
+    return SourceAnchor(page=page, clause=clause or "", document=row.get("anchor_document") or "")
 
 
 def _to_row(row: dict) -> MatrixRow:
@@ -79,6 +81,7 @@ def _row_payload(row: dict) -> dict:
         "requirement_level": row["requirement_level"],
         "anchor_page": row.get("anchor_page"),
         "anchor_clause": row.get("anchor_clause"),
+        "anchor_document": row.get("anchor_document"),
         "evidence_required": row.get("evidence_required"),
         "response_ref": row.get("response_ref"),
         "owner": row.get("owner"),
@@ -187,6 +190,7 @@ def generate(tender_id: str, user: CurrentUser) -> dict:
                 "requirement_level": r.requirement_level.value,
                 "anchor_page": r.anchor.page if r.anchor else None,
                 "anchor_clause": r.anchor.clause if r.anchor else None,
+                "anchor_document": (r.anchor.document or None) if r.anchor else None,
                 "evidence_required": r.evidence_required,
             }
             for r in rows

@@ -8,6 +8,7 @@ import {
   formatINR,
   formatMoney,
   formatTurnover,
+  sourceAnchor,
 } from "./format";
 
 describe("formatINR", () => {
@@ -86,5 +87,20 @@ describe("market-aware money", () => {
   it("labels the large unit per market without converting the number", () => {
     expect(formatTurnover(8.2, "IN")).toBe("\u20b98.2 Cr");
     expect(formatTurnover(8.2, "FR")).toBe("8,2 M\u20ac");
+  });
+});
+
+describe("sourceAnchor", () => {
+  it("names the document only when the caller passes one", () => {
+    expect(sourceAnchor(4, "3.1")).toBe("p.4 · Cl. 3.1");
+    expect(sourceAnchor(4, "3.1", "Annexure-II.pdf")).toBe("Annexure-II.pdf · p.4 · Cl. 3.1");
+  });
+
+  it("never doubles a prefix the extractor already supplied", () => {
+    expect(sourceAnchor(22, "Annexure-VII")).toBe("p.22 · Annexure-VII");
+  });
+
+  it("renders an em dash rather than a page-less anchor", () => {
+    expect(sourceAnchor(null, "4.1")).toBe("—");
   });
 });

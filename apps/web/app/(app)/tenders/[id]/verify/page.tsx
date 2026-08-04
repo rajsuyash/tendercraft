@@ -12,7 +12,10 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
     supabase.from("tenders").select("id,title,status").eq("id", id).single(),
     supabase
       .from("criteria")
-      .select("id,verbatim_text,category,requirement_level,confidence,confirmed,anchor_page,anchor_clause")
+      // One string literal, deliberately: supabase-js infers the row type from the literal,
+      // and splitting it across a concatenation collapses the result to GenericStringError[].
+      // eslint-disable-next-line max-len
+      .select("id,verbatim_text,category,requirement_level,confidence,confirmed,anchor_page,anchor_clause,anchor_document")
       .eq("tender_id", id),
   ]);
   if (!tender) notFound();

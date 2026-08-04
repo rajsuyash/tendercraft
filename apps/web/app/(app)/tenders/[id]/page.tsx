@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { sourceAnchor } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
 const CATEGORIES = ["eligibility", "technical", "financial", "terms"] as const;
@@ -17,12 +18,16 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
       .single(),
     supabase
       .from("criteria")
-      .select("id,verbatim_text,category,requirement_level,anchor_page,anchor_clause")
+      // eslint-disable-next-line max-len
+      .select("id,verbatim_text,category,requirement_level,anchor_page,anchor_clause,anchor_document")
       .eq("tender_id", id),
   ]);
   if (!tender) notFound();
 
   const locked = tender.status === "locked";
+  // Name the document in each anchor only once a tender spans more than one (A-AC3).
+  const multiDocument =
+    new Set((criteria ?? []).map((c) => c.anchor_document).filter(Boolean)).size > 1;
 
   return (
     <main className="p-page">
@@ -92,7 +97,11 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
                     </span>
                     <span data-anchor className="text-xs text-muted">
                       {c.anchor_page
-                        ? `p.${c.anchor_page}${c.anchor_clause ? ` · Cl. ${c.anchor_clause}` : ""}`
+                        ? sourceAnchor(
+                            c.anchor_page,
+                            c.anchor_clause,
+                            multiDocument ? c.anchor_document : null,
+                          )
                         : "no anchor"}
                     </span>
                   </div>

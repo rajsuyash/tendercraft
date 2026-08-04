@@ -21,6 +21,7 @@ from .deterministic.types import (
     FUZZY_REVIEW_THRESHOLD,
     Recommendation,
     RequirementLevel,
+    SourceAnchor,
     Verdict,
 )
 
@@ -42,9 +43,13 @@ def _anchor(row: dict) -> str:
     # Page alone is a resolvable anchor: real tenders state obligations in unnumbered
     # prose, and requiring a clause here silently produced anchor=None, which the lock
     # gate then refused forever (types.SourceAnchor.is_resolvable).
-    if row.get("anchor_page"):
-        return f"p.{row['anchor_page']} · Cl. {row['anchor_clause']}"
-    return f"p.{row['anchor_page']}" if row.get("anchor_page") else "no anchor"
+    if not row.get("anchor_page"):
+        return "no anchor"
+    return SourceAnchor(
+        page=row["anchor_page"],
+        clause=row.get("anchor_clause") or "",
+        document=row.get("anchor_document") or "",
+    ).label()
 
 
 def decide(row: dict, ev: ModelEval) -> CriterionVerdict:

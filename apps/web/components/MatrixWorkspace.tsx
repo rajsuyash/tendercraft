@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { sourceAnchor } from "@/lib/format";
+
 // Mirrors app/deterministic/matrix.py::MatrixRowStatus. If one end changes, change the other
 // — a UI array that mirrors a server enum WILL drift, and the symptom is a dead-looking
 // control that 422s (known-pitfalls).
@@ -26,6 +28,7 @@ export type MatrixRow = {
   requirement_level: "mandatory" | "desirable" | "self_attestation";
   anchor_page: number | null;
   anchor_clause: string | null;
+  anchor_document: string | null;
   evidence_required: string | null;
   response_ref: string | null;
   status: Status;
@@ -73,12 +76,9 @@ const LEVEL_LABEL: Record<MatrixRow["requirement_level"], string> = {
   self_attestation: "Self-attested",
 };
 
-/** "p.12 · Cl. 4.1(a)" — without doubling a "Cl." the extractor already put in the clause. */
-function sourceAnchor(page: number | null, clause: string | null): string {
-  if (!page) return "—";
-  const c = (clause ?? "").trim();
-  if (!c) return `p.${page}`;
-  return /^(cl\.?|clause|annexure|section)\b/i.test(c) ? `p.${page} · ${c}` : `p.${page} · Cl. ${c}`;
+/** True once a tender spans more than one document — then the page alone stops resolving. */
+function spansDocuments(rows: MatrixRow[]): boolean {
+  return new Set(rows.map((r) => r.anchor_document).filter(Boolean)).size > 1;
 }
 
 export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initial: Matrix }) {
@@ -87,6 +87,7 @@ export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initi
   const [showAllUnmapped, setShowAllUnmapped] = useState(false);
   const [busy, startTransition] = useTransition();
   const router = useRouter();
+  const multiDocument = spansDocuments(matrix.rows);
 
   async function send(path: string, init: RequestInit) {
     setError(null);
@@ -275,7 +276,11 @@ export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initi
                 </td>
                 <td className="p-3 whitespace-nowrap font-mono text-xs text-muted">
                   {/* A-AC3's UI face: a requirement with no traceable source is not auditable. */}
-                  {sourceAnchor(row.anchor_page, row.anchor_clause)}
+                  {sourceAnchor(
+                    row.anchor_page,
+                    row.anchor_clause,
+                    multiDocument ? row.anchor_document : null,
+                  )}
                 </td>
                 <td className="p-3 text-muted">{row.evidence_required || "—"}</td>
                 <td className="p-3">

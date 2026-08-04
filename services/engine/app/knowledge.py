@@ -40,6 +40,17 @@ def extract_text(filename: str, data: bytes) -> str:
         return _extract_docx(data)
     if ext in ("pptx",):
         return _extract_pptx(data)
+    if ext in ("xlsx", "xlsm", "csv"):
+        # Turnover tables and project lists arrive as sheets far more often than as prose.
+        # One parser, shared with tender ingest — sheet name kept as a heading so a figure
+        # stays attached to the year or project it belongs to.
+        from .ingest import parse_csv_pages, parse_spreadsheet_pages
+
+        pages = (
+            parse_csv_pages(filename, data) if ext == "csv"
+            else parse_spreadsheet_pages(filename, data)
+        )
+        return "\n\n".join(f"{p.document}\n{p.text}" for p in pages if p.text).strip()
     # plain text / unknown: best-effort decode
     return data.decode("utf-8", errors="ignore").strip()
 

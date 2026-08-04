@@ -5,20 +5,32 @@ import { useRouter } from "next/navigation";
 import { StageProgress } from "@/components/StageProgress";
 import { useState } from "react";
 
-// S3 — Upload Tender. Drop a PDF -> engine ingest (OCR/extract) -> verification queue.
+// S3 — Upload Tender. Drop the package -> engine ingest (OCR/extract) -> verification queue.
+// One tender per PACKAGE, not per file: annexures carry eligibility clauses, and three
+// separate tenders with three readiness checklists is not what the buyer published.
 export default function UploadPage() {
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "processing" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
-  const [illegible, setIllegible] = useState<{ tenderId: string; pages: number[] } | null>(null);
+  const [illegible, setIllegible] = useState<{ tenderId: string; pages: string[] } | null>(null);
 
-  async function upload(file: File) {
+  async function upload(files: FileList) {
+    const chosen = Array.from(files);
+    const first = chosen[0];
+    if (!first) return;
     setStatus("processing");
     setIllegible(null);
-    setMessage(`Reading ${file.name}…`);
+    setMessage(
+      chosen.length === 1
+        ? `Reading ${first.name}…`
+        : `Reading ${chosen.length} documents: ${chosen.map((f) => f.name).join(", ")}`,
+    );
     const form = new FormData();
-    form.append("file", file);
-    form.append("title", file.name.replace(/\.pdf$/i, ""));
+    // Repeated field name — the engine reads `file` as a list, so the package arrives intact.
+    for (const f of chosen) form.append("file", f);
+    // The title is a fallback the engine uses only when no document states its own (the
+    // first file is the notice by convention; ordering beyond that does not matter).
+    form.append("title", first.name.replace(/\.[^.]+$/, ""));
     const res = await fetch("/api/tenders/ingest", { method: "POST", body: form });
     const body = await res.json();
     if (!res.ok) {
@@ -26,7 +38,7 @@ export default function UploadPage() {
       setMessage(body.error?.message ?? "Upload failed");
       return;
     }
-    const pages: number[] = body.data.illegible_pages ?? [];
+    const pages: string[] = body.data.illegible_pages ?? [];
     if (pages.length > 0) {
       // EC-1 / S3-D1: don't silently pass a low-quality scan — surface the pages to re-upload.
       setStatus("idle");
@@ -41,8 +53,8 @@ export default function UploadPage() {
     <main className="mx-auto max-w-2xl p-page">
       <h1 className="mb-1 font-heading text-2xl font-semibold text-ink">Upload Tender</h1>
       <p className="mb-6 text-sm text-muted">
-        PDF tender packages (GeM / CPPP / state portals). Scanned pages route to manual review
-        when text is illegible.
+        The whole package at once — notice, annexures and BOQ sheets (PDF, XLSX, CSV) become one
+        tender. Scanned pages route to manual review when text is illegible.
       </p>
 
       <label
@@ -51,16 +63,20 @@ export default function UploadPage() {
       >
         <input
           type="file"
-          accept="application/pdf"
+          multiple
+          accept=".pdf,.xlsx,.xlsm,.csv,application/pdf"
           className="hidden"
           disabled={status === "processing"}
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) upload(f);
+            const f = e.target.files;
+            if (f && f.length) upload(f);
           }}
         />
         <p className="font-heading text-lg font-medium text-ink">Drop tender package here</p>
-        <p className="mt-1 text-sm text-muted">or click to browse files</p>
+        <p className="mt-1 text-sm text-muted">
+          or click to browse — select every file of the package together
+        </p>
+        <p className="mt-2 text-xs text-muted">PDF · XLSX · CSV — up to 50 MB in total</p>
       </label>
 
       {status === "processing" && (
@@ -95,8 +111,8 @@ export default function UploadPage() {
         >
           <p className="font-medium">Some pages could not be read (OCR quality gate)</p>
           <p className="mt-1">
-            Page{illegible.pages.length === 1 ? "" : "s"} {illegible.pages.join(", ")} appear to be
-            scans with little extractable text. Re-upload a clearer copy of{" "}
+            {illegible.pages.join(", ")} appear to be scans with little extractable text —
+            each is named by the document it belongs to. Re-upload a clearer copy of{" "}
             {illegible.pages.length === 1 ? "that page" : "those pages"}, then continue to
             verification.
           </p>
