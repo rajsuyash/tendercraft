@@ -135,8 +135,11 @@ async def suggest_for_criterion(
     )
     if not criterion:
         raise ApiError(404, "CRITERION_NOT_FOUND", "criterion not found in this tender")
+    # .get, not []: the guard's contract is "does this row exist and is it yours", and a
+    # criterion with no text simply has nothing to match against — a 500 on the read path of
+    # a suggestion panel is a far worse answer than "no suggestions".
     return ok(await run_in_threadpool(
-        _suggest, user.workspace_id, criterion["verbatim_text"], None
+        _suggest, user.workspace_id, criterion.get("verbatim_text") or "", None
     ))
 
 

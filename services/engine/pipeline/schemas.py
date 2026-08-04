@@ -209,3 +209,27 @@ KEYWORDS_SCHEMA = {
     },
     "required": ["keywords"],
 }
+
+
+#: Requirement -> answer pairs mined from a bid the client already SUBMITTED (G-FR3).
+#: `answer_text` must be copied verbatim from the document — the deterministic layer verifies
+#: that it actually appears in the source before storing, so a paraphrase is dropped rather
+#: than stored. Reuse is only worth anything if the words are the ones the evaluator accepted.
+ANSWER_PAIR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "pairs": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "requirement_text": {"type": "string"},
+                    "answer_text": {"type": "string"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["requirement_text", "answer_text", "confidence"],
+            },
+        }
+    },
+    "required": ["pairs"],
+}

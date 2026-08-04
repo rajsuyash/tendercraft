@@ -130,3 +130,25 @@ Mumbai anyway); until then, count round trips like they cost money.
   already had (`_readiness_and_proposal`) rather than recomputing it.
 - Cloud Run with no `min-instances` scales to zero, so the first visitor after an idle period pays
   a full container start (3.2s measured on `/dashboard`). Fine for a demo, wrong for a customer.
+
+## Answer reuse (Module G, G-FR3)
+
+- A stub that returns MORE than the real query does is not a test → `get_criterion_in_tender`
+  selected `id` only, every unit test stubbed it with `verbatim_text`, and the suggestion route
+  read that field. Nine green tests, and the first live call 500'd. When a test stubs a db
+  function, the stub's shape is an assumption about a query in another file — pin it (assert on
+  the query source, or use the real function) or the suite proves only that the stub agrees with
+  itself.
+- A model asked to extract a prior answer will PARAPHRASE it, and a paraphrase is the model
+  writing with a past submission's credibility attached → `appears_verbatim` drops any answer
+  that is not literally in the source page. Whitespace is normalised (PDFs wrap); case and
+  punctuation are not (a comma changes what a compliance sentence commits to).
+- A style/tone brief derived by READING untrusted documents and injected into every later prompt
+  is a permanent prompt-injection channel — stripping digits and credentials removes facts but
+  not instructions → template the brief from measurements only (`deterministic/style.py`), so no
+  attacker-controlled byte reaches a prompt.
+- Reusing a prior answer verbatim re-asserts every claim inside it as of TODAY → re-run it
+  through `validate_draft` against the current library on the GET (so flags are visible before
+  accepting) and again on accept (the library may have changed in between). An expired document
+  is already excluded from retrieval, so a stale claim fails to re-cite on its own — but report
+  WHICH document expired and when, or the user dismisses a generic "unverified".

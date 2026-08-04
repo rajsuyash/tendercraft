@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.deterministic.answer_mining import match_section_key, mine_answers
+from app.deterministic.answer_mining import appears_verbatim, match_section_key, mine_answers
 
 SPECS = (
     ("understanding", "Form 7(b): Understanding of the Project"),
@@ -66,3 +66,27 @@ def test_pairs_keep_document_order_across_a_package():
     ]
     mined = mine_answers(pages, SPECS)
     assert [m.document for m in mined] == ["NIT-response.pdf", "Annexure-II.pdf"]
+
+
+# ---------- the verbatim gate (what makes the model half safe) ----------
+def test_a_paraphrase_is_not_verbatim():
+    source = "We deployed the platform across 14 districts in eleven months."
+    assert appears_verbatim("We deployed the platform across 14 districts", source)
+    # Reworded — the words an evaluator accepted are gone, so this is the model writing.
+    assert not appears_verbatim("The platform was deployed across 14 districts", source)
+
+
+def test_a_line_break_inside_a_sentence_is_still_verbatim():
+    # PDFs wrap. That is an artefact of the format, not a change to the text.
+    source = "We deployed the platform\nacross 14 districts."
+    assert appears_verbatim("We deployed the platform across 14 districts.", source)
+
+
+def test_changed_punctuation_is_not_verbatim():
+    # A comma can change what a compliance sentence commits to.
+    source = "We will provide support, subject to the agreed SLA."
+    assert not appears_verbatim("We will provide support subject to the agreed SLA.", source)
+
+
+def test_an_empty_answer_is_never_verbatim():
+    assert not appears_verbatim("   ", "anything at all")

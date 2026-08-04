@@ -84,6 +84,28 @@ def match_section_key(heading: str, specs: Sequence[tuple[str, str]]) -> str | N
     return best if best_score >= 0.5 else None
 
 
+#: Whitespace differences are a PDF artefact, not a paraphrase — a line break inside a
+#: sentence must not fail the verbatim check, while a changed word must.
+_WHITESPACE = re.compile(r"\s+")
+
+
+def appears_verbatim(answer: str, source: str) -> bool:
+    """Is this answer actually IN the document, word for word?
+
+    The model half of mining may only POINT AT text, never author it. A paraphrase is the
+    model writing with a past bid's reputation attached — the words a reuse suggestion is
+    worth anything for are the ones an evaluator actually accepted, so a rewritten answer is
+    dropped rather than stored.
+
+    Normalised on whitespace only. Not on case or punctuation: "shall" and "Shall" are the
+    same word wrapped differently, but a changed comma in a compliance sentence can change
+    what it commits to.
+    """
+    if not answer.strip():
+        return False
+    return _WHITESPACE.sub(" ", answer).strip() in _WHITESPACE.sub(" ", source).strip()
+
+
 def _heading_of(line: str) -> str | None:
     line = line.strip()
     if not line or len(line) > _MAX_REQUIREMENT_CHARS or _FURNITURE.match(line):

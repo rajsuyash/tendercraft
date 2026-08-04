@@ -8,6 +8,7 @@ Word document stops being a blob and becomes reusable, attributable answers.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
@@ -29,6 +30,10 @@ CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # the package ceiling, matching tender ingest
 _MAX_DOC_CHARS = 20000  # library_documents.text_content is stored truncated
+#: One model call per unstructured page, capped. A 90-page bid must not become 90 calls
+#: because someone uploaded a scan-flavoured PDF with no headings.
+_MAX_MODEL_PAGES = 12
+_MINER_WORKERS = 4
 
 #: (key, heading) pairs for section matching. Passed into the deterministic miner rather than
 #: imported by it, so app/deterministic/ stays free of app-level imports.
@@ -37,6 +42,32 @@ _SPECS = tuple((s.key, s.heading) for s in SECTION_SPECS)
 
 class OutcomeIn(BaseModel):
     outcome: Literal["won", "lost", "unknown"]
+
+
+def _mine_residue(
+    pages: list[tuple[str, str]], found: list, limit: int = _MAX_MODEL_PAGES,
+) -> list:
+    """Ask the model about pages the structure pass could not read.
+
+    Only the residue, and only up to a cap: a 90-page bid is one model call per unreadable
+    page, and an uncapped loop over a big package is a cost incident wearing the face of a
+    feature. Pages that DID yield a structured pair are skipped entirely — they are already
+    mined, and re-reading them would duplicate answers under two names.
+    """
+    from pipeline.answer_miner import mine_page
+
+    mined_text = {a.answer_text for a in found}
+    residue = [
+        (doc, i, text) for i, (doc, text) in enumerate(pages, 1)
+        if text.strip() and not any(text.find(t) >= 0 for t in mined_text)
+    ][:limit]
+    if not residue:
+        return []
+
+    # Independent calls; sequential would be minutes on a real bid.
+    with ThreadPoolExecutor(max_workers=_MINER_WORKERS) as pool:
+        results = pool.map(lambda p: mine_page(p[0], p[1], p[2], _SPECS), residue)
+    return [a for group in results for a in group]
 
 
 def _process(
@@ -85,7 +116,8 @@ def _process(
         actor,
     )
 
-    mined = mine_answers(pages, _SPECS)
+    mined = list(mine_answers(pages, _SPECS))
+    mined += _mine_residue(pages, mined)
     stored = db.upsert_answers(workspace_id, bid["id"], [
         {
             "requirement_text": m.requirement_text,

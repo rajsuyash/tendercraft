@@ -147,3 +147,24 @@ def test_a_reused_claim_with_no_supporting_document_today_is_unverified(monkeypa
         "We hold ISO 9001:2015 certification.", [], reuse_routes.SectionKind.COMPLIANCE,
     )
     assert [f["reason"] for f in result["flags"]] == ["unverified"]
+
+
+def test_the_ownership_guard_returns_the_text_the_suggestion_needs():
+    """Regression: the route read criterion["verbatim_text"], which the guard did not select.
+
+    Every unit test passed because they stubbed the guard with a field the real query never
+    returned; a live end-to-end run 500'd on the first call. A stub that returns more than the
+    real function does is not a test, so this one asserts the QUERY, not the stub.
+    """
+    import inspect
+
+    src = inspect.getsource(db.get_criterion_in_tender)
+    assert "verbatim_text" in src, "the reuse suggestion path reads this field from the guard"
+
+
+def test_a_criterion_with_no_text_yields_no_suggestions_rather_than_a_500(client, monkeypatch,
+                                                                         corpus):
+    monkeypatch.setattr(db, "get_criterion_in_tender", lambda c, t, ws: {"id": "c1"})
+    r = client.get("/api/tenders/t1/criteria/c1/suggestions")
+    assert r.status_code == 200
+    assert r.json()["data"]["suggestions"] == []

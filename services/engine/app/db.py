@@ -85,12 +85,17 @@ def confirm_criterion(criterion_id: str, workspace_id: str) -> list[dict]:
 
 def get_criterion_in_tender(criterion_id: str, tender_id: str, workspace_id: str) -> dict | None:
     """Existence check that a criterion belongs to this tender AND this workspace — the guard on any
-    write that binds a criterion (decisions, per-item doc links). One query covers ET-6."""
+    write that binds a criterion (decisions, per-item doc links). One query covers ET-6.
+
+    Returns the requirement text as well as the id: callers that guard AND then need the text
+    (answer-reuse suggestions) would otherwise make a second round trip for a row they just
+    read, at ~130ms each (docs/known-pitfalls.md, latency).
+    """
     rows = _rest(
         "GET", "criteria",
         params={
             "id": f"eq.{criterion_id}", "tender_id": f"eq.{tender_id}",
-            "workspace_id": f"eq.{workspace_id}", "select": "id",
+            "workspace_id": f"eq.{workspace_id}", "select": "id,verbatim_text",
         },
     )
     return rows[0] if rows else None

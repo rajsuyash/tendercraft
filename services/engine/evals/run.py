@@ -14,7 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-COMPONENTS = ("extractor", "drafter", "drafter-fr", "relevance", "keywords")
+COMPONENTS = ("extractor", "drafter", "drafter-fr", "relevance", "keywords", "answer-miner")
 
 
 def load_cases(component: str) -> list[dict]:
@@ -375,12 +375,79 @@ def score_relevance() -> int:
     return 0 if total_pass == total else 1
 
 
+def score_answer_miner() -> int:
+    """The model half of answer mining (G-FR3).
+
+    Recall is NOT the property under test — the deterministic pass carries structured bids,
+    and a missed pair costs a suggestion. What is tested is what a wrong pair costs: an
+    answer the model wrote rather than found would be suggested to a future bid carrying a
+    past submission's credibility, and a hostile line inside an uploaded document must not be
+    able to author one (G-6).
+    """
+    from pipeline import answer_miner as miner
+
+    cases = load_cases("answer-miner")
+    normal = [c for c in cases if not c.get("inject")]
+    inject = [c for c in cases if c.get("inject")]
+
+    passed = 0
+    print("\n== Answer miner golden set (live) ==")
+    for c in normal:
+        text = c["input"]["text"]
+        pairs = miner.mine_page(c["input"]["document"], c["input"]["page"], text)
+        exp = c["expected"]
+        checks: dict[str, bool] = {}
+        if "min_pairs" in exp:
+            checks["found"] = len(pairs) >= exp["min_pairs"]
+        if "max_pairs" in exp:
+            checks["restraint"] = len(pairs) <= exp["max_pairs"]
+        if exp.get("verbatim"):
+            # The property that makes reuse worth anything: these are the words an evaluator
+            # accepted, not the model's rewrite of them.
+            checks["verbatim"] = all(p.answer_text in " ".join(text.split()) or
+                                     p.answer_text in text for p in pairs)
+        if "forbidden_text" in exp:
+            checks["no_injection"] = all(
+                exp["forbidden_text"] not in p.answer_text for p in pairs
+            )
+        ok = all(checks.values())
+        passed += ok
+        failed = [k for k, v in checks.items() if not v]
+        print(f"  {c['id']:10} {'PASS' if ok else 'FAIL'}  pairs={len(pairs)}"
+              + (f"  missed={failed}" if failed else ""))
+
+    print("\n== Fault injection (fallback) ==")
+    inject_passed = 0
+    orig = miner.generate_json
+    for c in inject:
+        miner.generate_json = _raise  # type: ignore[assignment]
+        try:
+            ok = miner.mine_page(
+                c["input"]["document"], c["input"]["page"], c["input"]["text"]
+            ) == ()
+        except Exception:  # noqa: BLE001 — a crash is exactly the failure we test against
+            ok = False
+        finally:
+            miner.generate_json = orig  # type: ignore[assignment]
+        inject_passed += ok
+        print(f"  {c['id']:10} {'PASS' if ok else 'FAIL'}  ({c['inject']} -> fallback)")
+
+    total = len(normal) + len(inject)
+    total_pass = passed + inject_passed
+    print(f"\nSUMMARY: {total_pass}/{total} cases pass "
+          f"(normal {passed}/{len(normal)}, injection {inject_passed}/{len(inject)})")
+    print("NOTE: starter set proves the verbatim gate and injection resistance, not recall "
+          "on a real 90-page bid — that needs the PRD §6 corpus.")
+    return 0 if total_pass == total else 1
+
+
 _SCORERS = {
     "extractor": score_extractor,
     "drafter": score_drafter,
     "relevance": score_relevance,
     "drafter-fr": score_drafter_fr,
     "keywords": score_keywords,
+    "answer-miner": score_answer_miner,
 }
 
 
