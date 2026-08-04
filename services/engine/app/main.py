@@ -30,8 +30,10 @@ def create_app() -> FastAPI:
     from .matrix_routes import router as matrix_router
     from .members_routes import router as members_router
     from .opportunities_routes import router as opportunities_router
+    from .past_bids_routes import router as past_bids_router
     from .proposal_routes import router as proposal_router
     from .readiness_routes import router as readiness_router
+    from .reuse_routes import router as reuse_router
     from .tenders import router as tenders_router
 
     app = FastAPI(title="TenderCraft Engine", version="0.1.0")
@@ -48,6 +50,8 @@ def create_app() -> FastAPI:
     app.include_router(members_router)
     app.include_router(matrix_router)
     app.include_router(opportunities_router)
+    app.include_router(past_bids_router)
+    app.include_router(reuse_router)
 
     @app.get("/health")
     async def health() -> dict:

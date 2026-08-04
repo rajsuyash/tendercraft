@@ -717,6 +717,109 @@ def create_workspace(name: str, org_id: str | None) -> dict:
     return rows[0]
 
 
+# ---------- past bids + the answer library (G-FR3) ----------
+def create_past_bid(workspace_id: str, bid: dict, uploaded_by: str | None) -> dict:
+    rows = _rest(
+        "POST", "past_bids",
+        json={**bid, "workspace_id": workspace_id, "uploaded_by": uploaded_by},
+    )
+    return rows[0]
+
+
+def get_past_bid(past_bid_id: str, workspace_id: str) -> dict | None:
+    """Ownership guard for a caller-supplied bid id — the service role will not do it for us."""
+    rows = _rest(
+        "GET", "past_bids",
+        params={"id": f"eq.{past_bid_id}", "workspace_id": f"eq.{workspace_id}", "select": "*"},
+    )
+    return rows[0] if rows else None
+
+
+def list_past_bids(workspace_id: str) -> list[dict]:
+    return _rest(
+        "GET", "past_bids",
+        params={"workspace_id": f"eq.{workspace_id}", "select": "*",
+                "order": "created_at.desc"},
+    ) or []
+
+
+def set_past_bid_outcome(past_bid_id: str, workspace_id: str, outcome: str) -> None:
+    _rest(
+        "PATCH", "past_bids",
+        params={"id": f"eq.{past_bid_id}", "workspace_id": f"eq.{workspace_id}"},
+        json={"outcome": outcome},
+    )
+
+
+def upsert_answers(workspace_id: str, past_bid_id: str, rows: list[dict]) -> list[dict]:
+    """Store mined pairs. Re-mining the same bid updates rather than duplicating."""
+    if not rows:
+        return []
+    payload = [{**r, "workspace_id": workspace_id, "past_bid_id": past_bid_id} for r in rows]
+    return _rest(
+        "POST", "answers",
+        params={"on_conflict": "workspace_id,past_bid_id,requirement_text"},
+        json=payload,
+        prefer="return=representation,resolution=merge-duplicates",
+    ) or []
+
+
+def get_answers_with_bids(workspace_id: str) -> list[dict]:
+    """Every mined answer joined to the bid it shipped in — the input to reuse ranking.
+
+    The join is what makes a suggestion a suggestion with a receipt: outcome, authority and
+    date travel with the text, so the user is never asked to accept an anonymous paragraph.
+    """
+    rows = _rest(
+        "GET", "answers",
+        params={
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "id,requirement_text,answer_text,section_key,category,past_bid_id,"
+                      "past_bids(name,authority,submitted_on,outcome)",
+        },
+    ) or []
+    out = []
+    for r in rows:
+        bid = r.pop("past_bids", None) or {}
+        out.append({
+            **r,
+            "bid_name": bid.get("name"),
+            "authority": bid.get("authority"),
+            "submitted_on": bid.get("submitted_on"),
+            "outcome": bid.get("outcome") or "unknown",
+        })
+    return out
+
+
+def get_answer(answer_id: str, workspace_id: str) -> dict | None:
+    rows = _rest(
+        "GET", "answers",
+        params={"id": f"eq.{answer_id}", "workspace_id": f"eq.{workspace_id}", "select": "*"},
+    )
+    return rows[0] if rows else None
+
+
+def record_answer_usage(
+    workspace_id: str, answer_id: str, proposal_id: str | None, target: str, actor: str | None,
+) -> dict:
+    """The G-AC6 receipt. Written by the accept path and by nothing else."""
+    rows = _rest(
+        "POST", "answer_usages",
+        json={"workspace_id": workspace_id, "answer_id": answer_id,
+              "proposal_id": proposal_id, "target": target, "actor": actor},
+    )
+    return rows[0]
+
+
+def get_expired_library_docs(workspace_id: str, today_iso: str) -> list[dict]:
+    """The inverse of get_valid_library_docs — what a reused answer may no longer claim."""
+    docs = _rest(
+        "GET", "library_documents",
+        params={"workspace_id": f"eq.{workspace_id}", "select": "id,name,valid_to"},
+    ) or []
+    return [d for d in docs if d.get("valid_to") and d["valid_to"] < today_iso]
+
+
 def get_profile(user_id: str) -> dict | None:
     rows = _rest(
         "GET", "profiles",
@@ -784,6 +887,45 @@ def edit_section(workspace_id: str, proposal_id: str, key: str, body_md: str,
             "flags": [],
             "edited_by": editor,
             "edited_at": when_iso,
+            "approved_by": None,
+            "approved_at": None,
+        },
+    )
+
+
+def append_reused_section_text(
+    workspace_id: str, proposal_id: str, key: str, text: str, validation: dict,
+) -> None:
+    """Add an accepted prior answer to a section, keeping the flags it came with.
+
+    Deliberately NOT edit_section: that clears flags, because once a human has rewritten the
+    prose they own it and a flag against text the model no longer wrote means nothing. A
+    reused answer is the opposite case — nobody has re-written those sentences, and a claim
+    inside them that no longer resolves must stay flagged until someone deals with it.
+
+    Approval is cleared, as with any edit: a section that changed after sign-off needs signing
+    off again.
+    """
+    rows = _rest(
+        "GET", "proposal_sections",
+        params={"proposal_id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
+                "key": f"eq.{key}", "select": "body_md,sentences,flags"},
+    ) or []
+    if not rows:
+        raise ApiError(404, "SECTION_NOT_FOUND", f"section {key} not found on this proposal")
+    current = rows[0]
+    body = f"{(current.get('body_md') or '').rstrip()}\n\n{text.strip()}".strip()
+    _rest(
+        "PATCH", "proposal_sections",
+        params={"proposal_id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
+                "key": f"eq.{key}"},
+        json={
+            "body_md": body,
+            "word_count": len(body.split()),
+            "sentences": (current.get("sentences") or []) + validation["sentences"],
+            "flags": (current.get("flags") or []) + validation["flags"],
+            # A section carrying an unresolved flag is 'unverified' whatever it was before.
+            "status": "unverified" if validation["flags"] else "drafted",
             "approved_by": None,
             "approved_at": None,
         },
