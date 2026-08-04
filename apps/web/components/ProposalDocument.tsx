@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { ReuseSuggestions } from "./ReuseSuggestions";
 import { StageProgress } from "./StageProgress";
 import { useState } from "react";
 
@@ -345,6 +346,17 @@ export function ProposalDocument({
                   </li>
                 ))}
               </ul>
+            ) : null}
+
+            {proposalId && s.kind === "narrative" ? (
+              <div className="mt-3">
+                <ReuseSuggestions
+                  suggestionsUrl={`/api/proposals/${proposalId}/sections/${s.key}/suggestions`}
+                  proposalId={proposalId}
+                  targetKind="section"
+                  target={s.key}
+                />
+              </div>
             ) : null}
 
             {proposalId && editing !== s.key ? (

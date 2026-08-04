@@ -24,6 +24,8 @@ Return 3–6 `subsections`, each with a real heading and several substantive par
 
 {{SECTION_BRIEF}}
 
+{{STYLE_BRIEF}}
+
 ## Tender context
 
 {{TENDER_CONTEXT}}

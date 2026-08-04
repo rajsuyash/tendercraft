@@ -19,6 +19,7 @@ from . import authz, db
 from .auth import AuthedUser, get_current_user
 from .deterministic.answer_mining import mine_answers
 from .deterministic.drafting import template_placeholders
+from .deterministic.style import build_profile
 from .envelope import ApiError, ok
 from .ingest import parse_document_pages
 from .sections import SECTION_SPECS
@@ -152,6 +153,36 @@ async def ingest_past_bid(
         "outcome": outcome,
     }
     return ok(await run_in_threadpool(_process, user.workspace_id, user.user_id, documents, meta))
+
+
+@router.post("/api/style-profile/rebuild")
+def rebuild_style_profile(user: CurrentUser) -> dict:
+    """Re-measure how this bidder writes, from every past bid in the workspace.
+
+    On demand rather than on upload: measuring is cheap but the result changes how every
+    future section is drafted, and that should be a moment the user chose.
+    """
+    authz.check(user, authz.DRAFT)
+    texts = db.get_past_bid_texts(user.workspace_id)
+    profile = build_profile(texts)
+    saved = db.upsert_style_profile(user.workspace_id, profile, user.user_id)
+    db.write_audit(user.workspace_id, user.user_id, "style_profile_rebuilt", "workspace",
+                   user.workspace_id, after={"built_from": profile["built_from"],
+                                             "has_brief": bool(profile["brief"])})
+    return ok({
+        **profile,
+        "id": saved.get("id"),
+        # Say so plainly rather than showing an empty panel: too little to measure is a
+        # state the user can fix (upload more bids), not an error.
+        "note": "" if profile["brief"] else
+                f"not enough prose yet — measured {profile['built_from']} past bid(s)",
+    })
+
+
+@router.get("/api/style-profile")
+def get_style_profile(user: CurrentUser) -> dict:
+    profile = db.get_style_profile(user.workspace_id)
+    return ok(profile or {"metrics": {}, "brief": "", "built_from": 0})
 
 
 @router.get("/api/past-bids")

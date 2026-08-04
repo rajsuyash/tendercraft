@@ -174,3 +174,41 @@ def test_no_evidence_still_drafts_approach_prose(monkeypatch):
     }))
     r = sd.draft_section("approach_methodology", "Methodology", 2500, CTX, [])
     assert r.status == "drafted"
+
+
+# ---------- house style (Phase 4) ----------
+def _captured_prompt(monkeypatch, style_brief=""):
+    seen: dict = {}
+
+    def _capture(prompt, schema, **kw):
+        seen["prompt"] = prompt
+        return {"subsections": [_sub("H", [_sent("The team will deliver in phases.")])],
+                "has_sufficient_context": True}
+
+    monkeypatch.setattr(sd, "generate_json", _capture)
+    sd.draft_section("approach_methodology", "Form 7(c)", 2500, CTX, CHUNKS,
+                     style_brief=style_brief)
+    return seen["prompt"]
+
+
+def test_a_workspace_with_no_past_bids_gets_the_prompt_unchanged():
+    # The placeholder must be inert, not merely harmless: an empty brief leaves nothing behind
+    # but whitespace, so drafting behaviour for existing workspaces is untouched.
+    assert "{{STYLE_BRIEF}}" in sd._TEMPLATE
+
+
+def test_an_empty_brief_leaves_no_style_instruction_in_the_prompt(monkeypatch):
+    prompt = _captured_prompt(monkeypatch, "")
+    assert "House style" not in prompt
+    assert "{{STYLE_BRIEF}}" not in prompt  # substituted, never leaked as a literal
+
+
+def test_a_measured_brief_reaches_the_model(monkeypatch):
+    from app.deterministic.style import build_profile
+
+    corpus = ["We have delivered platforms for state departments and retained ownership. " * 60]
+    brief = build_profile(corpus)["brief"]
+    prompt = _captured_prompt(monkeypatch, brief)
+    assert "House style" in prompt
+    # It sits with the instructions, not inside the evidence — style is never citable material.
+    assert prompt.index("House style") < prompt.index("Evidence chunks available")

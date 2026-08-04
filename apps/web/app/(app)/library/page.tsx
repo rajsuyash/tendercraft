@@ -1,4 +1,5 @@
 import { KnowledgeUpload } from "@/components/KnowledgeUpload";
+import { PastBids, type PastBid } from "@/components/PastBids";
 import { formatDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,12 +31,23 @@ function keyValueSummary(fields: Record<string, unknown> | null): string {
 // S8 — Content Library. S8-D1 (expired rows + hard-exclusion banner), S8-D2 (per-doc provenance).
 export default async function LibraryPage() {
   const supabase = await createClient();
-  const { data: documents } = await supabase
-    .from("library_documents")
-    .select("id,name,doc_type,valid_to,structured_fields,created_at")
-    .order("created_at", { ascending: false });
+  // Three independent reads — awaiting them in sequence multiplies the round trip by three
+  // (docs/known-pitfalls.md, latency).
+  const [{ data: documents }, { data: bids }, { data: style }] = await Promise.all([
+    supabase
+      .from("library_documents")
+      .select("id,name,doc_type,valid_to,structured_fields,created_at")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("past_bids")
+      .select("id,name,authority,submitted_on,outcome,created_at")
+      .order("created_at", { ascending: false }),
+    supabase.from("style_profiles").select("brief").maybeSingle(),
+  ]);
 
   const docs = (documents ?? []) as LibraryDocument[];
+  const pastBids = (bids ?? []) as PastBid[];
+  const styleProfile = style as { brief: string } | null;
   const now = new Date();
 
   const expiredCount = docs.filter((d) => d.valid_to && new Date(d.valid_to) < now).length;
@@ -59,6 +71,10 @@ export default async function LibraryPage() {
 
       <div className="mb-6">
         <KnowledgeUpload />
+      </div>
+
+      <div className="mb-6">
+        <PastBids initial={pastBids} styleBrief={styleProfile?.brief ?? ""} />
       </div>
 
       {expiredCount > 0 && (

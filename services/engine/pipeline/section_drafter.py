@@ -88,7 +88,7 @@ def _proposed_class(s: dict) -> SentenceClass:
 
 def draft_section(
     key: str, heading: str, target_words: int, tender_context: str, evidence_chunks: list[dict],
-    needs_bidder_evidence: bool = False,
+    needs_bidder_evidence: bool = False, style_brief: str = "",
 ) -> DraftedSection:
     """Draft one narrative section. `evidence_chunks`: [{id, name, text}]. Never raises.
 
@@ -117,6 +117,10 @@ def draft_section(
         .replace("{{TARGET_WORDS}}", str(target_words))
         .replace("{{TENDER_CONTEXT}}", tender_context)
         .replace("{{EVIDENCE}}", evidence_str)
+        # Empty for a workspace with no past bids — the prompt then reads exactly as it did
+        # before house style existed. app/deterministic/style.py guarantees this string is
+        # templated from measurements, never quoted from an uploaded document (G-6).
+        .replace("{{STYLE_BRIEF}}", style_brief or "")
     )
 
     try:

@@ -811,6 +811,34 @@ def record_answer_usage(
     return rows[0]
 
 
+def get_past_bid_texts(workspace_id: str) -> list[str]:
+    """The prose of every past bid, for measuring house style. Text only — no metadata."""
+    rows = _rest(
+        "GET", "library_documents",
+        params={"workspace_id": f"eq.{workspace_id}", "doc_type": "eq.past_proposal",
+                "select": "text_content"},
+    ) or []
+    return [r.get("text_content") or "" for r in rows if (r.get("text_content") or "").strip()]
+
+
+def upsert_style_profile(workspace_id: str, profile: dict, actor: str | None) -> dict:
+    rows = _rest(
+        "POST", "style_profiles",
+        params={"on_conflict": "workspace_id"},
+        json={"workspace_id": workspace_id, "built_by": actor, **profile},
+        prefer="return=representation,resolution=merge-duplicates",
+    )
+    return rows[0] if rows else {}
+
+
+def get_style_profile(workspace_id: str) -> dict | None:
+    rows = _rest(
+        "GET", "style_profiles",
+        params={"workspace_id": f"eq.{workspace_id}", "select": "*", "limit": "1"},
+    )
+    return rows[0] if rows else None
+
+
 def get_expired_library_docs(workspace_id: str, today_iso: str) -> list[dict]:
     """The inverse of get_valid_library_docs — what a reused answer may no longer claim."""
     docs = _rest(

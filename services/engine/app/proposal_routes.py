@@ -134,10 +134,15 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
         "annexures": sections.assemble_annexures(docs, today),
     }
 
+    # How this bidder writes, measured from their own past bids. Empty (and therefore inert)
+    # for a workspace that has uploaded none.
+    style_brief = (db.get_style_profile(workspace_id) or {}).get("brief") or ""
+
     def _narrative(spec: sections.SectionSpec):
         ev = select_evidence(f"{spec.evidence_query} {spec.heading}", chunks, top_k=12)
         return draft_section(
-            spec.key, spec.heading, spec.target_words, context, ev, spec.needs_bidder_evidence
+            spec.key, spec.heading, spec.target_words, context, ev,
+            spec.needs_bidder_evidence, style_brief,
         )
 
     narrative_specs = [sections.SPEC_BY_KEY[k] for k in sections.NARRATIVE_KEYS]

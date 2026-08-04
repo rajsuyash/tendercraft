@@ -5,6 +5,8 @@ import { useState, useTransition } from "react";
 
 import { sourceAnchor } from "@/lib/format";
 
+import { ReuseSuggestions } from "./ReuseSuggestions";
+
 // Mirrors app/deterministic/matrix.py::MatrixRowStatus. If one end changes, change the other
 // — a UI array that mirrors a server enum WILL drift, and the symptom is a dead-looking
 // control that 422s (known-pitfalls).
@@ -268,7 +270,20 @@ export function MatrixWorkspace({ tenderId, initial }: { tenderId: string; initi
           <tbody className="divide-y divide-hairline">
             {matrix.rows.map((row) => (
               <tr key={row.id} data-matrix-row className="align-top">
-                <td className="p-3 text-ink">{row.requirement_text}</td>
+                <td className="p-3 text-ink">
+                  {row.requirement_text}
+                  {/* No proposal here on purpose: the matrix is the standalone deliverable for
+                      teams drafting in Word, so prior answers are shown to read and copy. */}
+                  <div className="mt-1">
+                    <ReuseSuggestions
+                      suggestionsUrl={`/api/tenders/${tenderId}/criteria/${row.criterion_id}/suggestions`}
+                      proposalId={null}
+                      targetKind="criterion"
+                      target={row.criterion_id}
+                      label="Prior answers"
+                    />
+                  </div>
+                </td>
                 <td className="p-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs ${LEVEL_STYLE[row.requirement_level]}`}>
                     {LEVEL_LABEL[row.requirement_level]}
