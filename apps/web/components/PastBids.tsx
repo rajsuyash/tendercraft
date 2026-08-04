@@ -5,6 +5,8 @@ import { useState } from "react";
 
 import { formatDate } from "@/lib/format";
 
+import { PastBidUpload } from "./PastBidUpload";
+
 export interface PastBid {
   id: string;
   name: string;
@@ -31,38 +33,6 @@ export function PastBids({ initial, styleBrief }: { initial: PastBid[]; styleBri
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<PastBid["outcome"]>("unknown");
-
-  async function upload(files: FileList) {
-    const chosen = Array.from(files);
-    const first = chosen[0];
-    if (!first) return;
-    setBusy(true);
-    setError(null);
-    setNote(`Reading ${chosen.length === 1 ? first.name : `${chosen.length} documents`}…`);
-
-    const form = new FormData();
-    for (const f of chosen) form.append("file", f);
-    form.append("name", first.name.replace(/\.[^.]+$/, ""));
-    form.append("outcome", outcome);
-
-    const res = await fetch("/api/past-bids", { method: "POST", body: form });
-    const body = await res.json();
-    setBusy(false);
-    if (!res.ok || !body.ok) {
-      setNote(null);
-      // The blank-form refusal is the one error worth reading in full: it names the markers.
-      setError(body?.error?.message ?? "upload failed");
-      return;
-    }
-    setNote(
-      `${body.data.answers_mined} answer${body.data.answers_mined === 1 ? "" : "s"} mined` +
-        (body.data.sections_recognised.length
-          ? ` · sections recognised: ${body.data.sections_recognised.join(", ")}`
-          : " · no section headings recognised — answers are still searchable"),
-    );
-    router.refresh();
-  }
 
   async function setBidOutcome(id: string, next: PastBid["outcome"]) {
     setBusy(true);
@@ -100,34 +70,7 @@ export function PastBids({ initial, styleBrief }: { initial: PastBid[]; styleBri
             evidence before anything enters a draft.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            aria-label="Outcome of the bid being uploaded"
-            value={outcome}
-            onChange={(e) => setOutcome(e.target.value as PastBid["outcome"])}
-            className="rounded-control border border-hairline bg-surface px-2 py-1.5 text-xs text-ink"
-          >
-            {OUTCOMES.map((o) => (
-              <option key={o} value={o}>
-                {o === "unknown" ? "Outcome unknown" : `We ${o}`}
-              </option>
-            ))}
-          </select>
-          <label className="inline-flex cursor-pointer items-center rounded border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary-tint">
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.xlsx,.xlsm,.csv,application/pdf"
-              className="hidden"
-              disabled={busy}
-              onChange={(e) => {
-                const f = e.target.files;
-                if (f && f.length) void upload(f);
-              }}
-            />
-            {busy ? "Working…" : "Upload a past bid"}
-          </label>
-        </div>
+        <PastBidUpload onUploaded={() => router.refresh()} />
       </div>
 
       {error && (

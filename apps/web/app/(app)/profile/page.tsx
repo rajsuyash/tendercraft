@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { MarketPicker, type MarketOption } from "@/components/MarketPicker";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import { engineFetch } from "@/lib/engine";
@@ -53,8 +55,15 @@ export default async function ProfilePage() {
   // The active workspace comes from the ENGINE, which is the single authority on it.
   // NOT a bare .maybeSingle() on `workspaces`: that table's RLS deliberately returns EVERY
   // workspace you belong to (it backs the switcher), so a member of two would hit PGRST116.
-  const [meRes, { data: profile }, { data: financialsData }, { data: experienceData }, { data: certificationsData }] =
-    await Promise.all([
+  const [
+    meRes,
+    { data: profile },
+    { data: financialsData },
+    { data: experienceData },
+    { data: certificationsData },
+    { data: pastBidsData },
+    { data: styleData },
+  ] = await Promise.all([
       engineFetch("/api/me"),
       supabase
         .from("vendor_profiles")
@@ -75,6 +84,12 @@ export default async function ProfilePage() {
         .from("certifications")
         .select("id,name,cert_no,valid_from,valid_to")
         .order("valid_to", { ascending: true }),
+      // Past bids are neither a fact a comparator reads nor proof of anything — they are the
+      // workspace's own LANGUAGE. Reported here because this is where a user judges whether
+      // their workspace is set up, but never counted in the completeness meter below: that
+      // meter names items which BLOCK accurate analysis, and these block nothing.
+      supabase.from("past_bids").select("id,outcome"),
+      supabase.from("style_profiles").select("brief").maybeSingle(),
     ]);
 
   const me = meRes.ok ? ((await meRes.json()).data ?? null) : null;
@@ -114,6 +129,9 @@ export default async function ProfilePage() {
   const missingLegalCount =
     market === "IN" ? [profile?.cin, profile?.pan, profile?.gst].filter((v) => !v).length : 0;
   const blockingCount = missingLegalCount + expiredCerts.length;
+  const pastBids = (pastBidsData ?? []) as { id: string; outcome: string }[];
+  const wonBids = pastBids.filter((b) => b.outcome === "won").length;
+  const styleBrief = (styleData as { brief: string } | null)?.brief ?? "";
 
   const capabilityKeywords: string[] = profile?.capability_keywords ?? [];
 
@@ -178,6 +196,29 @@ export default async function ProfilePage() {
               </span>
             )}
           </div>
+
+          {/* Deliberately OUTSIDE the meter and never a warning chip: past bids change how a
+              draft SOUNDS and what can be REUSED. They change nothing about what is claimed,
+              cited or scored, so presenting them as a gap would be a false gate. */}
+          <p data-past-bids-summary className="mt-2 text-xs text-muted">
+            {pastBids.length > 0 ? (
+              <>
+                {pastBids.length} {t(pastBids.length === 1 ? "past bid" : "past bids")}
+                {wonBids > 0 && <> · {wonBids} {t("won")}</>} ·{" "}
+                {styleBrief ? t("house style measured") : t("house style not measured yet")} ·{" "}
+                <Link href="/library" className="text-primary underline">
+                  {t("manage in the knowledge base")}
+                </Link>
+              </>
+            ) : (
+              <>
+                {t("No past bids uploaded — proposals will be drafted in a neutral voice.")}{" "}
+                <Link href="/library" className="text-primary underline">
+                  {t("Add one")}
+                </Link>
+              </>
+            )}
+          </p>
         </div>
         <ProfileEditor
           locale={locale}

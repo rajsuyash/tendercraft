@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PastBidUpload } from "./PastBidUpload";
+
 /**
  * Prior answers offered against one requirement or section (G-FR3).
  *
@@ -64,9 +66,9 @@ export function ReuseSuggestions({
   const [error, setError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState<string | null>(null);
 
-  async function load() {
+  async function load(force = false) {
     setOpen(true);
-    if (items) return;
+    if (items && !force) return;
     setBusy(true);
     setError(null);
     const res = await fetch(suggestionsUrl);
@@ -116,11 +118,25 @@ export function ReuseSuggestions({
 
       {busy && <p className="mt-2 text-xs text-muted">Checking your past bids…</p>}
       {error && <p className="mt-2 text-xs text-danger">{error}</p>}
-      {items?.length === 0 && (
-        <p className="mt-2 text-xs text-muted">
-          Nothing close enough in your past bids. Upload more from the knowledge base, or write
-          this one fresh.
-        </p>
+      {items?.length === 0 && !busy && (
+        // The moment the need is legible: an empty section, and the user thinking "I have
+        // written this before". Telling them to go to another page here is a dead end — this
+        // is the one place an upload affordance is worth more than a link.
+        <div className="mt-2">
+          <p className="text-xs text-muted">
+            Nothing close enough in your past bids yet. Add one — it stays in your knowledge
+            base and is offered on every future tender.
+          </p>
+          <div className="mt-2">
+            <PastBidUpload
+              compact
+              label="Upload a past bid"
+              // Re-fetch rather than router.refresh(): the answer just mined should appear in
+              // THIS panel immediately, and a server refresh would not touch it.
+              onUploaded={() => void load(true)}
+            />
+          </div>
+        </div>
       )}
 
       <ul className="mt-2 space-y-3">

@@ -123,6 +123,17 @@ const FR: Record<string, string> = {
 
   "Not provided — without it your opportunity feed is ranked on keywords alone.":
     "Non renseigné — sans cela, votre flux d'opportunités est classé sur les seuls mots-clés.",
+  // Past bids: language, not evidence — the phrasing must not imply they affect eligibility.
+  "past bid": "candidature passée",
+  "past bids": "candidatures passées",
+  won: "remportée(s)",
+  "house style measured": "style rédactionnel mesuré",
+  "house style not measured yet": "style rédactionnel pas encore mesuré",
+  "manage in the knowledge base": "gérer dans la base de connaissances",
+  "No past bids uploaded — proposals will be drafted in a neutral voice.":
+    "Aucune candidature passée déposée — les propositions seront rédigées dans un style neutre.",
+  "Add one": "En ajouter une",
+
   Active: "Actif",
   complete: "complété",
   "item blocks": "élément empêche une",

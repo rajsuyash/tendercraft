@@ -283,6 +283,13 @@ export const FEATURES: { name: string; href?: string; what: string; detail?: str
       "Upload files or ingest a URL. Documents are classified, their key figures extracted, and their expiry tracked. Expired documents are excluded from drafting, not silently used.",
   },
   {
+    name: "Past bids",
+    href: "/library",
+    what: "Proposals you have already submitted, mined into answers you can reuse.",
+    detail:
+      "Changes how a draft SOUNDS and what you can reuse — never what is claimed, cited or scored. A prior answer is suggested with the bid it came from, its authority and its outcome, and it is re-checked against today's evidence before you accept it: if the certificate that backed it has since expired, you are told which one and when. Won, lost and unknown bids all count; a bid is usually lost on price, not on its methodology section.",
+  },
+  {
     name: "Proposal",
     what: "The full document, section by section, with inline editing and per-section approval.",
     detail:
