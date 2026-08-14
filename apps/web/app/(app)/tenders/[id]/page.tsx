@@ -53,8 +53,12 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
         <p className="text-sm text-muted">
           {tender.tender_number} · {tender.authority}
         </p>
-        {locked && (
-          <div className="mt-3 flex gap-2">
+        {/* Schedule fit sits outside the lock gate on purpose: "can we even make this" is worth
+            answering before anyone spends an afternoon verifying criteria, and the screen only
+            reads. The rest need a locked TOM to mean anything. */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {locked && (
+            <>
             <Link
               href={`/tenders/${id}/readiness`}
               className="rounded bg-primary px-3 py-1.5 text-sm font-medium text-on-primary hover:bg-primary-hover"
@@ -73,8 +77,15 @@ export default async function TenderDetailPage({ params }: { params: Promise<{ i
             >
               Compliance matrix
             </Link>
-          </div>
-        )}
+            </>
+          )}
+          <Link
+            href={`/tenders/${id}/schedule`}
+            className="rounded border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary-tint"
+          >
+            Schedule fit
+          </Link>
+        </div>
       </header>
 
       {CATEGORIES.map((cat) => {
