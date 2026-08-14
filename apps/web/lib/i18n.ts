@@ -279,6 +279,15 @@ const FR: Record<string, string> = {
     "Renseignés à partir de votre site web — modifiez ou supprimez-en dans le champ ci-dessus avant d'enregistrer.",
   "Add all": "Tout ajouter",
 
+  // ── routing (M12) ──────────────────────────────────────────
+  Owner: "Responsable",
+  Unassigned: "Non attribué",
+  "Former member": "Ancien membre",
+  "Watch this tender": "Suivre cette consultation",
+  "Stop watching": "Ne plus suivre",
+  "Could not route this tender. Nothing was changed.":
+    "Impossible d'attribuer cette consultation. Rien n'a été modifié.",
+
   // ── provenance footer ──────────────────────────────────────
   "Tender content stays on the source portal and is linked, not reproduced.":
     "Le contenu des avis reste sur le portail source : il est lié, jamais reproduit.",

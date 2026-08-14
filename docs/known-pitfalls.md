@@ -30,6 +30,8 @@ Format: **symptom → cause → fix.**
 - Error responses leaking stack traces → default exception handler → global handler returns the envelope; traces to logs only
 - Client-supplied tenant/user IDs trusted → authz bug class #1 and ET-6 Sev-1 → derive from validated JWT, always; integration test asserts body-supplied tenant_id is ignored
 - Missing rate limits on public endpoints (upload!) → abuse/cost blowup → per-tenant rate limit at the edge
+- A PATCH body filtered with `{k: v for k, v in model_dump().items() if v is not None}` → **clearing a field is unreachable**: the one payload that means "unset this" (`{"assigned_to": null}`) is stripped to `{}` and answered 422, so the column can be written and never rewritten. Use `model_dump(exclude_unset=True)` — pydantic v2 already distinguishes *omitted* from *explicitly null*, which is the distinction the filter throws away. Found on `PATCH /api/opportunities/{id}`, where it had shipped unreachable behind an endpoint with no UI.
+- Writing a caller-supplied user id into a row with no FK behind it (`opportunity_matches.assigned_to`) → the write succeeds, and the tender is routed to somebody who cannot open it — a silent failure of the exact feature (ET-7 again), plus a foreign user id sitting in a workspace-scoped row → one `get_membership` check before the write; refuse with a named code rather than accepting it.
 
 ## AI pipeline
 

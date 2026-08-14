@@ -73,10 +73,14 @@ type Match = {
   eligibility: "likely_eligible" | "likely_ineligible" | "unknown";
   eligibility_reason: string | null;
   watched: boolean;
+  assigned_to: string | null;
   opportunities: Opportunity | null;
 };
 
 type Rule = { id: string; name: string; kind: string; enabled: boolean };
+
+/** Roster for the Owner column. Served with the feed so assigning costs no extra request. */
+type Member = { user_id: string; full_name: string | null; email: string | null; role: string };
 
 type FeedData = {
   state: string;
@@ -93,6 +97,7 @@ type FeedData = {
    *  went on naming a country the user had just switched off until the rows caught up. */
   markets?: string[];
   rules: Rule[];
+  members?: Member[];
 };
 
 /**
@@ -263,6 +268,70 @@ function Coverage({
   );
 }
 
+/**
+ * Routing controls — ask 1 in `docs/feedback/usha-martin.md`, whose real sentence was
+ * *"identified manually and circulated to the respective Zonal Heads"*. A star and an owner,
+ * not a CRM.
+ *
+ * The star is a `button` with `aria-pressed` rather than a checkbox: it toggles workspace state
+ * the moment it is clicked, and a checkbox implies a form that is submitted later.
+ */
+function Routing({
+  match,
+  members,
+  disabled,
+  onRoute,
+  t,
+}: {
+  match: Match;
+  members: Member[];
+  disabled: boolean;
+  onRoute: (patch: { assigned_to?: string | null; watched?: boolean }) => void;
+  t: (k: string) => string;
+}) {
+  const owner = match.assigned_to ?? "";
+  // A person removed from the workspace leaves their id on the rows they owned. Rendering the
+  // select with an unmatched value would silently show "Unassigned" — a tender that looks
+  // like nobody's when in fact nobody has been told it is now theirs.
+  const orphaned = owner && !members.some((m) => m.user_id === owner);
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        aria-pressed={match.watched}
+        aria-label={t(match.watched ? "Stop watching" : "Watch this tender")}
+        title={t(match.watched ? "Stop watching" : "Watch this tender")}
+        data-watched={match.watched || undefined}
+        disabled={disabled}
+        onClick={() => onRoute({ watched: !match.watched })}
+        className={`shrink-0 rounded px-1 text-base leading-none disabled:opacity-50 ${
+          match.watched ? "text-warning" : "text-muted hover:text-ink"
+        }`}
+      >
+        {match.watched ? "★" : "☆"}
+      </button>
+      <select
+        aria-label={t("Owner")}
+        data-assigned-to={owner}
+        value={owner}
+        disabled={disabled}
+        onChange={(e) => onRoute({ assigned_to: e.target.value || null })}
+        className="w-full min-w-0 rounded-control border border-hairline bg-surface px-1.5 py-1 text-[12px] text-ink disabled:opacity-50"
+      >
+        <option value="">{t("Unassigned")}</option>
+        {orphaned && (
+          <option value={owner}>{t("Former member")}</option>
+        )}
+        {members.map((m) => (
+          <option key={m.user_id} value={m.user_id}>
+            {m.full_name || m.email || m.user_id.slice(0, 8)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export function OpportunityFeed({
   data,
   state,
@@ -298,6 +367,11 @@ export function OpportunityFeed({
   const [sweeping, setSweeping] = useState(false);
   const [sort, setSort] = useState<SortKey>("fit");
   const [gating, setGating] = useState(false);
+  // Routing edits are held here until the next refresh, so the row reflects the click straight
+  // away. Keyed by opportunity, overlaid on the server rows — never a second copy of the feed.
+  const [routed, setRouted] = useState<Record<string, Partial<Match>>>({});
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const members = data.members ?? [];
 
   const items = useMemo(() => {
     const rows = (data.items ?? []).filter((m) => m.opportunities);
@@ -358,6 +432,24 @@ export function OpportunityFeed({
       startTransition(() => router.refresh());
     } finally {
       setGating(false);
+    }
+  }
+
+  async function route(id: string, patch: { assigned_to?: string | null; watched?: boolean }) {
+    const before = routed[id];
+    setRouted((r) => ({ ...r, [id]: { ...r[id], ...patch } }));
+    setRouteError(null);
+    const res = await fetch(`/api/opportunities/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body?.ok) {
+      // Roll the row back. A tender that LOOKS routed and is not is precisely the silent miss
+      // this feature exists to prevent (ET-7) — worse than a visible failure.
+      setRouted((r) => ({ ...r, [id]: before ?? {} }));
+      setRouteError(body?.error?.message ?? t("Could not route this tender. Nothing was changed."));
     }
   }
 
@@ -611,7 +703,16 @@ export function OpportunityFeed({
           )}
         </div>
       ) : (
-        <section className="mt-4 overflow-x-auto rounded-card border border-hairline bg-surface">
+        <section className="mt-4">
+          {routeError && (
+            <p
+              data-route-error
+              className="mb-3 rounded-card border border-danger bg-danger-bg p-3 text-sm text-danger"
+            >
+              {routeError}
+            </p>
+          )}
+          <div className="overflow-x-auto rounded-card border border-hairline bg-surface">
           <table className="w-full table-fixed text-sm">
             <colgroup>
               <col />
@@ -620,6 +721,7 @@ export function OpportunityFeed({
               <col className="w-[84px]" />
               <col className="w-[132px]" />
               <col className="w-[92px]" />
+              {state === "in_scope" && <col className="w-[176px]" />}
               {state === "excluded" && <col className="w-[160px]" />}
             </colgroup>
             <thead className="border-b border-hairline bg-surface-alt text-left text-[11px] uppercase tracking-wider text-muted">
@@ -632,13 +734,20 @@ export function OpportunityFeed({
                 <th className="px-4 py-2.5 text-right font-medium">
                   {t(market === "IN" ? "EMD" : "Deposit")}
                 </th>
+                {/* Routing lives on the in-scope bucket only: an item hidden by one of your own
+                    rules is not something to circulate to a colleague. */}
+                {state === "in_scope" && (
+                  <th className="px-4 py-2.5 font-medium">{t("Owner")}</th>
+                )}
                 {state === "excluded" && (
                   <th className="px-4 py-2.5 font-medium">{t("Excluded by")}</th>
                 )}
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline">
-              {items.map((match) => {
+              {items.map((server) => {
+                // The server row plus whatever this session has since routed.
+                const match = { ...server, ...routed[server.opportunity_id] } as Match;
                 const opp = match.opportunities!;
                 const parsed = opp.eligibility ?? {};
                 // Per row, not per page: a mixed feed must not render euros as rupees.
@@ -728,6 +837,17 @@ export function OpportunityFeed({
                         <span className="text-[13px] text-muted">—</span>
                       )}
                     </td>
+                    {state === "in_scope" && (
+                      <td className="px-4 py-2.5 align-top">
+                        <Routing
+                          match={match}
+                          members={members}
+                          disabled={busy}
+                          onRoute={(patch) => void route(match.opportunity_id, patch)}
+                          t={t}
+                        />
+                      </td>
+                    )}
                     {/* S14-D1: an excluded row must name its rule. In the in-scope bucket the
                         column has nothing to say, so it does not exist rather than rendering a
                         chip whose only content is "your revenue is large enough". */}
@@ -746,6 +866,7 @@ export function OpportunityFeed({
               })}
             </tbody>
           </table>
+          </div>
         </section>
       )}
 

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from . import db
+from . import authz, db
 from .auth import AuthedUser, get_current_user
 from .deterministic.discovery import RULE_KINDS
 from .discovery import ingest
@@ -74,6 +74,10 @@ async def list_opportunities(
             },
             "markets": markets,
             "rules": db.get_discovery_rules(user.workspace_id),
+            # The roster the Owner column assigns from. Served here rather than fetched by the
+            # page: the engine sits beside the database, so this is two co-located queries,
+            # where a second web->engine call would be another full hop for the same rows.
+            "members": db.get_workspace_members(user.workspace_id),
         }
 
     return ok(await run_in_threadpool(work))
@@ -233,9 +237,24 @@ async def delete_rule(rule_id: str, user: CurrentUser) -> dict:
 
 @router.patch("/api/opportunities/{opportunity_id}")
 async def patch_match(opportunity_id: str, body: MatchPatch, user: CurrentUser) -> dict:
-    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    """Route a tender to a colleague, or star it for yourself.
+
+    This is ask 1's actual pain in `docs/feedback/usha-martin.md` — *"identified manually and
+    circulated to the respective Zonal Heads"*. The ask named a CRM; the sentence after it named
+    routing, and routing needs no CRM. A signed outbound webhook is the escape hatch if a
+    customer names their CRM.
+    """
+    authz.check(user, authz.DRAFT)
+    # `exclude_unset`, not a None filter: clearing an assignment IS `assigned_to: null`, and
+    # filtering every None made unassigning unreachable — the endpoint 422'd on it instead.
+    patch = body.model_dump(exclude_unset=True)
     if not patch:
         raise ApiError(422, "EMPTY_PATCH", "no fields to update")
+    assignee = patch.get("assigned_to")
+    if assignee and not db.get_membership(assignee, user.workspace_id):
+        # A tender routed to someone who cannot open it is the ask failing silently, which is
+        # worse than refusing it — and it keeps a foreign user id out of the row (ET-6).
+        raise ApiError(400, "NOT_A_MEMBER", "that person is not a member of this workspace")
 
     def work() -> list[dict]:
         rows = db.set_match_flags(user.workspace_id, opportunity_id, patch)
