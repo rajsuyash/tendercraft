@@ -4,6 +4,8 @@ Tender text is untrusted; the model may only emit JSON matching these shapes —
 text, no tool calls. Anything off-schema is rejected by the client and routed to fallback.
 """
 
+from app.deterministic.spec_params import PARAM_KEYS
+
 # Knowledge-base document classification (auto-derive metadata from ingested text).
 KB_DOC_SCHEMA = {
     "type": "object",
@@ -232,4 +234,50 @@ ANSWER_PAIR_SCHEMA = {
         }
     },
     "required": ["pairs"],
+}
+
+# Module H — free-text spec -> typed parameters. EXTRACTION ONLY.
+#
+# There is deliberately NO verdict field here, and that absence is the point. The older
+# CRITERION_EVAL_SCHEMA carries `model_verdict`, and app/analysis.py:53-66 still lets it decide
+# every non-numeric criterion behind a 0.75 confidence gate — a model deciding eligibility,
+# which PRD §2.4 forbids and which only survives because it predates the rule. Module H does not
+# repeat it: the model reads, `app/deterministic/spec_match.py` decides, and the two are
+# separated at the schema rather than at the router, where a future edit could quietly rejoin
+# them.
+#
+# `param_key` is an enum rendered from the registry — the G-6 allowlist. A hostile tender
+# document cannot invent a parameter name any more than it can invent a criterion category, and
+# an unregistered key never reaches a comparison.
+#
+# `equivalence` is absent on purpose too: whether a requirement permits an equivalent is derived
+# in Python from the requirement's own text (spec_params.allows_equivalent). Letting the model
+# report the field that softens its own result is the `is_financial` defect in
+# docs/known-pitfalls.md.
+SPEC_PARAMS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "parameters": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "param_key": {"type": "string", "enum": list(PARAM_KEYS)},
+                    "kind": {"type": "string", "enum": ["numeric", "enum"]},
+                    # As STATED in the text. Never converted by the model — spec_params owns
+                    # unit conversion, so a hallucinated conversion cannot reach a verdict.
+                    "unit": {"type": "string", "nullable": True},
+                    "num_min": {"type": "number", "nullable": True},
+                    "num_max": {"type": "number", "nullable": True},
+                    "enum_value": {"type": "string", "nullable": True},
+                    # The substring this came from. A parameter with no visible source is an
+                    # assertion, and the extractor is not permitted to make one.
+                    "raw_text": {"type": "string"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["param_key", "kind", "raw_text", "confidence"],
+            },
+        }
+    },
+    "required": ["parameters"],
 }

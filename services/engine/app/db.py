@@ -1395,3 +1395,115 @@ def set_match_flags(
         )
         or []
     )
+
+
+# ── Module H: product specs, tender line items, typed parameters ──────────────────────
+
+def get_capability_specs(workspace_id: str) -> list[dict]:
+    """Every envelope and catalogue item with its parameters, in ONE round trip.
+
+    An embedded select rather than a query per spec: matching is pure Python over rows already
+    in memory, and a per-spec fetch is the N+1 in docs/known-pitfalls.md multiplied by however
+    many product lines a manufacturer runs.
+    """
+    return _rest(
+        "GET", "product_specs",
+        params={
+            "workspace_id": f"eq.{workspace_id}",
+            "select": "id,spec_kind,label,standard_ref,parent_envelope_id,gem_catalogue_id,"
+                      "updated_at,spec_parameters(*)",
+            "order": "spec_kind.asc,label.asc",
+        },
+    ) or []
+
+
+def upsert_product_spec(workspace_id: str, spec: dict) -> dict:
+    """Create or update one envelope / catalogue item.
+
+    workspace_id is in the conflict target as well as the body. A service-role upsert bypasses
+    RLS, so a conflict key that omits the scope column can reassign another workspace's row
+    (docs/known-pitfalls.md — this is the exact shape that bit 0027).
+    """
+    rows = _rest(
+        "POST", "product_specs",
+        params={"on_conflict": "workspace_id,spec_kind,label"},
+        json={**spec, "workspace_id": workspace_id},
+        prefer="resolution=merge-duplicates,return=representation",
+    )
+    return rows[0] if rows else {}
+
+
+def get_product_spec(spec_id: str, workspace_id: str) -> dict | None:
+    """Ownership guard for any write that binds a caller-supplied spec id (ET-6)."""
+    rows = _rest(
+        "GET", "product_specs",
+        params={"id": f"eq.{spec_id}", "workspace_id": f"eq.{workspace_id}",
+                "select": "id,spec_kind,label"},
+    )
+    return rows[0] if rows else None
+
+
+def delete_product_spec(spec_id: str, workspace_id: str) -> None:
+    _rest("DELETE", "product_specs",
+          params={"id": f"eq.{spec_id}", "workspace_id": f"eq.{workspace_id}"},
+          prefer="return=minimal")
+
+
+def replace_spec_parameters(workspace_id: str, *, product_spec_id: str, rows: list[dict]) -> None:
+    """Delete-then-insert, the same shape `replace_profile_collection` uses.
+
+    An upsert would leave a parameter the user removed still sitting in the envelope, and a
+    stale capability is worse than a missing one: it produces a confident `match` on something
+    the plant no longer makes.
+    """
+    _rest("DELETE", "spec_parameters",
+          params={"product_spec_id": f"eq.{product_spec_id}",
+                  "workspace_id": f"eq.{workspace_id}"},
+          prefer="return=minimal")
+    if rows:
+        _rest("POST", "spec_parameters",
+              json=[{**r, "workspace_id": workspace_id, "product_spec_id": product_spec_id}
+                    for r in rows],
+              prefer="return=minimal")
+
+
+def replace_line_items(workspace_id: str, tender_id: str, rows: list[dict]) -> list[dict]:
+    """Re-reading a package replaces its schedule rather than doubling it.
+
+    Scoped DELETE first for the same reason as above: a corrigendum that REMOVES a line must
+    remove it here, and an upsert alone would leave a phantom item on the fit screen that no
+    document supports.
+    """
+    _rest("DELETE", "tender_line_items",
+          params={"tender_id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
+          prefer="return=minimal")
+    if not rows:
+        return []
+    return _rest(
+        "POST", "tender_line_items",
+        json=[{**r, "workspace_id": workspace_id, "tender_id": tender_id} for r in rows],
+    ) or []
+
+
+def get_line_items(tender_id: str, workspace_id: str) -> list[dict]:
+    """The tender's schedule with each line's extracted parameters, in one round trip."""
+    return _rest(
+        "GET", "tender_line_items",
+        params={
+            "tender_id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}",
+            "select": "id,schedule_ref,item_ref,description,quantity,uom,anchor_document,"
+                      "anchor_page,anchor_row,source_criterion_id,confirmed,spec_parameters(*)",
+            "order": "anchor_row.asc.nullslast,item_ref.asc",
+        },
+    ) or []
+
+
+def replace_line_item_parameters(workspace_id: str, line_item_id: str, rows: list[dict]) -> None:
+    _rest("DELETE", "spec_parameters",
+          params={"line_item_id": f"eq.{line_item_id}", "workspace_id": f"eq.{workspace_id}"},
+          prefer="return=minimal")
+    if rows:
+        _rest("POST", "spec_parameters",
+              json=[{**r, "workspace_id": workspace_id, "line_item_id": line_item_id}
+                    for r in rows],
+              prefer="return=minimal")

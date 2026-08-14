@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import os
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -23,10 +24,13 @@ from dataclasses import dataclass
 
 from pypdf import PdfReader
 
+from .deterministic.boq import BoqRow, rows_to_line_items
 from .deterministic.shred import unmapped_sentences
 from .deterministic.tender_meta import extract_tender_meta
 from .deterministic.types import EXTRACTION_CONFIRM_THRESHOLD
 from .envelope import ApiError
+
+log = logging.getLogger("tendercraft.ingest")
 
 # A page with almost no extractable text is probably a scan — flag for manual OCR (EC-1).
 _MIN_CHARS_PER_PAGE = 20
@@ -97,6 +101,52 @@ def parse_spreadsheet_pages(filename: str, data: bytes) -> list[SourcePage]:
     finally:
         wb.close()  # read_only leaves file handles open otherwise
     return pages
+
+
+def parse_boq_rows(filename: str, data: bytes) -> list[BoqRow]:
+    """Recover a spreadsheet's schedule of items as ROWS, additively.
+
+    `parse_spreadsheet_pages` above is untouched and still produces one page of joined text per
+    worksheet — criteria extraction and the unmapped-sentence denominator never notice this
+    function exists. That separation is deliberate: schedule parsing is new and unproven, and it
+    must not be able to change what the TOM contains.
+
+    Only the openpyxl read lives here; the column mapping is pure and testable in
+    app/deterministic/boq.py. A sheet with no recognisable header contributes nothing rather
+    than a guess.
+    """
+    _guard_zip_bomb(data)
+    from openpyxl import load_workbook
+
+    try:
+        wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    except Exception as exc:  # noqa: BLE001 — any parse failure is a bad upload (400)
+        raise ApiError(400, "BAD_DOCUMENT", f"could not read spreadsheet: {exc}") from exc
+
+    items: list[BoqRow] = []
+    try:
+        for index, sheet in enumerate(wb.worksheets, 1):
+            rows = list(sheet.iter_rows(values_only=True))
+            items.extend(
+                rows_to_line_items(f"{filename} · {sheet.title}", index, rows)
+            )
+    finally:
+        wb.close()  # read_only leaves file handles open otherwise
+    return items
+
+
+def parse_package_boq(documents: list[tuple[str, bytes]]) -> list[BoqRow]:
+    """Every schedule line in the package. A BOQ failure is never fatal to an upload —
+    criteria extraction is the product; the schedule is an addition to it."""
+    found: list[BoqRow] = []
+    for filename, data in documents:
+        if filename.lower().rsplit(".", 1)[-1] not in _SPREADSHEET_EXTS:
+            continue
+        try:
+            found.extend(parse_boq_rows(filename, data))
+        except ApiError:
+            log.warning("BOQ parse failed for %s — schedule skipped, ingest continues", filename)
+    return found
 
 
 def parse_csv_pages(filename: str, data: bytes) -> list[SourcePage]:

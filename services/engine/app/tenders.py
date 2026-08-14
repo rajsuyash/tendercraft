@@ -5,6 +5,7 @@ Every route scopes to the authenticated user's workspace (from the JWT, never th
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
@@ -12,13 +13,21 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from . import authz, db
+from . import authz, db, spec_service
 from .auth import AuthedUser, get_current_user
 from .deterministic.lock import evaluate_lock
 from .deterministic.tender_meta import display_title
 from .deterministic.types import Criterion, RequirementLevel, SourceAnchor
 from .envelope import ApiError, ok
-from .ingest import SourcePage, ingest_pages, number_package, parse_document_pages
+from .ingest import (
+    SourcePage,
+    ingest_pages,
+    number_package,
+    parse_document_pages,
+    parse_package_boq,
+)
+
+log = logging.getLogger("tendercraft.tenders")
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB guard
 
@@ -107,12 +116,27 @@ def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title
     tender = db.create_tender(workspace_id, display_title(meta, title))
     if meta.tender_number or meta.authority:
         db.set_tender_meta(tender["id"], workspace_id, meta.tender_number, meta.authority)
-    if result["criteria_rows"]:
+    # Keep the INSERTED rows: they carry the ids Module H binds a prose-derived line item
+    # to. result["criteria_rows"] are pre-insert and have no id.
+    inserted_criteria = (
         db.insert_criteria(workspace_id, tender["id"], result["criteria_rows"])
+        if result["criteria_rows"] else []
+    )
     # The denominator (G-FR2). Computed during ingest because page text is never persisted —
     # there is no later moment at which this could be recovered without a re-upload.
     if result["unmapped_rows"]:
         db.insert_unmapped(workspace_id, tender["id"], result["unmapped_rows"])
+    # Module H: the schedule of items, from any spreadsheet in the package plus the technical
+    # criteria just extracted. Non-fatal by construction — criteria extraction is the product
+    # and a BOQ that cannot be read must never fail an upload (app/ingest.parse_package_boq
+    # already swallows a bad workbook; this guards the persistence too).
+    try:
+        spec_service.persist_schedule(
+            workspace_id, tender["id"], parse_package_boq(documents), inserted_criteria
+        )
+    except Exception:  # noqa: BLE001 — an addition must not be able to break ingest
+        log.exception("schedule persistence failed for tender %s — ingest continues",
+                      tender["id"])
     return {
         "tender_id": tender["id"],
         "title": display_title(meta, title),

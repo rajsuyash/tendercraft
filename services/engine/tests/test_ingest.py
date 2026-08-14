@@ -141,3 +141,51 @@ def test_anchor_label_names_the_document_and_never_doubles_a_clause_prefix():
     assert SourceAnchor(4, "3.1", "Annexure-II.pdf").label() == "Annexure-II.pdf · p.4 · Cl. 3.1"
     assert SourceAnchor(4, "Annexure-VII").label() == "p.4 · Annexure-VII"
     assert SourceAnchor(12, "").label() == "p.12"
+
+
+# ── Module H: the schedule of items, read from a real workbook ───────────────────────
+
+_BOQ_SHEET = [
+    ["Tender for supply of steel wire ropes"],
+    [],
+    ["Sl. No.", "Item Description", "Qty", "UOM", "Unit Rate"],
+    [1, "Steel wire rope 20mm 6x36 IWRC as per IS 2266", 5000, "m", 450.0],
+    [2, "Steel wire rope 24mm 6x19 FC galvanised", 1200, "m", 610.5],
+    ["", "Total", 6200, "m", ""],
+]
+
+
+def test_a_real_workbook_yields_schedule_lines_anchored_to_their_row():
+    rows = ingest.parse_boq_rows("boq.xlsx", _xlsx({"Schedule-A": _BOQ_SHEET}))
+    assert [r.item_ref for r in rows] == ["1", "2"]
+    assert rows[0].document == "boq.xlsx · Schedule-A"
+    assert rows[0].row_number == 4          # the worksheet row a human scrolls to
+    assert rows[0].quantity == 5000.0 and rows[0].uom == "m"
+
+
+def test_reading_the_schedule_leaves_the_text_page_path_completely_untouched():
+    """The whole point of the additive design: criteria extraction and the unmapped-sentence
+    denominator must not notice that Module H exists."""
+    data = _xlsx({"Schedule-A": _BOQ_SHEET})
+    pages = ingest.parse_spreadsheet_pages("boq.xlsx", data)
+    assert len(pages) == 1 and "Steel wire rope 20mm" in pages[0].text
+
+
+def test_a_sheet_with_no_header_contributes_no_schedule_lines():
+    rows = ingest.parse_boq_rows("notes.xlsx", _xlsx({"Notes": [["some", "free"], ["text", 1]]}))
+    assert rows == []
+
+
+def test_only_spreadsheets_in_a_package_are_read_for_a_schedule():
+    package = [
+        ("boq.xlsx", _xlsx({"Schedule-A": _BOQ_SHEET})),
+        ("nit.pdf", b"%PDF-1.4 not a workbook"),
+        ("prices.csv", b"a,b\n1,2\n"),
+    ]
+    assert len(ingest.parse_package_boq(package)) == 2
+
+
+def test_an_unreadable_workbook_never_fails_the_upload():
+    """Criteria extraction is the product. A BOQ that cannot be parsed loses the schedule and
+    nothing else — it must not turn a valid package into a 400."""
+    assert ingest.parse_package_boq([("broken.xlsx", b"not a zip at all")]) == []
