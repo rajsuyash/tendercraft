@@ -1,0 +1,278 @@
+# Usha Martin Limited — design-partner feedback
+
+**Status:** received, unanswered · **Received:** 2026-08-07 · **Source:** email + process
+document from UML following a live demo
+**Decision owner:** human sign-off required before any of §Sequencing is built
+**Owner decisions, 2026-08-07:** answer the CRM ask with in-product routing first; time-box a
+feasibility spike on historical prices rather than commit or park; document and plan only.
+
+This is the first entry in `docs/feedback/`. The repo had no convention for recording what a
+customer actually said — design-partner language is already load-bearing in the discovery PRD
+(F-AC1's backtest, F-AC2's weekly partner rating sample, PH4e's ≥40% acceptance gate) with no
+file behind it. The form here follows `docs/multi-market.md`, which is the house shape for
+*a client said something and it changed the architecture*.
+
+## Who UML is, and why they are not this PRD's persona
+
+Usha Martin Limited manufactures steel wire rope. They are registered on GeM under ten product
+categories, nine of them rope against a named standard and one unrelated:
+
+Wire Rope per IS 4521 / API Spec 9A (ONGC) · MIG Welding Wire · Stranded Steel Wire (Black Wire
+Rope) · Winding and Man-Riding Haulage Ropes for Mines, IS 1855 · Haulage Purposes, IS 1856 ·
+Wire Rope Slings and Sling Legs, IS 2762 · Round Strand Galvanised Rope for Shipping, IS 2581 ·
+Suspension Ropes for Lifts, Elevators and Hoists, IS 2365 · General Engineering Purposes, IS 2266.
+
+**`tendercraft-PRD.md` §1 targets P1/P2/P3 — people who write proposals.** A bid manager at a
+services firm wins by what the narrative says, which is why the product's centre of gravity is
+Module B: cite-or-flag, transclusion, the watermark, the export gate.
+
+UML does not write a proposal. **UML selects a catalogue item and prices it.** Their bid is
+won or lost on three questions the product currently cannot answer — can we make this exact
+rope, do we have it listed on GeM already, and what did this item last sell for. Module B is
+nearly irrelevant to them and Module D is suppressed by its own data gate.
+
+That is not a criticism of the PRD; it is a segment boundary, and it should be conscious. A
+commodity manufacturer is a different product than a proposal writer, and three of UML's five
+asks live in a module that does not exist. **Whether that module gets built is a decision about
+which segment TenderCraft is for** — see assumption 6.
+
+## The five asks, verbatim
+
+Quoted, not paraphrased. A paraphrased requirement is a requirement we invented.
+
+1. **GeM Tender Lead Identification & CRM Integration** — *"The system should identify relevant
+   tender opportunities from the notification emails received from GeM and automatically create
+   a corresponding GeM Tender Lead in CRM. Currently, the relevant tenders are identified
+   manually and circulated to the respective Zonal Heads."*
+2. **Tender Specification & Manufacturing Capability Validation** — *"The system should analyse
+   the tender specifications and validate them against UML's manufacturing capabilities and
+   product specifications. Any mismatch or deviation should be identified at an early stage,
+   enabling the concerned team to take corrective action or seek clarification before bid
+   submission."*
+3. **Catalogue Availability & Creation** — *"Catalogue creation is one of the critical
+   activities before bid submission. The system should identify whether the required catalogue
+   for each tender schedule is already available or can be created, based on the required rope
+   specifications and technical parameters."*
+4. **Identification of Additional Documents / Post-Technical Evaluation Requirements** — *"After
+   the technical evaluation of a bid, GeM may require additional documents or clarifications.
+   The system should monitor the tender status and identify such requirements as soon as they
+   are generated on the portal, enabling the concerned team to respond within the stipulated
+   timeline."*
+5. **Historical Price Analysis — Key Requirement** — *"This is one of the major pain areas,
+   particularly for single-party and limited tenders. The system should be capable of
+   identifying and analysing the historical prices of the respective scheduled items for the
+   last five years."*
+
+## What is actually built
+
+Measured by reading the code on 2026-08-07, not estimated.
+
+> **Updated 2026-08-14.** Everything with no dependency on UML, GeM or a permission letter is
+> now built. Asks 2 and 3 are answered end to end; ask 1's routing half is answered. Asks 4 and
+> 5 and ask 1's *acquisition* half remain blocked on things only someone else can supply —
+> see §Sequencing, whose steps 2–4 are still unsent asks.
+
+| # | Ask | Status | Evidence |
+|---|---|---|---|
+| 1 | Lead identification → CRM, circulated to Zonal Heads | **Routing built; acquisition half still blocked** | Feed, connector, relevance banding and the rules gate were already live. **Added 2026-08-14:** `PATCH /api/opportunities/{id}` now enforces workspace membership on an assignee and can clear one, and the feed renders an Owner column and a watch star (`components/OpportunityFeed.tsx::Routing`). *Circulated to the respective Zonal Heads* is answered with no CRM. **Still missing:** inbound email (M11), which needs three forwarded GeM alerts from UML. |
+| 2 | Spec vs manufacturing capability | **Built** | `deterministic/spec_match.py` (interval intersection → `match / deviation / equivalent / unknown`), `deterministic/spec_params.py` (registry + units + `allows_equivalent`), `pipeline/spec_extractor.py` (schema carries no verdict field), `spec_service.py`, migration 0029. UI: `/capability` records the envelope, `/tenders/:id/schedule` shows the fit. |
+| 3 | Catalogue availability per tender schedule | **Built** | `deterministic/boq.py` finds the header row deterministically — no header found → zero line items and a manual-entry prompt. `tender_line_items` carries schedule ref, item ref, quantity, uom and a row-level anchor; technical criteria become line items too, because most GeM rope bids state the spec in NIT prose. Per line: `PUBLISHED` / `CAN BE CREATED` / `DEVIATION — CLARIFICATION NEEDED` / `NOT ASSESSED`. |
+| 4 | Post-technical-evaluation document requests | **Not built, and unbuildable as asked** | No poller, no scheduler, no status watcher. `opportunity_matches.watched` exists as a column with no writer. The blocker is not effort — see §What the portal will and will not give us. |
+| 5 | Five-year historical prices per scheduled item | **Not built. Probed 2026-08-07 — the portal route is refused** | GeM's public contract search is CAPTCHA-gated on both forms, which is a G-8 non-goal, not an obstacle. Full write-up: `docs/discovery/source-gem-contracts.md`. There is a free route that does not go through the portal — see below. |
+
+**What is live today and worth telling UML in the reply.** Depth-1 eligibility is parsed
+straight off the GeM bid document, deterministically, with **zero model calls and zero OCR** —
+minimum average annual turnover, MSE/startup relaxation, EMD, ePBG, estimated bid value,
+contract period, and years of past experience required (`services/gem-connector/app/document.py`,
+69 tests, three template variants pinned by golden fixtures). For a GeM bidder that is the
+eligibility half of ask 2 already working. It does not touch the technical half, which is the
+half UML asked about.
+
+## What the portal will and will not give us
+
+`docs/discovery/source-gem.md` did this analysis for the bid listing on 2026-07-30. Two of
+UML's asks turn on extending it.
+
+**Ask 4 is a guardrail refusal, not a backlog item.** Post-submission bid state — technical
+evaluation outcome, a request for additional documents, a clarification window — lives behind
+the **GeM seller login**. G-1 forbids portal credentials and G-8 forbids authenticated
+acquisition, and neither is a policy we can weigh against a feature request: they are the
+reason a government buyer can be sold the evaluate product at all (F13). We will never log in
+to UML's GeM account and read their bid status, and we should say that plainly rather than
+leave it in a backlog where it reads as "coming soon".
+
+**Ask 5 was probed, and the portal route is refused.** `gem.gov.in/view_contracts` is public and
+robots-clean — but **both of its search forms require a CAPTCHA** (`captcha_entered1/2`,
+encrypted client-side via `POST /view_contracts/encryptCaptcha`), verified 2026-08-07 through
+our own `GuardedFetcher`. `docs/discovery/PRD.md` §0 names *no CAPTCHA bypass* as a non-goal in
+the same breath as no authenticated acquisition. This is a rule we wrote, and it is the rule the
+evaluate product's credibility with a government buyer rests on. There is no version of ask 5
+that goes through that endpoint. Full write-up: `docs/discovery/source-gem-contracts.md`.
+
+**The route that works costs nothing and UML already owns the data.** They are the seller on
+every contract they won — those award values are their own records. Uploaded, they land in
+`past_bids` (migration 0027), whose `outcome` is user-supplied *by design* because
+*"we cannot see an award notice"* (`app/past_bids_routes.py:155`). The same corpus is what
+`deterministic/suppression.py` is waiting for: Module D withholds every score estimate until ≥30
+comparable outcomes exist (D-AC4). **Ask 5 and the suppressed estimator are the same data
+problem, and UML can solve both by uploading their own history.** State the limitation honestly
+in the reply — it prices *their* past bids, not the market's, so it will not show what a
+competitor bid.
+
+Two things must not happen here. Do not buy a commercial GeM data feed to answer this before
+UML has committed (assumption 7) and before their own history has been tried — it is ~$200/mo
+for something option one may cover for free. And do not take their GeM login "just to export
+it": G-1 forbids us holding a portal credential, and a human at UML exporting a spreadsheet is
+the same data with none of the exposure.
+
+**The §8 reproduction clause governs both, and is already answered.** GeM's copyright policy
+reads *"Contents of this website may not be reproduced partially or fully without due
+permission in writing in advance from the GeM SPV."* The exposure is **republication, not
+acquisition**, and `source-gem.md` §8 already sets the posture: store and display **facts, not
+expression**; deep-link the prose and the documents; keep raw snapshots as an internal audit
+record. A price, a quantity, a date, a buyer and a category code are facts, and they are
+exactly what a price-history feature reads. **The existing doctrine covers ask 5 without
+amendment** — which is worth noticing, because it means the constraint that looked like the
+blocker is the one thing already resolved.
+
+**Send the permission letter.** `source-gem.md` §8 item 5 names it and nobody has sent it. A
+granted permission removes the display constraints entirely and costs a letter. It should go
+out in parallel with the spike, not after it.
+
+## The two findings that collapse work
+
+**UML's inbox is a better feed than our crawler.** GeM routes new-bid notifications to sellers
+by their registered category mapping (`source-gem.md` finding 7). UML is a registered seller in
+ten categories, so **they already receive, pre-filtered, the feed we crawl and then rank**. For
+this customer the email path is not a fallback — it is higher fidelity than relevance banding,
+because GeM's own category mapping beats our keyword stems.
+
+One correction to guard against, since it is the tempting claim: the email path removes
+*acquisition* risk, **it does not avoid §8** (`source-gem.md:225`). Facts-and-deep-links applies
+to a forwarded email exactly as it applies to a crawled listing.
+
+**Asks 1 and 4 are the same pipe.** GeM emails the seller the new-bid alert *and* the
+post-evaluation clarification request. One inbound-email path, with a message classifier
+choosing between them, answers both — and for ask 4 it is the **only** legal route, because the
+alternative is the seller login we will not use. Two of the five asks collapse into one
+milestone that was already specced.
+
+## What asks 2 and 3 actually require
+
+A data model that does not exist. Sketched here so the roadmap is honest about size; the full
+treatment belongs in a `tendercraft-manufacturer-PRD.md` with a Module H numbered in house
+style, **written only if UML converts.**
+
+- **Three tables.** `product_specs` (`spec_kind ∈ envelope | catalogue`, `parent_envelope_id`,
+  `gem_catalogue_id`), `tender_line_items` (schedule ref, item ref, quantity, uom, row-level
+  anchor), and a **typed-EAV** `spec_parameters` (`param_key`, `kind`, `unit`, `num_min`,
+  `num_max`, `allowed_values`, `raw_text`, `confidence`). A point and a range are the same row:
+  a required 20 mm is `num_min = num_max = 20`; a manufacturing envelope of 6–60 mm is
+  `6..60`. Fixed columns (`diameter_mm`, `construction`, `core_type`…) die on the second
+  customer and are 80% NULL on the first, where NULL would have to mean both *not applicable*
+  and *unknown* — the one distinction this comparator must never blur. jsonb cannot be
+  branch-covered, and `app/deterministic/` is CI-gated at 100% branch.
+- **The comparator is interval intersection**, in `app/deterministic/spec_match.py`. States:
+  `match | deviation | equivalent | unknown`. Roll-up is conservative in the shape `recommend()`
+  already uses — any deviation → deviation; any unknown or equivalent → needs review. **A
+  missing parameter is always `unknown`, never a deviation.** A false "we cannot make this"
+  costs UML a bid they would have won, which is the only outcome here worse than saying nothing.
+- **The model extracts; it never decides.** `pipeline/spec_extractor.py` returns typed
+  parameters whose `param_key` is a JSON-schema **enum of registry keys** — that is the G-6
+  allowlist — and its schema carries **no verdict field at all**. This is deliberately unlike
+  `CRITERION_EVAL_SCHEMA`, whose `model_verdict` still decides every non-numeric criterion at
+  `app/analysis.py:53-66` behind a 0.75 gate. `"or equivalent"` is detected in Python from
+  `raw_text`, never model-reported: letting the model set the field that softens its own
+  verdict is the `is_financial` bug in `known-pitfalls.md`, repeated.
+- **BOQ parsing is additive.** `parse_spreadsheet_pages` is untouched, so criteria extraction
+  and the unmapped-sentence denominator never notice the feature exists. A new
+  `deterministic/boq.py` finds the header row deterministically; **no header found → zero line
+  items** and a manual-entry prompt, because a guessed line item is worse than none. The prose
+  path matters more than the spreadsheet one — most GeM rope bids state the spec in NIT text —
+  so a `category='technical'` criterion also becomes a line item.
+- **Generic schema, rope-seeded registry.** `deterministic/spec_params.py` holds the canonical
+  keys, units and synonyms. Domain knowledge is data. `6x36` never becomes a column name.
+
+The smallest slice that demonstrates both asks is one screen: a grid, one row per schedule
+line, one column per parameter, each cell carrying the requirement, UML's capability and a
+clickable anchor (`BOQ.xlsx · Schedule-A · row 14`) — and per line, **Published (SKU-4471) /
+Can be created / Deviation — clarification needed**. That is asks 2 and 3 in UML's own words.
+
+> **Built 2026-08-14** as `/tenders/:id/schedule` (S20, `components/ScheduleFit.tsx`), with
+> `/capability` (S19) as its input side. **Two PRD divergences to ratify**, per CLAUDE.md's
+> rule that reality contradicting the PRD is proposed, not silently drifted:
+> (a) S19/S20 are new screen ids — S15/S16 were already the opportunity detail and rules screens
+> in `docs/discovery/PRD.md` §Routes;
+> (b) routing reuses the existing `PATCH /api/opportunities/{id}` rather than the
+> `POST /api/opportunities/:id/assign` and `/watch` that the discovery PRD §Routes sketches for
+> S15 — one endpoint that already existed and already had the ownership guard, instead of two
+> new ones doing the same write. Columns are the union of parameters actually read, so a
+> schedule stating three things does not render a dozen empty ones. Two things the screen says
+> out loud, because both are claims we would otherwise be making silently: **"Published means
+> recorded by you"** — we never read UML's GeM catalogue (G-1/G-8) — and **a parameter nobody
+> recorded reads as `NOT ASSESSED`, never a deviation**, which is why `unknown` renders neutral
+> rather than borrowing the amber that means needs-review. The screen gates nothing.
+
+## Sequencing
+
+1. ~~Spike `/view_contracts`.~~ **Done 2026-08-07. Refused (G-8, CAPTCHA)** —
+   `docs/discovery/source-gem-contracts.md`.
+2. **Ask UML for their own contract history**, and for three forwarded GeM alert emails while
+   we are asking. The first answers ask 5 by the only free route and un-suppresses Module D;
+   the second resolves assumption 3. One email, two unblocked assumptions.
+3. **Send the GeM SPV permission letter.** Free, unknown lead time, and now the only thing that
+   could ever open a market-wide price feed. Named 2026-07-30, still unsent.
+4. **One hour: does any other GeM surface publish award data without a captcha?** An open-data
+   portal, a statistics dashboard, `data.gov.in`. §5 of the source review scopes it. Cheap, and
+   it is the difference between "the portal refuses us" and "this endpoint refuses us".
+5. **M11 — inbound email (revives M7).** Per-workspace address, GeM alert parse → normalised
+   F-FR1 record, dedup against the crawled corpus, plus the clarification-request class. Answers
+   ask 1's acquisition half and **all** of ask 4. **Blocked on step 2** — nobody has seen a GeM
+   alert email, so its parse is unspecifiable (assumption 3).
+6. ~~**M12 — routing.**~~ **Done 2026-08-14.** Owner + watch on every in-scope feed row; the
+   engine refuses an assignee who is not a member of the workspace, because a tender routed to
+   someone who cannot open it is the ask failing silently. A signed outbound webhook is still
+   the CRM escape hatch, built when UML names their CRM.
+7. ~~**Module H — product specs and catalogue fit.**~~ **Done 2026-08-14**, read-only, as
+   specced: it gates nothing. Whether the *segment* is a product is still the commercial
+   question — what shipped is the answer to asks 2 and 3, not a decision about assumption 7.
+
+Steps 2–4 are asks and letters, not engineering, and they cost an afternoon between them.
+Steps 5–6 are work already specced and already skipped once — they answer two and a half of the
+five asks and need no new module. Step 7 is a commercial decision, not an engineering one.
+
+**M13 (a contracts connector) is deleted, not deferred.** There is nothing to connect to.
+
+## Deliberately not doing
+
+- **Reading UML's GeM catalogue.** G-1, G-8, G-10. "Published" will mean *the catalogue you
+  recorded with us*, never *GeM says so* — and it must say that on the screen, the way
+  `coverage.py`'s docstring says `NOT_FOUND` is not non-compliance. A feature that silently
+  implied a live GeM check would be worse than not having it.
+- **Monitoring bid status on the portal.** Same reason, stated above. The email path is the
+  answer to ask 4, not a workaround for it.
+- **CRM integration**, until routing has been used and UML names the CRM. The ask names a
+  solution; the sentence after it names the problem, and the problem is routing.
+- **A wire-rope-specific schema.** Two of UML's ten categories (MIG welding wire) share almost
+  no parameters with the other eight — the generic registry is required *within the first
+  customer*, before the second one is even a question.
+- **Auto-generating a GeM catalogue draft** from a `can be created` result. It is the obvious
+  second slice and the real upsell; it ships after they trust the matching, not with it.
+- **Wiring spec-fit into `recommend()`, the readiness hub, the lock gate or the export gate.**
+  A brand-new comparator that can block an export before it has been seen on twenty real
+  tenders is how a product starts refusing to work. Read-only screen in v1 — the same reasoning
+  that kept the shredder out of the export gate (`docs/discovery/PRD.md` §11).
+
+## Assumptions to veto
+
+| # | Assumption | Confidence |
+|---|---|---|
+| 1 | ~~`/view_contracts` exposes per-**item** unit prices~~ | **Resolved NEGATIVE, 2026-08-07.** Moot — the search is CAPTCHA-gated and the endpoint is refused entirely (G-8) |
+| 2 | UML's own contract history is complete enough, and granular enough (per item, not per PO), to price a schedule line | **Unverified, and this is now the gate on ask 5.** Ask before designing anything |
+| 3 | GeM's seller alert emails carry enough structure to normalise into the F-FR1 record | Medium — the bid number is certainly present, which is the dedup key; the rest is unknown until we see one. **Ask UML to forward three.** |
+| 4 | UML will maintain a manufacturing envelope by hand (≈5 envelopes, one sitting) | Medium-high — it is a one-time act by someone who knows the answer cold. If it is not maintained, every verdict decays to `unknown` and the feature reads as broken |
+| 5 | UML's GeM catalogue can be exported and pasted or CSV'd | Medium — if not, v1 is envelope-only and every answer degrades from *Published* to *Can be created*, which is a materially weaker demo |
+| 6 | Wire-rope parameters generalise across all ten of UML's categories | **Low.** MIG welding wire shares almost nothing with rope. Verify against two real tenders from different categories before sizing Module H |
+| 7 | UML is a design partner, not a demo that gave feedback | **Unresolved, and it gates steps 5–6.** Steps 1–4 are worth doing regardless; Module H is not |
+
+Assumption 7 is the one to resolve first, and it is a conversation, not a spike.
