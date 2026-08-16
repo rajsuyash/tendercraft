@@ -1,3 +1,4 @@
+import { AlertSettings, type NotificationSettings } from "@/components/AlertSettings";
 import { MembersPanel, type Invitation, type Member } from "@/components/MembersPanel";
 import { engineFetch } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
@@ -69,14 +70,28 @@ export default async function SettingsPage() {
   const me = meRes.ok ? (await meRes.json()).data : null;
 
   // Round 2 — both of these need the resolved workspace id, and neither needs the other.
-  const [membersRes, { data: workspace }] = await Promise.all([
+  const [membersRes, { data: workspace }, alertsRes] = await Promise.all([
     me?.workspace_id ? engineFetch(`/api/workspaces/${me.workspace_id}/members`) : null,
     supabase
       .from("workspaces")
       .select("name")
       .eq("id", me?.workspace_id ?? "")
       .maybeSingle(),
+    engineFetch("/api/notifications/settings"),
   ]);
+
+  const alertsBody = alertsRes.ok ? await alertsRes.json().catch(() => null) : null;
+  // Alerts default to OFF rather than to an error state: a workspace that has never opened
+  // this panel is not broken, it simply has not opted in.
+  const alerts: NotificationSettings = alertsBody?.ok
+    ? (alertsBody.data as NotificationSettings)
+    : {
+        enabled: false,
+        recipients: [],
+        min_band: "medium",
+        notify_assignee: true,
+        smtp_configured: false,
+      };
 
   let members: Member[] = [];
   let invitations: Invitation[] = [];
@@ -115,6 +130,10 @@ export default async function SettingsPage() {
           canManage={me?.role === "admin"}
           currentUserId={me?.user_id ?? ""}
         />
+      </div>
+
+      <div className="mb-8">
+        <AlertSettings initial={alerts} />
       </div>
 
       <section className="mb-8">

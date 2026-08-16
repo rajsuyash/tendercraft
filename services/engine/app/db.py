@@ -7,6 +7,7 @@ ET-6 defect (known-pitfalls: service-role bypasses RLS).
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -1573,3 +1574,83 @@ def replace_line_item_parameters(workspace_id: str, line_item_id: str, rows: lis
               json=[{**r, "workspace_id": workspace_id, "line_item_id": line_item_id}
                     for r in rows],
               prefer="return=minimal")
+
+
+def get_workspace(workspace_id: str) -> dict | None:
+    """The workspace row. Its NAME is what a digest subject line says the tenders matched."""
+    rows = _rest(
+        "GET", "workspaces",
+        params={"id": f"eq.{workspace_id}", "select": "id,name", "limit": "1"},
+    )
+    return rows[0] if rows else None
+
+
+# ---------- notifications (UML ask 1) ----------
+def get_notification_settings(workspace_id: str) -> dict | None:
+    rows = _rest(
+        "GET", "notification_settings",
+        params={"workspace_id": f"eq.{workspace_id}", "select": "*", "limit": "1"},
+    )
+    return rows[0] if rows else None
+
+
+def upsert_notification_settings(workspace_id: str, patch: dict, actor: str | None) -> dict:
+    rows = _rest(
+        "POST", "notification_settings",
+        # workspace_id is both the scope column and the conflict target: the engine writes with
+        # the service role and bypasses RLS, so omitting it lets a caller-supplied key reassign
+        # another workspace's row (docs/known-pitfalls.md).
+        params={"on_conflict": "workspace_id"},
+        json={"workspace_id": workspace_id, "updated_by": actor,
+              "updated_at": datetime.now(UTC).isoformat(), **patch},
+        prefer="return=representation,resolution=merge-duplicates",
+    )
+    return rows[0] if rows else {}
+
+
+def get_notified_opportunity_ids(workspace_id: str, recipient: str, kind: str) -> set[str]:
+    """The ledger, as a set. This is what stops a re-run re-sending (migration 0032)."""
+    rows = _rest(
+        "GET", "notifications_sent",
+        params={"workspace_id": f"eq.{workspace_id}", "recipient": f"eq.{recipient}",
+                "kind": f"eq.{kind}", "select": "opportunity_id"},
+    ) or []
+    return {r["opportunity_id"] for r in rows}
+
+
+def record_notifications(workspace_id: str, rows: list[dict]) -> int:
+    """Write the ledger AFTER a successful send. Ignores rows that already exist.
+
+    Order matters and is the opposite of the intuitive one: recording first would mean a
+    failed send is permanently marked as delivered, and the tender nobody heard about is
+    exactly the failure this feature exists to prevent (ET-7).
+    """
+    if not rows:
+        return 0
+    written = _rest(
+        "POST", "notifications_sent",
+        params={"on_conflict": "workspace_id,opportunity_id,recipient,kind"},
+        json=[{**r, "workspace_id": workspace_id} for r in rows],
+        prefer="return=representation,resolution=merge-duplicates",
+    )
+    return len(written or [])
+
+
+def get_member_email(workspace_id: str, user_id: str) -> str | None:
+    """A member's address, or None if they are not in this workspace.
+
+    The membership check is the point, not a side effect: routing a tender to someone outside
+    the workspace and then emailing them would leak what this workspace is bidding on.
+    """
+    rows = _rest(
+        "GET", "workspace_members",
+        params={"workspace_id": f"eq.{workspace_id}", "user_id": f"eq.{user_id}",
+                "select": "user_id", "limit": "1"},
+    )
+    if not rows:
+        return None
+    profile = _rest(
+        "GET", "profiles",
+        params={"user_id": f"eq.{user_id}", "select": "email", "limit": "1"},
+    )
+    return (profile[0].get("email") if profile else None) or None

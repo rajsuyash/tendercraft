@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from . import authz, db
+from . import authz, db, mailer, notify_service
 from .auth import AuthedUser, get_current_user
 from .deterministic.discovery import RULE_KINDS
 from .discovery import ingest
@@ -256,12 +256,83 @@ async def patch_match(opportunity_id: str, body: MatchPatch, user: CurrentUser) 
         # worse than refusing it — and it keeps a foreign user id out of the row (ET-6).
         raise ApiError(400, "NOT_A_MEMBER", "that person is not a member of this workspace")
 
-    def work() -> list[dict]:
+    def work() -> dict:
         rows = db.set_match_flags(user.workspace_id, opportunity_id, patch)
         if not rows:
             # The row belongs to another workspace or does not exist. 404 either way: a
             # distinguishable 403 would confirm the opportunity exists in someone else's feed.
             raise ApiError(404, "NOT_FOUND", "opportunity not in this workspace's feed")
-        return rows
+        notified = None
+        if assignee:
+            # After the write, and unable to raise: the routing is the thing that matters, and
+            # a bouncing address must not leave the tender unassigned (notify_service).
+            notified = notify_service.notify_assignee(
+                user.workspace_id, opportunity_id, assignee, user.user_id,
+            )
+        return {"rows": rows, "notified": notified}
 
     return ok(await run_in_threadpool(work))
+
+
+class NotificationSettingsIn(BaseModel):
+    enabled: bool | None = None
+    recipients: list[str] | None = None
+    min_band: Literal["high", "medium", "low"] | None = None
+    notify_assignee: bool | None = None
+
+
+@router.get("/api/notifications/settings")
+def get_notification_settings(user: CurrentUser) -> dict:
+    """Alert configuration for this workspace. Off until someone turns it on."""
+    saved = db.get_notification_settings(user.workspace_id) or {}
+    return ok({
+        "enabled": bool(saved.get("enabled")),
+        "recipients": saved.get("recipients") or [],
+        "min_band": saved.get("min_band") or "medium",
+        "notify_assignee": saved.get("notify_assignee", True),
+        # Whether this DEPLOYMENT can send at all, which is a different question from whether
+        # this workspace wants alerts — and the one that explains a silent inbox.
+        "smtp_configured": mailer.is_configured(),
+    })
+
+
+@router.put("/api/notifications/settings")
+async def put_notification_settings(body: NotificationSettingsIn, user: CurrentUser) -> dict:
+    authz.check(user, authz.DRAFT)
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        raise ApiError(422, "EMPTY_PATCH", "no fields to update")
+    for address in patch.get("recipients") or []:
+        # Shape-checked, not validated against a registry: pydantic's EmailStr rejects reserved
+        # TLDs including this project's own .test fixtures (docs/known-pitfalls.md).
+        if "@" not in address or address.strip() != address:
+            raise ApiError(422, "BAD_RECIPIENT", f"not an email address: {address!r}")
+
+    def work() -> dict:
+        saved = db.upsert_notification_settings(user.workspace_id, patch, user.user_id)
+        db.write_audit(user.workspace_id, user.user_id, "notification_settings_changed",
+                       "workspace", user.workspace_id, after=patch)
+        return saved
+
+    return ok(await run_in_threadpool(work))
+
+
+@router.post("/api/notifications/dispatch")
+async def dispatch_notifications(user: CurrentUser) -> dict:
+    """Send the digest now. Idempotent — a second call sends nothing new.
+
+    Exposed as an endpoint rather than a background timer so it can be driven by a scheduler
+    (Cloud Scheduler, cron) without this service growing one, and so a user can press it and
+    see the result rather than wondering whether it ran.
+    """
+    authz.check(user, authz.DRAFT)
+    workspace = db.get_workspace(user.workspace_id) or {}
+    try:
+        return ok(await run_in_threadpool(
+            notify_service.dispatch_digest, user.workspace_id,
+            workspace.get("name") or "your workspace",
+        ))
+    except mailer.MailNotConfigured as exc:
+        # A named code, not a 500: the UI can say "alerts are on but this deployment cannot
+        # send", which is actionable, where a stack trace is not.
+        raise ApiError(503, "SMTP_NOT_CONFIGURED", str(exc)) from exc
