@@ -161,3 +161,32 @@ def test_the_result_pages_we_do_read_are_still_clean():
     from app.fetch import assert_no_bot_challenge
 
     assert_no_bot_challenge(FIXTURE, "/bidding/bid/getBidResultView/1")
+
+
+# --- "no match" is an answer, not a failure -------------------------------------------------
+
+def test_gem_reporting_no_data_is_an_empty_result_not_an_exception():
+    """GeM answers a query that matched nothing with an HTTP-200 body carrying code 404.
+
+    parse_page raised on it, which was harmless for the listing sweep (it never asks a question
+    with no answer) and fatal for the per-bid status check, where "no" is the expected answer
+    most of the time. Found live: /bid-results?status=tech_evaluated 500'd.
+    """
+    import json as _json
+
+    from app.listing import parse_page
+
+    total, docs = parse_page(_json.dumps({"code": 404, "message": "No data found"}))
+    assert (total, docs) == (0, [])
+
+
+def test_a_genuine_fault_still_raises():
+    """Only the known empty-set message is treated as empty; anything else is still a fault."""
+    import json as _json
+
+    from app.listing import parse_page
+
+    with pytest.raises(ValueError, match="503"):
+        parse_page(_json.dumps({"code": 503, "message": "Service unavailable"}))
+    with pytest.raises(ValueError, match="404"):
+        parse_page(_json.dumps({"code": 404, "message": "Blocked by WAF"}))

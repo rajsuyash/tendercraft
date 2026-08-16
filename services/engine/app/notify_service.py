@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import UTC, datetime
 
 from . import db
 from .deterministic.notify import Alertable, render_assignment, render_digest, select_for_digest
@@ -134,3 +135,83 @@ def notify_assignee(
     except Exception:  # noqa: BLE001 — the assignment itself has already succeeded
         log.exception("assignment notification failed for opportunity %s", opportunity_id)
         return {"emailed": False, "reason": "send failed"}
+
+
+def check_watched_stages(workspace_id: str, limit: int = 25) -> dict:
+    """Poll every watched bid's evaluation stage, announce the forward moves (UML ask 4).
+
+    Ordering, again: record the new stage only AFTER the alert is sent. Recording first would
+    consume the transition — the bid would show the new stage, the ledger would show nothing
+    sent, and the one moment the user needed to know about technical evaluation would be gone
+    with no trace that it had happened.
+
+    A per-bid failure never stops the sweep. The portal is a third-party site and one bid that
+    404s must not cost the other twenty-four their check.
+    """
+    from .deterministic.stage_watch import classify, render_stage_alert
+    from .discovery import ingest
+
+    settings = db.get_notification_settings(workspace_id) or {}
+    recipients = [r for r in (settings.get("recipients") or []) if r and "@" in r]
+    can_email = bool(settings.get("enabled")) and bool(recipients) and is_configured()
+
+    checked, moved, alerted, failures = 0, [], 0, []
+    for row in db.get_watched_matches(workspace_id, limit=limit):
+        opp = row.get("opportunities") or {}
+        ref = opp.get("portal_ref_no")
+        if not ref:
+            continue
+        try:
+            status = ingest.bid_stage(ref)
+        except Exception as exc:  # noqa: BLE001 — one bid must not cost the others their check
+            log.warning("stage check failed for %s: %s", ref, exc)
+            failures.append({"portal_ref_no": ref, "error": str(exc)})
+            continue
+
+        checked += 1
+        current = status.get("stage") or "not_evaluated"
+        transition = classify(ref, row.get("last_stage"), current)
+        when = datetime.now(UTC).isoformat()
+
+        if transition.alertable:
+            moved.append({"portal_ref_no": ref, "from": transition.previous,
+                          "to": transition.current})
+            if can_email:
+                subject, body = render_stage_alert(
+                    transition, opp.get("title") or "Untitled tender", _app_url(),
+                    status.get("source_url"),
+                )
+                # The assignee first, then the digest list: the person who owns the bid is the
+                # one with a response window to hit.
+                targets = list(recipients)
+                owner = db.get_member_email(workspace_id, row["assigned_to"]) \
+                    if row.get("assigned_to") else None
+                if owner and owner not in targets:
+                    targets.insert(0, owner)
+                for target in targets:
+                    already = db.get_notified_opportunity_ids(
+                        workspace_id, target, transition.kind)
+                    if row["opportunity_id"] in already:
+                        continue
+                    try:
+                        send(target, subject, body)
+                    except Exception:  # noqa: BLE001
+                        log.exception("stage alert send failed for %s", target)
+                        continue
+                    db.record_notifications(workspace_id, [{
+                        "opportunity_id": row["opportunity_id"], "recipient": target,
+                        "kind": transition.kind,
+                    }])
+                    alerted += 1
+
+        db.set_match_stage(workspace_id, row["opportunity_id"], current, when)
+
+    return {
+        "checked": checked,
+        "moved": moved,
+        "alerts_sent": alerted,
+        # Named rather than swallowed: a watchlist that silently stops being polled is the
+        # ET-7 failure wearing a different hat.
+        "failures": failures,
+        "emailing": can_email,
+    }

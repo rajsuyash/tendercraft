@@ -194,6 +194,56 @@ def sweep_results(
     }
 
 
+def bid_status(fetcher: GuardedFetcher, *, ref: str) -> dict[str, Any]:
+    """How far ONE bid has got through evaluation (UML ask 4).
+
+    GeM publishes the evaluation lifecycle on the same un-captcha'd surface as the price
+    ladder: Not Evaluated -> Technical Evaluation -> Financial Evaluation -> Bid Award, carried
+    on `b_buyer_status`. So a seller can be told their bid entered technical evaluation without
+    anyone logging in to their account.
+
+    **What this does NOT do, and must never claim to.** It reports the STAGE. The text of a
+    clarification or a document request lives behind the GeM seller login, which we will not
+    hold (G-1) and will not automate (G-8). The stage transition is the alarm clock, not the
+    letter — and a feature that implied otherwise would be worse than none, because a bidder
+    would stop checking their own portal inbox.
+
+    Searched one stage at a time because `byStatus` takes a single value; the first hit wins,
+    most-advanced first, so a bid that has been awarded is not reported as merely evaluated.
+    """
+    fetcher.reset_session()
+    landing = fetcher.get("/all-bids")
+    from .fetch import assert_no_bot_challenge
+
+    assert_no_bot_challenge(landing.text, "/all-bids")
+    token = extract_csrf_token(landing.text)
+
+    normalized = normalize_ref(ref)
+    # Most advanced first: the stages are cumulative on the portal, so asking in this order
+    # means the first match is the CURRENT stage rather than an earlier one it also satisfies.
+    for status in ("bid_awarded", "fin_evaluated", "tech_evaluated"):
+        body = build_results_payload(1, ref, status) | {"csrf_bd_gem_nk": token}
+        _, docs = parse_page(fetcher.post_form("/all-bids-data", body).text)
+        for doc in docs:
+            if normalize_ref(_one(doc, "b_bid_number")) != normalized:
+                # Full-text search, so a query can return neighbours. Only an exact reference
+                # match may set a stage — reporting the wrong bid's progress is worse than
+                # reporting none (F-FR6: no fuzzy matching on a dedup key).
+                continue
+            return {
+                "portal_ref_no": normalized,
+                "stage": result_stage(doc),
+                "matched_status": status,
+                "category": _one(doc, "b_category_name"),
+                "source_url": f"{BASE_URL}/{result_path(doc)}",
+                "found": True,
+            }
+
+    # Not at any published stage. That is a fact about the bid, not a failure of the lookup.
+    return {"portal_ref_no": normalized, "stage": "not_evaluated", "matched_status": None,
+            "category": None, "source_url": None, "found": False}
+
+
 def _one(doc: dict, key: str):  # noqa: ANN202
     """Solr wraps every field in a list."""
     v = doc.get(key)
@@ -269,6 +319,18 @@ def create_app() -> FastAPI:
         try:
             return ok(sweep_results(fetcher, search=q, status=status,
                                     max_pages=max_pages, max_results=max_results))
+        finally:
+            fetcher.close()
+
+    @app.get("/bid-status")
+    def bid_status_endpoint(
+        ref: str = Query(min_length=6, max_length=60,
+                         description="bid reference, e.g. GEM/2026/B/7876746"),
+    ) -> dict[str, Any]:
+        """The evaluation stage of one bid. Three portal requests worst case, one best."""
+        fetcher = GuardedFetcher()
+        try:
+            return ok(bid_status(fetcher, ref=ref))
         finally:
             fetcher.close()
 

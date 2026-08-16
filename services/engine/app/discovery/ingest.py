@@ -408,3 +408,10 @@ def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
         # 40-row sample being mistaken for the market.
         "portal_total_matching": data.get("portal_total_matching", 0),
     }
+
+
+def bid_stage(portal_ref_no: str, market: str = "IN") -> dict[str, Any]:
+    """Ask the connector how far one bid has got. Raises if no connector serves this market."""
+    sources = for_market(market)
+    base = next((s.connector_url for s in sources if s.connector_url), "")
+    return _connector("/bid-status", {"ref": portal_ref_no}, base=base)

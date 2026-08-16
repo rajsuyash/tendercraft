@@ -364,6 +364,7 @@ export function OpportunityFeed({
     : (PORTAL[market] ?? DEFAULT_PORTAL);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [stageNote, setStageNote] = useState<string | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [sort, setSort] = useState<SortKey>("fit");
   const [gating, setGating] = useState(false);
@@ -463,7 +464,41 @@ export function OpportunityFeed({
     }
   }
 
+  /** Poll the starred bids for a change of evaluation stage — UML ask 4.
+   *
+   *  Explicit, like the sweep: up to three portal requests per watched bid is not something to
+   *  do on a page load. The result names what moved rather than saying "done", because a check
+   *  that found nothing and a check that failed must not look the same. */
+  async function checkWatched() {
+    setSweeping(true);
+    setStageNote(null);
+    try {
+      const r = await fetch("/api/opportunities/watch/check", { method: "POST" });
+      const body = await r.json().catch(() => null);
+      if (!body?.ok) {
+        setStageNote(body?.error?.message ?? t("Could not check bid status."));
+        return;
+      }
+      const d = body.data;
+      const moved = (d.moved ?? []).length;
+      setStageNote(
+        d.checked === 0
+          ? t("No watched bids to check.")
+          : moved === 0
+            ? `${d.checked} watched bid${d.checked === 1 ? "" : "s"} checked — no change.`
+            : `${moved} bid${moved === 1 ? "" : "s"} moved: ${(d.moved ?? [])
+                .map((m: { portal_ref_no: string; to: string }) =>
+                  `${m.portal_ref_no} → ${m.to.replace(/_/g, " ")}`)
+                .join(", ")}`,
+      );
+      startTransition(() => router.refresh());
+    } finally {
+      setSweeping(false);
+    }
+  }
+
   const busy = sweeping || pending;
+  const watchedCount = (data.items ?? []).filter((m) => m.watched).length;
 
   /** The one figure every row was repeating. Stated once, above the table, so each row can
    *  carry only what varies — the tender's own bar. Thirty rows of "…your profile shows
@@ -503,8 +538,33 @@ export function OpportunityFeed({
           >
             {busy ? t("Sweeping {portal}…").replace("{portal}", portal) : t("Refresh")}
           </button>
+          {/* Only offered when there is something to check — a button that can only ever say
+              "nothing to check" is furniture. */}
+          {watchedCount > 0 && (
+            <button
+              type="button"
+              onClick={checkWatched}
+              disabled={busy}
+              data-check-watched
+              title={t("Check the evaluation stage of your watched bids on the portal")}
+              className="rounded-control border border-hairline bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-surface-alt disabled:opacity-50"
+            >
+              {t("Check bid status")} ({watchedCount})
+            </button>
+          )}
         </div>
       </header>
+
+      {stageNote && (
+        <p data-stage-note className="mt-3 text-sm text-muted">
+          {stageNote}{" "}
+          <span className="text-xs">
+            {t(
+              "Stage only — a clarification or document request appears in your GeM seller account, which we do not access.",
+            )}
+          </span>
+        </p>
+      )}
 
       {/* Coverage as one instrument, bounded to the same width as the table beneath it. */}
       <section

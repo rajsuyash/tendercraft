@@ -167,3 +167,112 @@ def test_a_non_member_is_never_emailed_what_this_workspace_is_bidding_on(client,
     assert r.status_code == 400
     assert r.json()["error"]["code"] == "NOT_A_MEMBER"
     assert wired["sent"] == []
+
+
+# --- the stage watcher (UML ask 4) ----------------------------------------------------------
+
+@pytest.fixture
+def watchlist(monkeypatch, wired):
+    """One watched bid, currently recorded as not evaluated."""
+    from app.discovery import ingest
+
+    state = {"stage": "tech_evaluated", "written": [], "last_stage": "not_evaluated",
+             "fail": False}
+
+    def _watched(ws, limit=25):
+        return [{
+            "opportunity_id": "o1", "last_stage": state["last_stage"],
+            "stage_checked_at": None, "assigned_to": "u2",
+            "opportunities": {"portal_ref_no": "GEM/2026/B/7876746",
+                              "title": "Supply of wire rope", "deadline": None},
+        }]
+
+    def _stage(ref, market="IN"):
+        if state["fail"]:
+            raise RuntimeError("connector unreachable")
+        return {"portal_ref_no": ref, "stage": state["stage"], "found": True,
+                "source_url": "https://bidplus.gem.gov.in/x"}
+
+    monkeypatch.setattr(db, "get_watched_matches", _watched)
+    monkeypatch.setattr(db, "set_match_stage",
+                        lambda ws, oid, stage, when: state["written"].append((oid, stage)))
+    monkeypatch.setattr(db, "get_member_email", lambda ws, uid: "zonal.head@uml.test")
+    monkeypatch.setattr(ingest, "bid_stage", _stage)
+    return state
+
+
+def test_a_bid_entering_technical_evaluation_alerts_the_owner(client, wired, watchlist):
+    data = client.post("/api/opportunities/watch/check").json()["data"]
+
+    assert data["checked"] == 1
+    assert data["moved"] == [{"portal_ref_no": "GEM/2026/B/7876746",
+                              "from": "not_evaluated", "to": "tech_evaluated"}]
+    assert data["alerts_sent"] >= 1
+    # The assignee is told first — they are the one with a response window to hit.
+    assert wired["sent"][0][0] == "zonal.head@uml.test"
+    assert "clarifications" in wired["sent"][0][2]
+
+
+def test_every_stage_alert_states_what_we_cannot_see(client, wired, watchlist):
+    """The bidder must keep checking their own GeM inbox — that is where the request lands."""
+    client.post("/api/opportunities/watch/check")
+    body = wired["sent"][0][2]
+    assert "cannot see the request itself" in body
+    assert "we do not hold portal logins" in body
+
+
+def test_the_new_stage_is_recorded_only_after_the_alert(client, wired, watchlist, monkeypatch):
+    """Recording first would CONSUME the transition: the bid would show the new stage, the
+    ledger would show nothing sent, and the moment the user needed would be gone silently.
+
+    Both events append to ONE list, so the assertion is about their order and not about the
+    order the test happened to write them in.
+    """
+    order: list[str] = []
+    monkeypatch.setattr(notify_service, "send",
+                        lambda to, s, b: order.append(f"sent:{to}"))
+    monkeypatch.setattr(db, "set_match_stage",
+                        lambda ws, oid, stage, when: order.append(f"recorded:{stage}"))
+
+    client.post("/api/opportunities/watch/check")
+
+    assert order, "neither an alert nor a stage write happened"
+    assert order[0].startswith("sent:")
+    assert order[-1] == "recorded:tech_evaluated"
+
+
+def test_a_first_check_records_a_baseline_without_alerting(client, wired, watchlist):
+    watchlist["last_stage"] = None
+    data = client.post("/api/opportunities/watch/check").json()["data"]
+    assert data["moved"] == []
+    assert data["alerts_sent"] == 0
+    # Still recorded, so the NEXT move is detectable.
+    assert watchlist["written"] == [("o1", "tech_evaluated")]
+    assert wired["sent"] == []
+
+
+def test_no_movement_is_silent(client, wired, watchlist):
+    watchlist["last_stage"] = "tech_evaluated"
+    data = client.post("/api/opportunities/watch/check").json()["data"]
+    assert data["moved"] == []
+    assert wired["sent"] == []
+
+
+def test_one_unreachable_bid_is_reported_not_swallowed(client, wired, watchlist):
+    """A watchlist that quietly stops being polled is the missed-tender failure again."""
+    watchlist["fail"] = True
+    data = client.post("/api/opportunities/watch/check").json()["data"]
+    assert data["checked"] == 0
+    assert data["failures"][0]["portal_ref_no"] == "GEM/2026/B/7876746"
+    # The stage is NOT recorded on a failed check — that would fake a successful poll.
+    assert watchlist["written"] == []
+
+
+def test_stage_watching_still_records_when_alerts_are_off(client, wired, watchlist):
+    """Watching and emailing are separate choices. A workspace with alerts off still gets its
+    stages tracked, so the screen is right and the first alert after switching on is real."""
+    wired["settings"]["enabled"] = False
+    data = client.post("/api/opportunities/watch/check").json()["data"]
+    assert data["emailing"] is False
+    assert data["moved"] and data["alerts_sent"] == 0
+    assert watchlist["written"] == [("o1", "tech_evaluated")]

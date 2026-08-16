@@ -387,3 +387,20 @@ async def refresh_price_history(
         return ok(await run_in_threadpool(ingest.refresh_awards, q, max_results))
     except RuntimeError as exc:
         raise ApiError(503, "CONNECTOR_UNAVAILABLE", str(exc)) from exc
+
+
+@router.post("/api/opportunities/watch/check")
+async def check_watched(
+    user: CurrentUser,
+    limit: int = Query(default=25, ge=1, le=100),
+) -> dict:
+    """Poll the watched bids for a change of evaluation stage (UML ask 4).
+
+    Explicit rather than a background timer, for the same reason the digest is: up to three
+    portal requests per watched bid is not a page-load side effect, and a user pressing it
+    should see the result. A scheduler can call the same endpoint.
+    """
+    authz.check(user, authz.DRAFT)
+    return ok(await run_in_threadpool(
+        notify_service.check_watched_stages, user.workspace_id, limit,
+    ))

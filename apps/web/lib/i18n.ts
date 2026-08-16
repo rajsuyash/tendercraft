@@ -44,6 +44,13 @@ const FR: Record<string, string> = {
   "Live public tenders on {portal}, deduplicated and matched against your rules and profile.":
     "Marchés publics en cours sur {portal}, dédoublonnés et rapprochés de vos règles et de votre profil.",
   Refresh: "Actualiser",
+  "Check bid status": "Vérifier le statut des offres",
+  "Check the evaluation stage of your watched bids on the portal":
+    "Vérifier l'étape d'évaluation de vos offres suivies sur le portail",
+  "No watched bids to check.": "Aucune offre suivie à vérifier.",
+  "Could not check bid status.": "Impossible de vérifier le statut des offres.",
+  "Stage only — a clarification or document request appears in your GeM seller account, which we do not access.":
+    "Étape uniquement — une demande de clarification ou de document apparaît dans votre compte vendeur GeM, auquel nous n'accédons pas.",
   "Sweeping {portal}…": "Collecte {portal} en cours…",
   swept: "collecté le",
   "Swept from {portal}": "Avis collectés sur {portal}",

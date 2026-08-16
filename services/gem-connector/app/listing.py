@@ -175,10 +175,23 @@ def build_payload(page: int, search: str = "") -> dict[str, str]:
     return {"payload": json.dumps(payload, separators=(",", ":"))}
 
 
+#: GeM reports "your query matched nothing" as an HTTP-200 body carrying code 404. That is an
+#: ANSWER, not a failure — and it is the common answer once you ask targeted questions, e.g.
+#: "is bid X at technical evaluation?", where "no" is what you expect most of the time.
+#: Matched on the code AND the message so a genuine 404-shaped fault still raises.
+_NO_DATA_MESSAGE = "no data found"
+
+
 def parse_page(body: str) -> tuple[int, list[dict[str, Any]]]:
     """→ (total_found, raw docs). The endpoint sends JSON under a text/html content type."""
     parsed = json.loads(body)
-    if parsed.get("code") != 200:
-        raise ValueError(f"GeM returned code {parsed.get('code')}: {parsed.get('message')!r}")
+    code = parsed.get("code")
+    if code == 404 and str(parsed.get("message", "")).strip().lower() == _NO_DATA_MESSAGE:
+        # Empty, not broken. Raising here turned every "no match" into a 500 — harmless for the
+        # listing sweep, which never asks a question with no answer, and fatal for a per-bid
+        # status check, which asks one on every poll.
+        return 0, []
+    if code != 200:
+        raise ValueError(f"GeM returned code {code}: {parsed.get('message')!r}")
     inner = parsed["response"]["response"]
     return int(inner["numFound"]), list(inner.get("docs") or [])

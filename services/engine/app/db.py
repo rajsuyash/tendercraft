@@ -1711,3 +1711,31 @@ def search_award_results(query: str, limit: int = 60) -> list[dict]:
         # ("rope" matching "roping") in a screen whose whole job is to be trusted with money.
         params["category"] = f"ilike.*{query.strip()}*"
     return _rest("GET", "award_results", params=params) or []
+
+
+# ---------- watched-bid stage tracking (UML ask 4) ----------
+def get_watched_matches(workspace_id: str, limit: int = 50) -> list[dict]:
+    """Bids this workspace starred, with the reference needed to look them up on the portal.
+
+    Bounded: each row costs up to three portal requests, so an unbounded watchlist would turn
+    one scheduled check into hundreds of requests at a government site.
+    """
+    return _rest(
+        "GET", "opportunity_matches",
+        params={
+            "workspace_id": f"eq.{workspace_id}", "watched": "is.true",
+            "select": "opportunity_id,last_stage,stage_checked_at,assigned_to,"
+                      "opportunities(portal_ref_no,title,deadline)",
+            "order": "stage_checked_at.asc.nullsfirst",
+            "limit": str(limit),
+        },
+    ) or []
+
+
+def set_match_stage(workspace_id: str, opportunity_id: str, stage: str, when_iso: str) -> None:
+    _rest(
+        "PATCH", "opportunity_matches",
+        params={"workspace_id": f"eq.{workspace_id}",
+                "opportunity_id": f"eq.{opportunity_id}"},
+        json={"last_stage": stage, "stage_checked_at": when_iso},
+    )
