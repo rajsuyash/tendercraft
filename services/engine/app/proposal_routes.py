@@ -14,7 +14,7 @@ from pipeline.drafter import draft_response
 from pipeline.retrieval import chunk_docs, select_evidence
 from pipeline.section_drafter import draft_section
 
-from . import authz, db, docx_export, sections
+from . import authz, db, docx_export, learning, sections
 from .auth import AuthedUser, get_current_user
 from .deterministic.drafting import mandatory_coverage
 from .envelope import ApiError, ok
@@ -436,5 +436,12 @@ def export_proposal(tender_id: str, user: CurrentUser, override: bool = False) -
     db.mark_exported(proposal["id"], user.workspace_id, when)
     db.write_audit(user.workspace_id, user.user_id, "export", "proposal", proposal["id"],
                    after={"override_used": decision.override_used})
+
+    # Close the learning loop: this proposal's human-approved sections become answers the next
+    # tender can reuse. Deliberately AFTER the gate and the audit write, and deliberately
+    # unable to raise — an export that cleared every blocker must not fail because a mining
+    # query did (app/learning.py).
+    harvest = learning.harvest_quietly(user.workspace_id, proposal["id"], user.user_id)
+
     return ok({"proposal_id": proposal["id"], "exported_at": when,
-               "override_used": decision.override_used})
+               "override_used": decision.override_used, "learned": harvest})

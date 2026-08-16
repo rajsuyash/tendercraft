@@ -731,6 +731,23 @@ def create_past_bid(workspace_id: str, bid: dict, uploaded_by: str | None) -> di
     return rows[0]
 
 
+def get_past_bid_by_proposal(workspace_id: str, proposal_id: str) -> dict | None:
+    """The harvest row for one of our own exported proposals, if it has been harvested before.
+
+    Looked up rather than upserted: `past_bids_workspace_proposal_uniq` (migration 0030) is a
+    PARTIAL unique index — uploaded bids carry no proposal_id and there are many of them — and
+    PostgREST's `on_conflict` cannot express the index predicate. One extra read on a path that
+    runs once per export is cheaper than the alternative, which is a second uniqueness rule
+    that disagrees with the first.
+    """
+    rows = _rest(
+        "GET", "past_bids",
+        params={"workspace_id": f"eq.{workspace_id}", "proposal_id": f"eq.{proposal_id}",
+                "select": "*", "limit": "1"},
+    )
+    return rows[0] if rows else None
+
+
 def get_past_bid(past_bid_id: str, workspace_id: str) -> dict | None:
     """Ownership guard for a caller-supplied bid id — the service role will not do it for us."""
     rows = _rest(
@@ -774,24 +791,32 @@ def get_answers_with_bids(workspace_id: str) -> list[dict]:
 
     The join is what makes a suggestion a suggestion with a receipt: outcome, authority and
     date travel with the text, so the user is never asked to accept an anonymous paragraph.
+
+    `answer_usages(count)` rides along in the same query. It is what feeds acceptance into the
+    ranking — the receipts have been written since 0027 and read by nothing. Counted in the
+    embedded resource rather than per row: this list is every answer in the workspace, and a
+    per-row usage lookup is the N+1 the pitfalls file names for exactly these screens.
     """
     rows = _rest(
         "GET", "answers",
         params={
             "workspace_id": f"eq.{workspace_id}",
             "select": "id,requirement_text,answer_text,section_key,category,past_bid_id,"
-                      "past_bids(name,authority,submitted_on,outcome)",
+                      "mined_by,past_bids(name,authority,submitted_on,outcome),"
+                      "answer_usages(count)",
         },
     ) or []
     out = []
     for r in rows:
         bid = r.pop("past_bids", None) or {}
+        usages = r.pop("answer_usages", None) or []
         out.append({
             **r,
             "bid_name": bid.get("name"),
             "authority": bid.get("authority"),
             "submitted_on": bid.get("submitted_on"),
             "outcome": bid.get("outcome") or "unknown",
+            "times_used": (usages[0].get("count") if usages else 0) or 0,
         })
     return out
 
@@ -824,6 +849,31 @@ def get_past_bid_texts(workspace_id: str) -> list[str]:
                 "select": "text_content"},
     ) or []
     return [r.get("text_content") or "" for r in rows if (r.get("text_content") or "").strip()]
+
+
+def get_edit_rows(workspace_id: str) -> list[dict]:
+    """Every human-edited section that still has the drafter's original beside it.
+
+    Only rows where `original_md` survived: it is NULL for pre-0031 sections that were already
+    edited, and treating those as unchanged would report the most heavily rewritten sections as
+    the least (migration 0031). Ordered oldest-first because the whole point of the trend is
+    whether the rewriting shrinks as the workspace fills.
+    """
+    return _rest(
+        "GET", "proposal_sections",
+        params={"workspace_id": f"eq.{workspace_id}", "original_md": "not.is.null",
+                "edited_by": "not.is.null",
+                "select": "proposal_id,key,original_md,body_md,edited_at",
+                "order": "edited_at.asc"},
+    ) or []
+
+
+def get_edit_pairs(workspace_id: str) -> list[tuple[str, str]]:
+    """(drafter's original, shipped text) pairs — the style measurement's input."""
+    return [
+        (r["original_md"], r.get("body_md") or "")
+        for r in get_edit_rows(workspace_id) if r.get("original_md")
+    ]
 
 
 def upsert_style_profile(workspace_id: str, profile: dict, actor: str | None) -> dict:
@@ -905,7 +955,22 @@ def edit_section(workspace_id: str, proposal_id: str, key: str, body_md: str,
     rewritten the text they own it — keeping an "unverified" flag raised against a sentence
     the model no longer wrote would be meaningless. Approval is deliberately NOT granted
     here; editing is authorship, sign-off is a separate act (and may be a separate person).
+
+    Seals `original_md` on the FIRST edit (migration 0031). The read is what makes that
+    possible — PostgREST cannot write a column from another column's current value — and it
+    costs one round trip on a path a human is typing into, which is the right place to spend
+    one. A second edit leaves the seal alone: it is the author refining their own words, and
+    overwriting would shrink the measured delta toward zero the more carefully someone works.
     """
+    prior = _rest(
+        "GET", "proposal_sections",
+        params={"proposal_id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
+                "key": f"eq.{key}", "select": "body_md,original_md", "limit": "1"},
+    )
+    seal = {}
+    if prior and prior[0].get("original_md") is None and (prior[0].get("body_md") or "").strip():
+        seal = {"original_md": prior[0]["body_md"]}
+
     _rest(
         "PATCH", "proposal_sections",
         params={
@@ -914,6 +979,7 @@ def edit_section(workspace_id: str, proposal_id: str, key: str, body_md: str,
             "key": f"eq.{key}",
         },
         json={
+            **seal,
             "body_md": body_md,
             "word_count": len(body_md.split()),
             "status": "drafted",

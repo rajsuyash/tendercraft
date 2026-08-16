@@ -26,6 +26,8 @@ import re
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 
+from .learning import edit_delta, measure_edits, render_edit_brief
+
 _WORD = re.compile(r"[A-Za-z']+")
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 _FIRST_PERSON = re.compile(r"\b(we|our|us|ours)\b", re.I)
@@ -121,6 +123,24 @@ def render_brief(m: StyleMetrics) -> str:
     )
 
 
-def build_profile(texts: Sequence[str]) -> dict:
+def build_profile(texts: Sequence[str], edits: Sequence[tuple[str, str]] = ()) -> dict:
+    """The workspace's style profile: how they write, plus how they correct us.
+
+    `texts` is the prose of their own submitted bids (uploaded, never generated — see
+    app/learning.py). `edits` is (drafter's original, shipped text) pairs from
+    proposal_sections; each is measured and discarded, so no source byte reaches the brief.
+    """
     m = measure(texts)
-    return {"metrics": m.as_dict(), "brief": render_brief(m), "built_from": len(texts)}
+    deltas = [d for d in (edit_delta(a, b) for a, b in edits) if d is not None]
+    em = measure_edits(deltas)
+    brief = render_brief(m)
+    # Only append corrections to a brief that exists. A "learned from your corrections" note
+    # floating alone, with no measured voice under it, reads as the system having opinions
+    # about a bidder it has never read.
+    if brief:
+        brief += render_edit_brief(em)
+    return {
+        "metrics": {**m.as_dict(), "edits": em.as_dict()},
+        "brief": brief,
+        "built_from": len(texts),
+    }

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .drafting import _CREDENTIAL
 
@@ -36,6 +36,17 @@ _DEFAULT_LIMIT = 3
 #: answer to a requirement nobody disputed is still the right answer.
 _OUTCOME_WEIGHT = {"won": 1.0, "unknown": 0.92, "lost": 0.85}
 
+#: Acceptance nudges ties too, on the same principle and for the same reason. An answer a human
+#: has taken four times is EVIDENCE, not proof — the fourth tender may simply have resembled
+#: the first three — so the boost is small and saturates fast. `answer_usages` has been written
+#: since 0027 and read by nothing; this is what makes the receipts do work.
+_USAGE_STEP = 0.03
+_USAGE_CAP = 5
+
+#: Two answers this similar are the same answer under two bid names. Above the floor because a
+#: wrong merge hides a genuinely different answer behind a count nobody expands.
+_DUPLICATE_FLOOR = 0.85
+
 
 @dataclass(frozen=True)
 class Suggestion:
@@ -48,6 +59,11 @@ class Suggestion:
     submitted_on: str | None
     outcome: str
     section_key: str | None
+    #: How many times a human has accepted this answer into a draft (answer_usages).
+    times_used: int = 0
+    #: How many OTHER bids carried a near-identical answer, collapsed behind this one. Shown as
+    #: "also in N bids" — the same repetition that used to read as noise, reading as confidence.
+    also_in_bids: int = 0
 
 
 @dataclass(frozen=True)
@@ -87,6 +103,11 @@ def rank_answers(
     `answers` rows carry the answer joined to its past bid (see db.get_answers_with_bids).
     A `section_key` narrows to answers mined from the same section when one is known — a
     methodology answer must not be offered for a pre-qualification requirement.
+
+    Near-identical answers are collapsed BEFORE the limit is applied. Doing it after would
+    truncate three duplicates off one bid and then dedupe them to one, filling a three-slot
+    panel with a single answer — which is how a workspace's sixth tender ends up with a
+    suggestion panel less useful than its second.
     """
     scored: list[tuple[float, str, Suggestion]] = []
     for row in answers:
@@ -96,8 +117,11 @@ def rank_answers(
         if raw < _MIN_SIMILARITY:
             continue
         outcome = row.get("outcome") or "unknown"
+        used = int(row.get("times_used") or 0)
         scored.append((
-            raw * _OUTCOME_WEIGHT.get(outcome, _OUTCOME_WEIGHT["unknown"]),
+            raw
+            * _OUTCOME_WEIGHT.get(outcome, _OUTCOME_WEIGHT["unknown"])
+            * (1.0 + min(used, _USAGE_CAP) * _USAGE_STEP),
             row.get("submitted_on") or "",
             Suggestion(
                 answer_id=row["id"],
@@ -109,12 +133,48 @@ def rank_answers(
                 submitted_on=row.get("submitted_on"),
                 outcome=outcome,
                 section_key=row.get("section_key"),
+                times_used=used,
             ),
         ))
     # Weighted score first, then recency — a newer answer to an equally-matching requirement
     # is the one whose facts are likeliest to still hold.
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
-    return tuple(s for _, _, s in scored[:limit])
+    return collapse_duplicates([s for _, _, s in scored])[:limit]
+
+
+def _near_duplicate(a: str, b: str) -> bool:
+    """Are these the same answer under two bid names?
+
+    Both directions, and the WEAKER one decides. `similarity` is deliberately asymmetric (it
+    asks what fraction of the first text's distinctive words the second contains), so a
+    two-line answer fully contained in a three-page one scores 1.0 one way round. Taking the
+    minimum means a short answer is never swallowed by a long one that merely mentions it.
+    """
+    return min(similarity(a, b), similarity(b, a)) >= _DUPLICATE_FLOOR
+
+
+def collapse_duplicates(ranked: Sequence[Suggestion]) -> tuple[Suggestion, ...]:
+    """Fold near-identical answers into the best-ranked one, carrying a count.
+
+    After six tenders a workspace holds six near-identical answers to "Understanding of the
+    Project" — one per bid, all scoring within a few points. The panel showed three of them,
+    the user learned it was noise, and stopped reading it. Growth has to mean convergence.
+
+    The head is the one the ranking already chose, so outcome, recency and acceptance all still
+    decide WHICH version is offered. What the fold adds is that repetition now reads as
+    confidence ("also in 3 bids") instead of as three wasted rows.
+    """
+    kept: list[Suggestion] = []
+    extra: dict[str, int] = {}
+    for s in ranked:
+        head = next((k for k in kept if _near_duplicate(k.answer_text, s.answer_text)), None)
+        if head is None:
+            kept.append(s)
+            continue
+        extra[head.answer_id] = extra.get(head.answer_id, 0) + 1
+    return tuple(
+        replace(k, also_in_bids=extra[k.answer_id]) if k.answer_id in extra else k for k in kept
+    )
 
 
 def _name_tokens(name: str) -> set[str]:

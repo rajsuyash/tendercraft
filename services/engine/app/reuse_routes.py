@@ -26,6 +26,13 @@ from . import authz, db
 from .auth import AuthedUser, get_current_user
 from .deterministic.answer_reuse import rank_answers, stale_claims
 from .deterministic.drafting import DraftSentence, validate_draft
+from .deterministic.learning import (
+    MIN_EDITS,
+    edit_delta,
+    measure_edits,
+    reuse_coverage,
+    utilisation,
+)
 from .deterministic.shred import split_sentences
 from .deterministic.types import SectionKind
 from .envelope import ApiError, ok
@@ -112,6 +119,10 @@ def _suggest(workspace_id: str, requirement_text: str, section_key: str | None) 
                 "provenance": {
                     "bid": s.bid_name, "authority": s.authority,
                     "submitted_on": s.submitted_on, "outcome": s.outcome,
+                    # Track record, not a verdict. "Accepted 4 times, also in 2 other bids"
+                    # is why this one is at the top — shown so the ranking can be judged
+                    # rather than trusted.
+                    "times_used": s.times_used, "also_in_bids": s.also_in_bids,
                 },
                 "validation": _revalidate(s.answer_text, chunks, kind),
                 # Named, dated, and specific — "unverified" with no reason gets dismissed.
@@ -224,3 +235,61 @@ async def reuse_answer(proposal_id: str, body: ReuseIn, user: CurrentUser) -> di
     return ok(await run_in_threadpool(
         _apply, user.workspace_id, user.user_id, proposal_id, answer, body
     ))
+
+
+@router.get("/api/learning/maturity")
+def learning_maturity(user: CurrentUser) -> dict:
+    """Is the knowledge base actually getting better? Three numbers, and one of them can fall.
+
+    "Self-sufficient after five or six tenders" is a claim. This is the evidence for it, or
+    against it. Coverage and utilisation both rise merely by accumulating rows; the edit trend
+    is the one that can say no, which is why it is here and why it is reported even when there
+    is too little of it to mean anything yet.
+
+    Everything is derived from rows the system already holds — no new tracking table, and no
+    metric that needs a denominator we do not honestly have.
+    """
+    answers = db.get_answers_with_bids(user.workspace_id)
+    bids = db.list_past_bids(user.workspace_id)
+    edits = db.get_edit_rows(user.workspace_id)
+
+    deltas = [
+        (r, d) for r in edits
+        if (d := edit_delta(r.get("original_md") or "", r.get("body_md") or "")) is not None
+    ]
+
+    # Coverage is measured against the newest tender that has criteria: it answers "if this
+    # arrived today, how much of it could we already speak to?", which is the question a user
+    # actually has. Older tenders would average away exactly the improvement being measured.
+    coverage = None
+    for t in db.list_tenders(user.workspace_id, limit=5):
+        criteria = db.get_criteria(t["id"], user.workspace_id)
+        if criteria:
+            coverage = reuse_coverage(
+                t["id"], [c.get("verbatim_text") or "" for c in criteria], answers
+            ).as_dict()
+            coverage["tender_title"] = t.get("title")
+            break
+
+    return ok({
+        "answers": len(answers),
+        "past_bids": {
+            # Told apart on purpose: an uploaded bid is evidence of what an evaluator
+            # accepted, a generated one of what this client signs their name to (0030).
+            "uploaded": sum(1 for b in bids if (b.get("origin") or "uploaded") == "uploaded"),
+            "generated": sum(1 for b in bids if b.get("origin") == "generated"),
+        },
+        "utilisation": utilisation(answers),
+        "coverage": coverage,
+        "edits": {
+            **measure_edits([d for _, d in deltas]).as_dict(),
+            "floor": MIN_EDITS,
+            # Oldest first. A falling line is the system learning; a flat one is the honest
+            # answer that it is not, and the caller is given the points rather than a verdict.
+            "trend": [
+                {"when": r.get("edited_at"), "section": r.get("key"),
+                 "rewrite_ratio": d.rewrite_ratio, "length_shift": d.length_shift}
+                for r, d in deltas
+            ],
+        },
+    })

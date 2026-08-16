@@ -12,6 +12,8 @@ const NAV = [
   { href: "/tenders", label: "Tenders" },
   { href: "/proposals", label: "Proposals" },
   { href: "/library", label: "Knowledge Base" },
+  // The documents you gave us (/library) vs what we learned from finishing bids (/knowledge).
+  { href: "/knowledge", label: "Learning" },
   { href: "/profile", label: "Vendor Profile" },
   { href: "/capability", label: "Capability" },
   { href: "/settings", label: "Settings" },

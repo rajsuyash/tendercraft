@@ -196,7 +196,9 @@ def rebuild_style_profile(user: CurrentUser) -> dict:
     """
     authz.check(user, authz.DRAFT)
     texts = db.get_past_bid_texts(user.workspace_id)
-    profile = build_profile(texts)
+    # How they write, plus how they correct us. Both are measurements; neither carries a byte
+    # of source text into the brief (deterministic/style.py, G-6).
+    profile = build_profile(texts, db.get_edit_pairs(user.workspace_id))
     saved = db.upsert_style_profile(user.workspace_id, profile, user.user_id)
     db.write_audit(user.workspace_id, user.user_id, "style_profile_rebuilt", "workspace",
                    user.workspace_id, after={"built_from": profile["built_from"],

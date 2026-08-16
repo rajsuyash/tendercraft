@@ -60,6 +60,8 @@ def test_suggestions_return_provenance_and_write_nothing(client, monkeypatch, co
     assert data["suggestions"][0]["provenance"] == {
         "bid": "NIC 2025 bid", "authority": "NIC",
         "submitted_on": "2025-04-01", "outcome": "won",
+        # Track record travels with the receipt so the ranking can be judged, not trusted.
+        "times_used": 0, "also_in_bids": 0,
     }
     # G-AC6: looking at a suggestion is not accepting it.
     assert writes == []
@@ -168,3 +170,73 @@ def test_a_criterion_with_no_text_yields_no_suggestions_rather_than_a_500(client
     r = client.get("/api/tenders/t1/criteria/c1/suggestions")
     assert r.status_code == 200
     assert r.json()["data"]["suggestions"] == []
+
+
+# --- the maturity meter (Phase 4) ---------------------------------------------------------
+
+def test_maturity_reports_the_three_numbers_and_tells_bid_origins_apart(client, monkeypatch):
+    monkeypatch.setattr(db, "get_answers_with_bids", lambda ws: [
+        {"id": "a1", "requirement_text": "quality management certification",
+         "answer_text": _ANSWER_TEXT, "section_key": None, "bid_name": "b",
+         "authority": "NIC", "submitted_on": "2025-04-01", "outcome": "won",
+         "times_used": 2},
+        {"id": "a2", "requirement_text": "training plan for departmental users",
+         "answer_text": "We deliver role-based training across three cohorts on site.",
+         "section_key": None, "bid_name": "b", "authority": "NIC",
+         "submitted_on": "2025-04-01", "outcome": "won", "times_used": 0},
+    ])
+    monkeypatch.setattr(db, "list_past_bids", lambda ws: [
+        {"id": "b1", "origin": "uploaded"}, {"id": "b2", "origin": "generated"},
+        {"id": "b3"},  # pre-0030 row: the column default is what makes this an upload
+    ])
+    monkeypatch.setattr(db, "get_edit_rows", lambda ws: [
+        {"proposal_id": "p1", "key": "solution", "edited_at": "2026-01-01T00:00:00Z",
+         "original_md": "word " * 100, "body_md": "word " * 60},
+        # No original: pre-0031, unrecoverable. Must be skipped, never counted as unchanged.
+        {"proposal_id": "p2", "key": "workplan", "edited_at": "2026-02-01T00:00:00Z",
+         "original_md": None, "body_md": "anything"},
+    ])
+    monkeypatch.setattr(db, "list_tenders", lambda ws, **kw: [{"id": "t9", "title": "NIC ERP"}])
+    monkeypatch.setattr(db, "get_criteria", lambda t, ws: [
+        {"verbatim_text": "quality management certification"},
+        {"verbatim_text": "bank guarantee validity period"},
+    ])
+
+    data = client.get("/api/learning/maturity").json()["data"]
+
+    assert data["past_bids"] == {"uploaded": 2, "generated": 1}
+    assert data["utilisation"] == {"used": 1, "total": 2, "ratio": 0.5}
+    assert data["coverage"]["with_suggestion"] == 1
+    assert data["coverage"]["ratio"] == 0.5
+    assert data["coverage"]["tender_title"] == "NIC ERP"
+    # One measurable edit, not two — the row with no original is unknown, not unchanged.
+    assert data["edits"]["edits"] == 1
+    assert len(data["edits"]["trend"]) == 1
+    assert data["edits"]["trend"][0]["length_shift"] < 0
+
+
+def test_maturity_of_a_brand_new_workspace_is_zeroes_not_an_error(client, monkeypatch):
+    monkeypatch.setattr(db, "get_answers_with_bids", lambda ws: [])
+    monkeypatch.setattr(db, "list_past_bids", lambda ws: [])
+    monkeypatch.setattr(db, "get_edit_rows", lambda ws: [])
+    monkeypatch.setattr(db, "list_tenders", lambda ws, **kw: [])
+
+    data = client.get("/api/learning/maturity").json()["data"]
+    assert data["answers"] == 0
+    assert data["coverage"] is None
+    assert data["utilisation"]["ratio"] == 0.0
+    assert data["edits"]["trend"] == []
+
+
+def test_the_corpus_query_actually_fetches_the_usage_counts_the_ranker_reads():
+    """Same trap as the guard test above: the ranker and the meter both read `times_used`.
+
+    If the real query stops selecting `answer_usages(count)`, every stubbed test still passes
+    and acceptance silently stops influencing the ranking — a regression with no failing test
+    and no error, which is the worst shape a regression can take.
+    """
+    import inspect
+
+    src = inspect.getsource(db.get_answers_with_bids)
+    assert "answer_usages(count)" in src
+    assert "times_used" in src

@@ -33,6 +33,7 @@ const FR: Record<string, string> = {
   Tenders: "Consultations",
   Proposals: "Propositions",
   "Knowledge Base": "Base documentaire",
+  Learning: "Apprentissage",
   "Vendor Profile": "Profil entreprise",
   Settings: "Paramètres",
   "User guide": "Guide d'utilisation",

@@ -154,3 +154,48 @@ Mumbai anyway); until then, count round trips like they cost money.
   accepting) and again on accept (the library may have changed in between). An expired document
   is already excluded from retrieval, so a stale claim fails to re-cite on its own — but report
   WHICH document expired and when, or the user dismisses a generic "unverified".
+
+## The learning loop (Modules added 2026-08-16, migrations 0030–0031)
+
+- A product that learns from its own output **learns from its own output**. Harvesting an
+  exported proposal into the answer library is the whole feature, and mining the sections
+  nobody approved is how it silently becomes worthless: after five tenders the client's
+  "knowledge base" is a compressed recording of the drafter's habits. The tell is that it
+  looks like success — coverage rises, edits fall, prose drifts away from how the client
+  writes, and no screen says so. Gate on `approved_by or edited_by`
+  (`deterministic/learning.py::harvestable`); the approval gate already existed and is free.
+- A harvested proposal must NOT become a `library_documents` row, however natural it looks
+  beside the upload path. Two separate failures: the retriever would then cite our own
+  unverified draft as evidence (circular grounding, which cite-or-flag reports as SATISFIED),
+  and `get_past_bid_texts` would feed generated prose into the house-style measurement,
+  converging the style brief onto the drafter's own voice. A harvest writes `past_bids` +
+  `answers` and nothing else.
+- Never delete-and-rebuild `answers` on a re-harvest. `answer_usages` cascades from `answers`,
+  so the rebuild destroys the G-AC6 acceptance receipts — the only record proving no
+  suggestion entered a draft unaccepted. Upsert on the stable key instead (section headings
+  come from SECTION_SPECS, so they do not move between exports).
+- A PARTIAL unique index cannot be used as a PostgREST `on_conflict` target: the client cannot
+  express the index predicate, and the request fails at runtime rather than at review. Look the
+  row up first (`db.get_past_bid_by_proposal`) — one extra read on a once-per-export path beats
+  a second uniqueness rule that disagrees with the first.
+- Backfilling a new column with "the obvious value" can manufacture the exact lie the column
+  was added to detect. `proposal_sections.original_md` is backfilled from `body_md` ONLY where
+  `edited_by is null`; for an already-edited row the original is unrecoverable, and copying the
+  current body would report the most heavily rewritten sections in the workspace as untouched.
+  NULL means unknown, and `edit_delta` returns None rather than a zeroed delta so the two can
+  never be confused.
+- Seal an edit-provenance column on the FIRST write only. A second edit is the author refining
+  their own prose, not correcting the model; letting it overwrite shrinks the measured delta
+  toward zero the more carefully someone works — the metric inverts under exactly the behaviour
+  it is meant to reward.
+- **A mean over a small sample is not robust enough to carry a "is this improving?" verdict.**
+  Scrapping one section outright is normal, and a single 100% rewrite moves a five-sample mean
+  by 0.1 — twice the noise floor — so one discarded section reads as "the system is learning"
+  for the whole workspace. Compare MEDIANS of the halves (`LearningMeter.readTrend`). Found by
+  a test written to assert outlier-immunity that the mean implementation could not deliver.
+- Deduplicate suggestions BEFORE applying the result limit, not after. Truncating to three and
+  then folding leaves a three-slot panel showing one answer — so the panel gets *worse* as the
+  library grows, which is the opposite of the feature's promise.
+- When folding near-identical text, compare similarity in BOTH directions and let the weaker
+  one decide. `answer_reuse.similarity` is deliberately asymmetric, so a two-line answer fully
+  contained in a three-page one scores 1.0 one way round and would be silently swallowed by it.
