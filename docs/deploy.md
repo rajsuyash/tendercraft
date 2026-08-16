@@ -1,16 +1,27 @@
 # Deployment
 
-Both services run as containers on **Google Cloud Run, `asia-south1` (Mumbai)**.
+Both services run as containers on **Google Cloud Run, `europe-north1` (Hamina)**.
 
 | Service | URL | Container |
 |---|---|---|
-| Web (Next.js) | https://tendercraft-web-822379741897.asia-south1.run.app | `Dockerfile.web` (repo root — pnpm workspace needs the root as build context) |
-| Engine (FastAPI) | https://tendercraft-engine-822379741897.asia-south1.run.app | `services/engine/Dockerfile` |
+| Web (Next.js) | https://tendercraft-web-eu-822379741897.europe-north1.run.app | `Dockerfile.web` (repo root — pnpm workspace needs the root as build context) |
+| Engine (FastAPI) | https://tendercraft-engine-eu-822379741897.europe-north1.run.app | `services/engine/Dockerfile` |
 
-Project `resonant-tube-280016`. Mumbai was chosen deliberately: PRD §9 requires Indian
-residency, and this is the half of that we control today. **The model endpoint is still
-`generativelanguage.googleapis.com` (Google AI Studio), which has no region pinning — see
-the residency blocker in BUILD-LOG before any real client data.**
+Project `resonant-tube-280016`.
+
+> **This file said `asia-south1` until 2026-08-16, and those services no longer exist.** The
+> compute was moved to `europe-north1` on 2026-07-26 to sit beside the Supabase project in
+> Stockholm — every DB round trip had been costing ~130ms and endpoints got 9-15x faster with
+> no code change (`docs/latency-plan.md`, `docs/known-pitfalls.md`). The Mumbai services were
+> **deleted** so the slow deployment could not be demoed by accident, so the commands below,
+> as they were written, would have deployed a *new* service at a hostname nothing points at
+> while production carried on unchanged — a deploy that appears to succeed and changes nothing.
+> Region is now a variable in one place below.
+>
+> Mumbai remains the destination: PRD §9 requires Indian residency, and satisfying it means
+> moving the DATABASE (`docs/latency-plan.md` Option B), not the compute back. **The model
+> endpoint is `generativelanguage.googleapis.com` (Google AI Studio), which has no region
+> pinning — see the residency blocker in BUILD-LOG before any real client data.**
 
 ## Secrets
 
@@ -29,15 +40,22 @@ inlines them into the client bundle at build time; runtime-only would ship an em
 
 ## Redeploy
 
+**Apply any new migrations FIRST.** The engine reads columns the database must already have;
+old code ignores new columns, so migrations-then-code is the only ordering with no broken
+window. `services/engine/migrations/` is the chain, applied in filename order. `tools/local-db.sh`
+is for the throwaway CI database ONLY — it drops `schema public` and refuses any non-localhost
+`DB_URL`.
+
 ```bash
 set -a; source .env; set +a
-P=resonant-tube-280016; R=asia-south1
-E=https://tendercraft-engine-822379741897.asia-south1.run.app
+P=resonant-tube-280016; R=europe-north1
+WEB=tendercraft-web-eu; ENG=tendercraft-engine-eu
+E=https://tendercraft-engine-eu-822379741897.europe-north1.run.app
 IMG="$R-docker.pkg.dev/$P/cloud-run-source-deploy/tendercraft-web:latest"
 
 # engine — builds from source, Dockerfile in services/engine
 cd services/engine
-gcloud run deploy tendercraft-engine --source . --project=$P --region=$R \
+gcloud run deploy $ENG --source . --project=$P --region=$R \
   --allow-unauthenticated --memory=2Gi --cpu=2 --timeout=600 --max-instances=5 \
   --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}" \
   --set-secrets="SUPABASE_SERVICE_JWT=tendercraft-supabase-service-key:latest,GEMINI_API_KEY=tendercraft-gemini-api-key:latest"
@@ -46,10 +64,13 @@ gcloud run deploy tendercraft-engine --source . --project=$P --region=$R \
 cd ../..
 gcloud builds submit --config=cloudbuild.web.yaml --project=$P --region=$R \
   --substitutions="_SB_URL=${NEXT_PUBLIC_SUPABASE_URL},_SB_ANON=${NEXT_PUBLIC_SUPABASE_ANON_KEY},_IMAGE=${IMG}"
-gcloud run deploy tendercraft-web --image="$IMG" --project=$P --region=$R \
+gcloud run deploy $WEB --image="$IMG" --project=$P --region=$R \
   --allow-unauthenticated --memory=1Gi --cpu=1 --timeout=300 --max-instances=5 \
   --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL},NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY},ENGINE_URL=${E}"
 ```
+
+Confirm the service names before deploying — `gcloud run services list --project=$P` is the
+only authority, and a typo creates a new service rather than failing.
 
 ## Cost posture
 
@@ -58,12 +79,12 @@ tradeoff is a cold start of a few seconds on the first request after ~15 minutes
 For a scheduled demo, warm both a couple of minutes beforehand:
 
 ```bash
-curl -s -o /dev/null https://tendercraft-web-822379741897.asia-south1.run.app/login
-curl -s -o /dev/null https://tendercraft-engine-822379741897.asia-south1.run.app/health
+curl -s -o /dev/null https://tendercraft-web-eu-822379741897.europe-north1.run.app/login
+curl -s -o /dev/null https://tendercraft-engine-eu-822379741897.europe-north1.run.app/health
 ```
 
 To remove cold starts entirely (roughly $15–25/month for the pair):
-`gcloud run services update tendercraft-{web,engine} --min-instances=1 --region=asia-south1`
+`gcloud run services update tendercraft-{web-eu,engine-eu} --min-instances=1 --region=europe-north1`
 
 ## Two things that bit during the first deploy
 
