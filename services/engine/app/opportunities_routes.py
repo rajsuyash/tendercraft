@@ -293,6 +293,9 @@ def get_notification_settings(user: CurrentUser) -> dict:
         # Whether this DEPLOYMENT can send at all, which is a different question from whether
         # this workspace wants alerts — and the one that explains a silent inbox.
         "smtp_configured": mailer.is_configured(),
+        # 'resend' | 'smtp' | 'none'. Named so a support question is one screenshot, not a
+        # log dig: "alerts are on but nothing arrives" has a different cause per transport.
+        "transport": mailer.transport(),
     })
 
 

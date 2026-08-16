@@ -140,3 +140,57 @@ def test_the_assignment_email_names_who_routed_it():
     assert subject == "Tender assigned to you: Wire rope"
     assert "priya@meridian.test has assigned" in body
     assert "GEM/2026/B/1" in body
+
+
+# --- transport selection (Resend or SMTP, both free at this volume) -------------------------
+
+def test_resend_is_preferred_when_a_key_is_present(monkeypatch):
+    """Chosen for reliability on Cloud Run, not cost: an HTTPS POST needs no long-lived
+    connection and cannot be tripped by a blocked SMTP egress port."""
+    from app import mailer
+
+    monkeypatch.setenv("RESEND_API_KEY", "re_test")
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("SMTP_USER", "u")
+    monkeypatch.setenv("SMTP_PASSWORD", "p")
+    assert mailer.transport() == "resend"
+    assert mailer.is_configured() is True
+
+
+def test_smtp_is_the_fallback_when_there_is_no_resend_key(monkeypatch):
+    from app import mailer
+
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("SMTP_USER", "u")
+    monkeypatch.setenv("SMTP_PASSWORD", "p")
+    assert mailer.transport() == "smtp"
+
+
+def test_no_credentials_at_all_reports_none_rather_than_pretending(monkeypatch):
+    from app import mailer
+
+    for var in ("RESEND_API_KEY", "SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD"):
+        monkeypatch.delenv(var, raising=False)
+    assert mailer.transport() == "none"
+    assert mailer.is_configured() is False
+
+
+def test_a_resend_rejection_keeps_the_reason(monkeypatch):
+    """Resend's body says WHY — unverified domain, bad recipient, rate limit. A bare status
+    code turns a five-second fix into an afternoon."""
+    import httpx
+
+    from app import http, mailer
+
+    monkeypatch.setenv("RESEND_API_KEY", "re_test")
+
+    def _post(*_a, **_k):
+        request = httpx.Request("POST", "https://api.resend.com/emails")
+        response = httpx.Response(403, json={"message": "domain is not verified"},
+                                  request=request)
+        raise httpx.HTTPStatusError("403", request=request, response=response)
+
+    monkeypatch.setattr(http.client, "post", _post)
+    with pytest.raises(RuntimeError, match="domain is not verified"):
+        mailer.send("ops@uml.test", "subject", "body")
