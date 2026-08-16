@@ -1,6 +1,39 @@
 # Source review — GeM awarded contracts (`gem.gov.in/view_contracts`)
 
-**Probed:** 2026-08-07 · **Verdict: acquisition REFUSED — G-8 (CAPTCHA).**
+**Probed:** 2026-08-07 · **Verdict on THIS endpoint: acquisition REFUSED — G-8 (CAPTCHA).**
+
+> ## SUPERSEDED IN PART, 2026-08-16 — ask 5 is BUILT, from a different surface
+>
+> Everything below about `gem.gov.in/view_contracts` still holds, and was re-verified on
+> 2026-08-16: both search forms are captcha-gated, and `/view_contracts/bid_detail?bid_no=…`
+> — reachable as a link from a public result page — is captcha-gated too. We do not go there.
+>
+> **But this file's own §5 named the gap and it was the whole answer:** *"whether any other
+> public GeM surface publishes award data without a captcha … worth one hour before accepting
+> §4."* It was worth an hour. `bidplus.gem.gov.in/all-bids-data` — the endpoint this product
+> ALREADY sweeps, same anonymous cookie, same CSRF token — serves published results when asked:
+>
+> ```
+> filter.bidStatusType = "bidrastatus"                      (not "ongoing_bids")
+> filter.byStatus      = "bid_awarded" | "fin_evaluated" | "tech_evaluated"
+> ```
+>
+> and each result links to a public page carrying the full competitive ladder — seller, offered
+> item, **total price**, and rank (L1, L2, L3) — plus every participant with their MSE status
+> and qualification outcome. No captcha, no login, robots-clean. Measured: **45,273 awarded
+> bids for "wire rope"**, out of 5.7M awarded bids overall.
+>
+> Implemented in `services/gem-connector/app/results.py` (`GET /bid-results`), 21 tests against
+> a golden fixture captured from a real result page.
+>
+> **The lesson worth more than the feature:** a refusal was recorded against a QUESTION ("can
+> we get award data?") when it had only been established against an ENDPOINT. Nine days of
+> "ask 5 is impossible" followed, including a plan to buy a ~$200/mo commercial data feed. When
+> a source review refuses something, it must name the surface it refused, and the open items in
+> its own §5 are not optional.
+>
+> §3's gap is also closed: the generic captcha markers are now in `fetch.py::_CHALLENGE_MARKERS`,
+> so `/view_contracts` halts a run instead of returning clean.
 **Prompted by:** `docs/feedback/usha-martin.md` ask 5, five-year historical price analysis,
 which UML named their major pain area.
 **Method:** one `GET` through the existing `services/gem-connector/app/fetch.py::GuardedFetcher`

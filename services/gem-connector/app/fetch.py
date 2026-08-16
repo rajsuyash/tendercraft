@@ -75,6 +75,18 @@ _CHALLENGE_MARKERS = (
     "hcaptcha",
     "are you a human",
     "enable javascript and cookies to continue",
+    # A portal's OWN captcha, which the commercial-vendor list above does not catch. This gap
+    # was found and written up on 2026-08-07 (docs/discovery/source-gem-contracts.md §3) and
+    # left open: `gem.gov.in/view_contracts` is captcha-gated on both search forms, and
+    # `assert_no_bot_challenge` returned CLEAN on it. A clean check therefore read as
+    # permission on a page that is unambiguously for humans. The danger is not a loud failure
+    # — it is submitting a blank captcha field and recording the empty result as "no contracts
+    # found", which is a fabricated fact with nothing anywhere to contradict it.
+    "captcha_entered",
+    "h_captcha",
+    "encryptcaptcha",
+    "captcha_code",
+    "enter captcha",
 )
 
 

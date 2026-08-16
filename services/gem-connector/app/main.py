@@ -26,7 +26,15 @@ from fastapi.responses import JSONResponse
 
 from .document import eligibility_for
 from .fetch import BotChallengeDetected, FetchRefused, GuardedFetcher
-from .listing import build_payload, extract_csrf_token, normalize, parse_page
+from .listing import build_payload, extract_csrf_token, normalize, normalize_ref, parse_page
+from .results import (
+    BASE_URL,
+    RESULT_STATUSES,
+    build_results_payload,
+    parse_result_page,
+    result_path,
+    result_stage,
+)
 
 log = logging.getLogger("tendercraft.gem")
 
@@ -121,6 +129,77 @@ def sweep(
     }
 
 
+def sweep_results(
+    fetcher: GuardedFetcher,
+    *,
+    search: str,
+    status: str = "bid_awarded",
+    max_pages: int = 5,
+    max_results: int = 40,
+) -> dict[str, Any]:
+    """Published bid results, with the awarded price ladder for each (UML ask 5).
+
+    Two requests per result — the listing page, then that bid's own result page — so this is
+    deliberately bounded much tighter than the listing sweep. `max_results` is the real cap;
+    a category with 45,000 awards is a backfill job, not one HTTP call.
+
+    A result page that yields no ladder is KEPT with `ladder: []` rather than dropped. The bid
+    is genuinely at an earlier stage, and silently omitting it would make a price history look
+    denser than the evidence supports.
+    """
+    fetcher.reset_session()
+    landing = fetcher.get("/all-bids")
+    from .fetch import assert_no_bot_challenge
+
+    assert_no_bot_challenge(landing.text, "/all-bids")
+    token = extract_csrf_token(landing.text)
+
+    out: list[dict[str, Any]] = []
+    total_found = 0
+    for page in range(1, max_pages + 1):
+        body = build_results_payload(page, search, status) | {"csrf_bd_gem_nk": token}
+        total_found, docs = parse_page(fetcher.post_form("/all-bids-data", body).text)
+        if not docs:
+            break
+        for doc in docs:
+            if len(out) >= max_results:
+                break
+            path = result_path(doc)
+            page_html = fetcher.get(f"/{path}").text
+            # The result page is a public page like any other: if the portal starts
+            # challenging us here, the run stops rather than adapting (G-8).
+            assert_no_bot_challenge(page_html, path)
+            result = parse_result_page(page_html)
+            out.append({
+                "portal_ref_no": normalize_ref(_one(doc, "b_bid_number")),
+                "category": _one(doc, "b_category_name"),
+                "quantity": _one(doc, "b_total_quantity"),
+                "department": _one(doc, "ba_official_details_deptName"),
+                "bid_end_date": _one(doc, "final_end_date_sort"),
+                "stage": result_stage(doc),
+                # Facts, plus a deep link for the prose — §8 of docs/discovery/source-gem.md.
+                "source_url": f"{BASE_URL}/{path}",
+                **result.as_dict(),
+            })
+        if len(out) >= max_results:
+            break
+
+    return {
+        "source_id": "gem_bidplus",
+        "search": search,
+        "status": status,
+        "portal_total_matching": total_found,
+        "count": len(out),
+        "results": out,
+    }
+
+
+def _one(doc: dict, key: str):  # noqa: ANN202
+    """Solr wraps every field in a list."""
+    v = doc.get(key)
+    return v[0] if isinstance(v, list) and v else (None if isinstance(v, list) else v)
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="TenderCraft GeM Connector", version="0.1.0")
 
@@ -166,6 +245,30 @@ def create_app() -> FastAPI:
         fetcher = GuardedFetcher()
         try:
             return ok(sweep(fetcher, max_pages=max_pages, stop_at_refs=stop_at, search=q))
+        finally:
+            fetcher.close()
+
+    @app.get("/bid-results")
+    def bid_results(
+        q: str = Query(description="GeM full-text query, e.g. a product category"),
+        status: str = Query(default="bid_awarded",
+                            description="bid_awarded | fin_evaluated | tech_evaluated"),
+        max_results: int = Query(default=20, ge=1, le=100),
+        max_pages: int = Query(default=5, ge=1, le=30),
+    ) -> dict[str, Any]:
+        """Published results with the awarded price ladder (UML ask 5).
+
+        Costs two requests per result, so it is capped an order of magnitude tighter than the
+        listing sweep. Sync for the same reason as `/opportunities`: the fetcher sleeps to
+        honour the rate cap, and sleeping in an async handler stalls the loop.
+        """
+        if status not in RESULT_STATUSES:
+            raise ApiError(400, "BAD_STATUS",
+                           f"status must be one of {', '.join(RESULT_STATUSES)}")
+        fetcher = GuardedFetcher()
+        try:
+            return ok(sweep_results(fetcher, search=q, status=status,
+                                    max_pages=max_pages, max_results=max_results))
         finally:
             fetcher.close()
 
