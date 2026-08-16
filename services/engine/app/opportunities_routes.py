@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from . import authz, db, mailer, notify_service
 from .auth import AuthedUser, get_current_user
 from .deterministic.discovery import RULE_KINDS
+from .deterministic.price_history import summarise, to_award
 from .discovery import ingest
 from .discovery.registry import REGISTRY, for_market
 from .envelope import ApiError, ok
@@ -339,3 +340,50 @@ async def dispatch_notifications(user: CurrentUser) -> dict:
         # A named code, not a 500: the UI can say "alerts are on but this deployment cannot
         # send", which is actionable, where a stack trace is not.
         raise ApiError(503, "SMTP_NOT_CONFIGURED", str(exc)) from exc
+
+
+@router.get("/api/price-history")
+async def price_history(
+    user: CurrentUser,
+    q: str = Query(default="", max_length=80, description="product category, e.g. 'wire rope'"),
+    limit: int = Query(default=60, ge=1, le=200),
+) -> dict:
+    """What this category has actually been winning at (UML ask 5).
+
+    Reads the stored corpus only — refreshing is a separate, explicit action because it costs
+    two portal requests per award. A user searching a category they have never swept sees an
+    empty history with a "fetch from GeM" affordance rather than an unexplained pause.
+    """
+
+    def work() -> dict:
+        rows = db.search_award_results(q, limit=limit)
+        awards = [to_award(r, r.get("award_prices") or []) for r in rows]
+        return {
+            "query": q,
+            "summary": summarise(awards),
+            "awards": [a.as_dict() for a in awards],
+            # Said plainly rather than implied: this is a sample of a public corpus we have
+            # pulled, not the market. The refresh endpoint is how it grows.
+            "note": "Prices are what sellers bid on GeM, as published. "
+                    "This is what has been fetched so far, not every award in the category.",
+        }
+
+    return ok(await run_in_threadpool(work))
+
+
+@router.post("/api/price-history/refresh")
+async def refresh_price_history(
+    user: CurrentUser,
+    q: str = Query(min_length=2, max_length=80),
+    max_results: int = Query(default=40, ge=1, le=100),
+) -> dict:
+    """Fetch more published results for a category from the portal.
+
+    Explicit rather than automatic: two portal requests per award against a government site is
+    not something to do on a page load, and the user should know a fetch is happening.
+    """
+    authz.check(user, authz.DRAFT)
+    try:
+        return ok(await run_in_threadpool(ingest.refresh_awards, q, max_results))
+    except RuntimeError as exc:
+        raise ApiError(503, "CONNECTOR_UNAVAILABLE", str(exc)) from exc

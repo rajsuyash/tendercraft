@@ -1654,3 +1654,60 @@ def get_member_email(workspace_id: str, user_id: str) -> str | None:
         params={"user_id": f"eq.{user_id}", "select": "email", "limit": "1"},
     )
     return (profile[0].get("email") if profile else None) or None
+
+
+# ---------- award history (shared public corpus, UML ask 5) ----------
+def upsert_award_result(row: dict) -> str | None:
+    """Insert or refresh one award record. Returns its id.
+
+    No workspace_id anywhere in this table pair, deliberately (migration 0033): these are
+    public facts, identical for every customer, and copying them per tenant would multiply the
+    corpus by the customer count to store the same numbers.
+    """
+    rows = _rest(
+        "POST", "award_results",
+        params={"on_conflict": "source_id,portal_ref_no"},
+        json=row,
+        prefer="return=representation,resolution=merge-duplicates",
+    )
+    return rows[0]["id"] if rows else None
+
+
+def replace_award_prices(award_result_id: str, ladder: list[dict]) -> int:
+    """Replace this award's price ladder.
+
+    Delete-then-insert rather than upsert: a re-read of the same page after more sellers were
+    published produces a DIFFERENT ladder — three rows become five, and ranks shift — so
+    merging on rank would leave a stale L3 sitting under the new one. Nothing references these
+    rows, so replacing them costs no history (unlike `answers`, where a rebuild would destroy
+    the acceptance receipts).
+    """
+    _rest("DELETE", "award_prices", params={"award_result_id": f"eq.{award_result_id}"})
+    if not ladder:
+        return 0
+    written = _rest(
+        "POST", "award_prices",
+        json=[{**row, "award_result_id": award_result_id} for row in ladder],
+    )
+    return len(written or [])
+
+
+def search_award_results(query: str, limit: int = 60) -> list[dict]:
+    """Award records whose category matches, newest first, each with its full ladder.
+
+    One query with the ladder embedded: a 60-row history that lazily loaded each ladder would
+    be 61 round trips, which is the N+1 this codebase has already measured the cost of.
+    """
+    params = {
+        "select": "id,portal_ref_no,category,department,quantity,bid_end_date,stage,"
+                  "participants,source_url,award_prices(seller,mse,total_price,rank,"
+                  "offered_item)",
+        "order": "bid_end_date.desc.nullslast",
+        "limit": str(limit),
+    }
+    if query.strip():
+        # Case-insensitive contains. Deliberately not full-text: GeM category strings are
+        # comma-joined product names, not prose, and a stemmed match on them surprises people
+        # ("rope" matching "roping") in a screen whose whole job is to be trusted with money.
+        params["category"] = f"ilike.*{query.strip()}*"
+    return _rest("GET", "award_results", params=params) or []

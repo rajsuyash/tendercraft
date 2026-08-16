@@ -343,3 +343,68 @@ def _enrich_documents(opportunities: list[dict[str, Any]], *, budget: int) -> in
         )
         fetched += 1
     return fetched
+
+
+# ── award history (UML ask 5) ────────────────────────────────────────────────────────────
+#
+# Same shape as the listing sweep and the same rule: this module reads the connector and
+# writes rows. It makes no judgement about which awards a workspace should see — award history
+# is public market data and there is nothing to gate, which is why no filtering appears here
+# and why the guardrail script's ban on filter-shaped names in this tree costs nothing.
+
+#: Two portal requests per result, so this is capped far tighter than the listing sweep.
+AWARD_PAGE_CAP = int(os.environ.get("GEM_AWARD_PAGES", "5"))
+AWARD_RESULT_CAP = int(os.environ.get("GEM_AWARD_RESULTS", "40"))
+
+
+def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
+                   market: str = "IN") -> dict[str, Any]:
+    """Pull published results for a category into the shared award corpus.
+
+    Returns what the portal says it HAS alongside what we stored, because the gap between them
+    is the honest answer to "is this the whole picture": 45,000 awards exist for wire rope and
+    one call reads forty of them.
+    """
+    sources = for_market(market)
+    base = next((s.connector_url for s in sources if s.connector_url), "")
+    data = _connector("/bid-results", {
+        "q": query, "status": "bid_awarded",
+        "max_results": max_results, "max_pages": AWARD_PAGE_CAP,
+    }, base=base)
+
+    stored = 0
+    for record in data.get("results") or []:
+        ref = record.get("portal_ref_no")
+        if not ref:
+            # No bid number means no dedup key, so re-running would duplicate it. Skipped and
+            # logged rather than stored under a generated id.
+            log.warning("award result with no bid number — skipped")
+            continue
+        result_id = db.upsert_award_result({
+            "source_id": data.get("source_id") or "gem_bidplus",
+            "portal_ref_no": ref,
+            "category": record.get("category"),
+            "department": record.get("department"),
+            "quantity": record.get("quantity"),
+            "bid_end_date": record.get("bid_end_date"),
+            "stage": record.get("stage") or "bid_awarded",
+            "participants": record.get("participant_count") or 0,
+            "source_url": record.get("source_url"),
+            "fetched_at": datetime.now(UTC).isoformat(),
+        })
+        if result_id:
+            db.replace_award_prices(result_id, [
+                {"seller": row["seller"], "mse": bool(row.get("mse")),
+                 "total_price": row["total_price"], "rank": row["rank"],
+                 "offered_item": row.get("offered_item")}
+                for row in record.get("ladder") or []
+            ])
+            stored += 1
+
+    return {
+        "query": query,
+        "stored": stored,
+        # What the portal holds, versus what one call read. Naming the gap is what stops a
+        # 40-row sample being mistaken for the market.
+        "portal_total_matching": data.get("portal_total_matching", 0),
+    }

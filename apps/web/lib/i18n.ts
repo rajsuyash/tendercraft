@@ -34,6 +34,7 @@ const FR: Record<string, string> = {
   Proposals: "Propositions",
   "Knowledge Base": "Base documentaire",
   Learning: "Apprentissage",
+  "Price history": "Historique des prix",
   "Vendor Profile": "Profil entreprise",
   Settings: "Paramètres",
   "User guide": "Guide d'utilisation",
