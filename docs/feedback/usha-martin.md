@@ -126,6 +126,10 @@ UML's asks turn on extending it.
 > signing the raw body ourselves, so any provider works) and never having seen a sample email
 > (solved by a parser built to be wrong — classification routes, it never discards).
 >
+> **Live 2026-08-24.** `inbound.aisewak.com` receives on Resend and a real email has gone
+> through the whole path — classified, bid reference extracted, deadline read, action raised.
+> UML's side is one Outlook rule to `<their-token>@inbound.aisewak.com`.
+>
 > **The remaining honest limit is narrower than "unbuildable":** we see the request when UML
 > forwards it, which is as fast as their mail rule, not as fast as the portal.
 

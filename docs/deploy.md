@@ -134,9 +134,26 @@ A workspace's address is `<workspaces.inbound_token>@$DISCOVERY_INBOUND_DOMAIN`.
 supabase db query --linked "select name, inbound_token from public.workspaces;"
 ```
 
-**Not yet wired to a real mailbox.** The endpoint is live and tested; the DNS + provider
-routing for `inbound.tendercraft.aisewak.com` is the remaining step, and it is deliberately the
-only part a vendor decision touches.
+**Live since 2026-08-24 on `inbound.aisewak.com`, via Resend** (region eu-west-1, receiving on,
+sending off). Two DNS records at Hostinger in the **aisewak.com** zone — a DKIM `TXT` on
+`resend._domainkey.inbound` and an `MX` on `inbound` → `inbound-smtp.eu-west-1.amazonaws.com`.
+Neither touches `aisewak.com` itself; check that first if company mail ever looks wrong:
+
+```bash
+dig +short MX aisewak.com          # must stay 10 SMTP.GOOGLE.com
+dig +short MX inbound.aisewak.com  # 10 inbound-smtp.eu-west-1.amazonaws.com
+```
+
+**Cloudflare Email Routing was tried first and rejected:** it refuses a subdomain zone on the
+free plan and wants the root domain, which would have meant moving nameservers off Hostinger
+along with the live Google Workspace MX. Not a trade worth making for this feature.
+
+Resend signs with **svix**, so the endpoint verifies either scheme (`RESEND_WEBHOOK_SECRET`)
+and its webhook carries **metadata only** — the body needs a second authenticated read with
+`RESEND_INBOUND_API_KEY`. That key is deliberately separate from `RESEND_API_KEY`: the sending
+key is send-only and returns `restricted_api_key` on every read path.
+
+Secrets: `tendercraft-resend-webhook-secret`, `tendercraft-resend-inbound-key`.
 
 Smoke test it the way the provider will:
 
