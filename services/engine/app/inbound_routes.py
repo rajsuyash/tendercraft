@@ -34,7 +34,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Request
 from starlette.concurrency import run_in_threadpool
 
-from . import db
+from . import db, resend_inbound
 from .auth import AuthedUser, get_current_user
 from .deterministic.inbound import CLARIFICATION, STAGE_NOTICE, classify
 from .envelope import ApiError, ok
@@ -91,8 +91,16 @@ def _digest(*parts: str) -> str:
 async def inbound_email(
     request: Request,
     x_tendercraft_signature: str | None = Header(default=None),
+    svix_id: str | None = Header(default=None),
+    svix_timestamp: str | None = Header(default=None),
+    svix_signature: str | None = Header(default=None),
 ) -> dict:
     """Accept one forwarded email, file it, and raise an action if it asks for something.
+
+    Two signature schemes, because the endpoint was designed before the provider was chosen and
+    that decision should stay cheap to revisit: svix when Resend calls, our own raw-body HMAC
+    otherwise. Neither is a fallback for the other — a request presenting svix headers is
+    verified as svix or refused, never retried against the weaker check.
 
     Returns 200 for a duplicate as well as a new message: every provider retries on a non-2xx,
     and a retry storm against a signature-verified endpoint is worse than the duplicate it is
@@ -102,7 +110,18 @@ async def inbound_email(
     if len(raw) > MAX_BODY_BYTES:
         raise ApiError(413, "INBOUND_TOO_LARGE",
                        f"message exceeds {MAX_BODY_BYTES} bytes")
-    _verify(raw, x_tendercraft_signature)
+
+    from_resend = bool(svix_id and svix_timestamp and svix_signature)
+    if from_resend:
+        secret = os.environ.get("RESEND_WEBHOOK_SECRET", "").strip()
+        if not secret:
+            raise ApiError(503, "INBOUND_NOT_CONFIGURED",
+                           "inbound email is not configured on this deployment "
+                           "(RESEND_WEBHOOK_SECRET)")
+        resend_inbound.verify_svix(raw, svix_id, svix_timestamp, svix_signature, secret,
+                                   now=int(datetime.now(UTC).timestamp()))
+    else:
+        _verify(raw, x_tendercraft_signature)
 
     try:
         payload = await request.json()
@@ -110,6 +129,20 @@ async def inbound_email(
         raise ApiError(400, "INBOUND_MALFORMED", "body is not valid JSON") from exc
     if not isinstance(payload, dict):
         raise ApiError(400, "INBOUND_MALFORMED", "body must be a JSON object")
+
+    if from_resend:
+        # Resend's webhook is metadata only; the body needs a second authenticated read.
+        # Anything that is not a received email is acknowledged and dropped — returning an
+        # error for an event type we simply do not handle would mark the endpoint unhealthy
+        # and get it disabled for the events we DO handle.
+        if payload.get("type") != "email.received":
+            return ok({"status": "ignored", "type": payload.get("type")})
+        email_id = str((payload.get("data") or {}).get("email_id") or "")
+        if not email_id:
+            raise ApiError(400, "INBOUND_MALFORMED", "email.received carried no email_id")
+        body = await run_in_threadpool(resend_inbound.fetch_received_email, email_id)
+        payload = resend_inbound.to_message(
+            payload, body, domain=os.environ.get("DISCOVERY_INBOUND_DOMAIN", ""))
 
     to_address = str(payload.get("to") or "")
     token = _local_part(to_address)
