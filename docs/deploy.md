@@ -86,6 +86,72 @@ curl -s -o /dev/null https://tendercraft-engine-eu-822379741897.europe-north1.ru
 To remove cold starts entirely (roughly $15–25/month for the pair):
 `gcloud run services update tendercraft-{web-eu,engine-eu} --min-instances=1 --region=europe-north1`
 
+## Scheduled jobs
+
+Two product jobs, both in Cloud Scheduler `europe-west1`:
+
+| Job | Schedule (UTC) | Calls | Answers |
+|---|---|---|---|
+| `tendercraft-alert-digest` | `0 3-13 * * 1-5` (hourly, 08:30–18:30 IST) | `POST /internal/cron/digest` | UML ask 1 — *automatically* circulate relevant tenders |
+| `tendercraft-stage-watch` | `0 5,11 * * 1-5` (10:30 + 16:30 IST) | `POST /internal/cron/watch` | UML ask 4 — monitor GeM evaluation stage |
+
+**Auth is Google OIDC, not a Supabase session.** Both jobs run as
+`tendercraft-cron@…iam.gserviceaccount.com`, and `app/cron_auth.py` checks two things
+independently: the token's audience is this service's URL, and the caller's email is in
+`CRON_SERVICE_ACCOUNTS`. Either alone is weak — anyone can mint a valid Google token for an
+arbitrary audience, and a token minted for another service is still a valid Google token.
+There is no shared secret to store or rotate. **Both env vars unset fails closed** (503), so a
+deployment that forgets them has no scheduled jobs rather than an open write endpoint.
+
+Diagnose without side effects — this sends nothing and touches no portal:
+
+```bash
+gcloud scheduler jobs run tendercraft-alert-digest --project=$P --location=europe-west1
+# then, for the caller identity the engine actually saw:
+gcloud logging read 'resource.labels.service_name="tendercraft-engine-eu"' \
+  --project=$P --limit=5 --freshness=10m --format="value(textPayload)"
+```
+
+The digest is safe to re-run: `select_for_digest` is handed the already-sent ledger, so a
+second run in the same hour sends nothing. The watcher is capped at 25 bids per workspace
+because each costs up to three requests to a government site.
+
+Both endpoints exist so a schedule can call what a button already calls — the route adds no
+threshold of its own. A scheduled run and a user pressing *Check watched bids* must produce
+the same outcome, or only one of the two paths is the one that gets tested.
+
+## Supabase keepalive (free tier)
+
+Supabase pauses a **free-tier** project after 7 days with no API activity. Both Cloud Run
+services scale to zero, so an idle week is normal here and the pause is not hypothetical.
+
+**There are two Supabase projects** — the wall (F13) requires it — so there are two jobs,
+one per project, both every 3 days:
+
+```bash
+gcloud scheduler jobs list --project=$P --location=europe-west1
+```
+
+| Job | Project | Pings |
+|---|---|---|
+| `supabase-keepalive` | bidder | `/rest/v1/workspaces?select=id&limit=1` |
+| `supabase-keepalive-evaluate` | evaluate | `/rest/v1/tenders?select=id&limit=1` |
+
+`europe-west1`, not `europe-north1` — Scheduler has no Hamina region. Each carries that
+project's own anon `apikey` header (public by design, same key its web bundle ships). They
+read one id; RLS returns nothing to an anon caller, which is fine — the request is the
+point, not the rows.
+
+**The evaluate project had already paused** when these were added (2026-08-24): it has had
+no users since July, while the bidder project stayed warm on connector traffic. Symptom to
+recognise, because it does not look like a pause — DNS resolves normally and Cloudflare
+answers, so you get **502 on `/auth/v1/*` and 521 on `/rest/v1/*`**, and both Cloud Run
+services still return 200 on `/health` because that handler never touches the database.
+Resume is a dashboard click; a keepalive prevents the pause but cannot undo one.
+
+**Delete both jobs when the projects move to Pro.** Pro does not pause, and a keepalive
+that outlives its reason is a cron nobody can explain.
+
 ## Two things that bit during the first deploy
 
 1. **`app/config.py` walked `parents[3]`** to find the repo-root `.env`. In a container the

@@ -1585,6 +1585,42 @@ def get_workspace(workspace_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
+# ---------- the fan-out a scheduled job iterates (UML asks 1 and 4) ----------
+#: A scheduled sweep touches every opted-in workspace, so an unbounded read here becomes an
+#: unbounded run. Far above any real tenant count, low enough that a runaway is visible.
+_CRON_FANOUT_LIMIT = 500
+
+
+def list_notifying_workspaces() -> list[str]:
+    """Workspaces that switched alerts ON — the digest's opt-in, read from the same row the
+    settings screen writes.
+
+    Deliberately not "every workspace": `dispatch_digest` would return `disabled` for the rest,
+    but it would read the feed first, so an opt-out would still cost a query per sweep.
+    """
+    rows = _rest(
+        "GET", "notification_settings",
+        params={"enabled": "is.true", "select": "workspace_id",
+                "limit": str(_CRON_FANOUT_LIMIT)},
+    ) or []
+    return [r["workspace_id"] for r in rows if r.get("workspace_id")]
+
+
+def list_watching_workspaces() -> list[str]:
+    """Workspaces with at least one starred bid.
+
+    Distinct is done here rather than in PostgREST, which has no DISTINCT: the alternative is
+    one query per workspace to ask "any watches?", which is the N+1 this avoids. Order is
+    preserved so a truncated sweep is at least stable between runs.
+    """
+    rows = _rest(
+        "GET", "opportunity_matches",
+        params={"watched": "is.true", "select": "workspace_id",
+                "limit": str(_CRON_FANOUT_LIMIT)},
+    ) or []
+    return list(dict.fromkeys(r["workspace_id"] for r in rows if r.get("workspace_id")))
+
+
 # ---------- notifications (UML ask 1) ----------
 def get_notification_settings(workspace_id: str) -> dict | None:
     rows = _rest(

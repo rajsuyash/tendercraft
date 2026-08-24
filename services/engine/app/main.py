@@ -26,6 +26,7 @@ CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
 
 def create_app() -> FastAPI:
     from .analyze_routes import router as analyze_router
+    from .cron_routes import router as cron_router
     from .knowledge_routes import router as knowledge_router
     from .matrix_routes import router as matrix_router
     from .members_routes import router as members_router
@@ -54,6 +55,8 @@ def create_app() -> FastAPI:
     app.include_router(past_bids_router)
     app.include_router(reuse_router)
     app.include_router(spec_router)
+    # Scheduler-facing. Google OIDC, never a Supabase session — see cron_auth.py.
+    app.include_router(cron_router)
 
     @app.get("/health")
     async def health() -> dict:

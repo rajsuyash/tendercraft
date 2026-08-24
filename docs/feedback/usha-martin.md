@@ -71,14 +71,30 @@ Measured by reading the code on 2026-08-07, not estimated.
 > now built. Asks 2 and 3 are answered end to end; ask 1's routing half is answered. Asks 4 and
 > 5 and ask 1's *acquisition* half remain blocked on things only someone else can supply —
 > see §Sequencing, whose steps 2–4 are still unsent asks.
+>
+> **Updated 2026-08-16, verified live 2026-08-24.** Asks 4 and 5 were reopened and are now
+> partly built — **the 2026-08-07 refusal was too broad.** It was the CAPTCHA-gated
+> `/view_contracts` that is closed; `bidplus.gem.gov.in` publishes the award ladder and the
+> evaluation stage on a public, un-gated surface, which is how both now work with no login and
+> no CAPTCHA bypass. Two things did NOT change and still gate the asks as UML worded them:
+> **the document request itself is still behind the seller login** (we detect the stage, never
+> the letter), and — at the time of that check — nothing ran on a timer.
+>
+> **Updated 2026-08-24: the timer exists.** `POST /internal/cron/{digest,watch}` authenticate
+> Google's OIDC token (`app/cron_auth.py`) rather than a Supabase session, because these jobs
+> have no user behind them, and two Cloud Scheduler jobs now call them — the digest hourly on
+> IST business hours, the stage watcher twice a day. Both fan out across the workspaces that
+> opted in and survive a per-workspace failure. So ask 1's *"automatically"* and ask 4's
+> *"as soon as they are generated"* are answered as far as a public portal page can answer
+> them. **The seller-login limit is unchanged and is not an engineering problem.**
 
 | # | Ask | Status | Evidence |
 |---|---|---|---|
-| 1 | Lead identification → CRM, circulated to Zonal Heads | **Routing built; acquisition half still blocked** | Feed, connector, relevance banding and the rules gate were already live. **Added 2026-08-14:** `PATCH /api/opportunities/{id}` now enforces workspace membership on an assignee and can clear one, and the feed renders an Owner column and a watch star (`components/OpportunityFeed.tsx::Routing`). *Circulated to the respective Zonal Heads* is answered with no CRM. **Still missing:** inbound email (M11), which needs three forwarded GeM alerts from UML. |
+| 1 | Lead identification → CRM, circulated to Zonal Heads | **Routing built; acquisition half still blocked** | Feed, connector, relevance banding and the rules gate were already live. **Added 2026-08-14:** `PATCH /api/opportunities/{id}` now enforces workspace membership on an assignee and can clear one, and the feed renders an Owner column and a watch star (`components/OpportunityFeed.tsx::Routing`). *Circulated to the respective Zonal Heads* is answered with no CRM. **Still missing:** inbound email (M11), which needs three forwarded GeM alerts from UML. **Added 2026-08-16:** outbound alerting — `deterministic/notify.py` (band threshold governs the inbox, never the feed), `mailer.py` with Resend primary and SMTP fallback, `GET/POST /api/notifications/{settings,dispatch}`. So a relevant tender does now email a human; it reaches them from our crawl, not from GeM's alert email, and **only when something calls `dispatch`.** |
 | 2 | Spec vs manufacturing capability | **Built** | `deterministic/spec_match.py` (interval intersection → `match / deviation / equivalent / unknown`), `deterministic/spec_params.py` (registry + units + `allows_equivalent`), `pipeline/spec_extractor.py` (schema carries no verdict field), `spec_service.py`, migration 0029. UI: `/capability` records the envelope, `/tenders/:id/schedule` shows the fit. |
 | 3 | Catalogue availability per tender schedule | **Built** | `deterministic/boq.py` finds the header row deterministically — no header found → zero line items and a manual-entry prompt. `tender_line_items` carries schedule ref, item ref, quantity, uom and a row-level anchor; technical criteria become line items too, because most GeM rope bids state the spec in NIT prose. Per line: `PUBLISHED` / `CAN BE CREATED` / `DEVIATION — CLARIFICATION NEEDED` / `NOT ASSESSED`. |
-| 4 | Post-technical-evaluation document requests | **Not built, and unbuildable as asked** | No poller, no scheduler, no status watcher. `opportunity_matches.watched` exists as a column with no writer. The blocker is not effort — see §What the portal will and will not give us. |
-| 5 | Five-year historical prices per scheduled item | **Not built. Probed 2026-08-07 — the portal route is refused** | GeM's public contract search is CAPTCHA-gated on both forms, which is a G-8 non-goal, not an obstacle. Full write-up: `docs/discovery/source-gem-contracts.md`. There is a free route that does not go through the portal — see below. |
+| 4 | Post-technical-evaluation document requests | **Stage detection built; the document request itself remains unbuildable as asked** | `deterministic/stage_watch.py` (pure: first sighting is never an alert, only forward moves alert), connector `GET /bid-status`, engine `POST /api/opportunities/watch/check`, migration 0034, watch star in `OpportunityFeed`. Live 2026-08-24: `GEM/2026/B/7876746` → `bid_awarded` + deep link, no login. **What it is not:** it is the alarm clock, not the letter — the clarification lives behind the seller login (G-1/G-8), and every rendered message says so. **Also:** the check is a button, not a poller. |
+| 5 | Five-year historical prices per scheduled item | **Award history built; the five-year window is not** | `deterministic/price_history.py` (median not mean; unit rate emitted only for single-category records), connector `GET /bid-results`, engine `GET /api/price-history` + `POST /api/price-history/refresh`, migration 0033, `/prices` screen. Live 2026-08-24: real ladders with seller, rank, MSE flag and L1/L2 prices. **Two gaps:** no date filter anywhere, so "last five years" is really "whatever the portal returned, up to `max_results`"; and GeM's full-text search matches any word — `q=wire rope` returned six unrelated bundles containing *wire* and zero rope awards. |
 
 **What is live today and worth telling UML in the reply.** Depth-1 eligibility is parsed
 straight off the GeM bid document, deterministically, with **zero model calls and zero OCR** —
@@ -100,6 +116,15 @@ acquisition, and neither is a policy we can weigh against a feature request: the
 reason a government buyer can be sold the evaluate product at all (F13). We will never log in
 to UML's GeM account and read their bid status, and we should say that plainly rather than
 leave it in a backlog where it reads as "coming soon".
+
+> **Superseded in part, 2026-08-16.** What follows is true of `view_contracts` and remains
+> the reason we will never touch it. It was wrong as a claim about *ask 5*: the conclusion
+> "there is no version of ask 5 that goes through the portal" generalised one refused endpoint
+> to the whole portal. `bidplus.gem.gov.in/bidding/bid/getBidResultView/<id>` publishes the
+> award ladder with no CAPTCHA and no login, and that is what shipped. The lesson is narrow
+> and worth keeping: **a refused endpoint is not a refused portal** — enumerate the other
+> surfaces before writing a capability off, which is what §Sequencing step 4 asked for and
+> what nobody had done when this paragraph was written.
 
 **Ask 5 was probed, and the portal route is refused.** `gem.gov.in/view_contracts` is public and
 robots-clean — but **both of its search forms require a CAPTCHA** (`captcha_entered1/2`,
