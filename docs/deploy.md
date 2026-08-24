@@ -120,6 +120,36 @@ Both endpoints exist so a schedule can call what a button already calls — the 
 threshold of its own. A scheduled run and a user pressing *Check watched bids* must produce
 the same outcome, or only one of the two paths is the one that gets tested.
 
+## Inbound email (UML ask 4)
+
+`POST /api/inbound/email` accepts a forwarded GeM message, files it, and raises a `bid_action`
+when it asks for something. Auth is **HMAC-SHA256 over the raw request body** against
+`DISCOVERY_INBOUND_SECRET` (Secret Manager: `tendercraft-inbound-secret`), so it is
+provider-agnostic — Cloudflare Email Routing, SES, Mailgun or a small Worker all satisfy it.
+Unset secret fails closed (503).
+
+A workspace's address is `<workspaces.inbound_token>@$DISCOVERY_INBOUND_DOMAIN`. Get one with:
+
+```bash
+supabase db query --linked "select name, inbound_token from public.workspaces;"
+```
+
+**Not yet wired to a real mailbox.** The endpoint is live and tested; the DNS + provider
+routing for `inbound.tendercraft.aisewak.com` is the remaining step, and it is deliberately the
+only part a vendor decision touches.
+
+Smoke test it the way the provider will:
+
+```bash
+BODY='{"to":"<token>@inbound.tendercraft.aisewak.com","from":"noreply@gem.gov.in",
+       "subject":"Clarification sought","text":"Submit by 30-09-2026 for GEM/2026/B/7876746."}'
+SIG=$(python3 -c 'import hmac,hashlib,sys;print(hmac.new(sys.argv[1].encode(),sys.argv[2].encode(),hashlib.sha256).hexdigest())' "$SECRET" "$BODY")
+curl -X POST "$E/api/inbound/email" -H "X-TenderCraft-Signature: $SIG" -d "$BODY"
+```
+
+Replays are expected traffic, not errors: every provider retries on a non-2xx, so a duplicate
+returns 200 with `"status":"duplicate"` and raises no second action.
+
 ## Supabase keepalive (free tier)
 
 Supabase pauses a **free-tier** project after 7 days with no API activity. Both Cloud Run

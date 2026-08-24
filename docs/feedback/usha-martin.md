@@ -93,7 +93,7 @@ Measured by reading the code on 2026-08-07, not estimated.
 | 1 | Lead identification → CRM, circulated to Zonal Heads | **Routing built; acquisition half still blocked** | Feed, connector, relevance banding and the rules gate were already live. **Added 2026-08-14:** `PATCH /api/opportunities/{id}` now enforces workspace membership on an assignee and can clear one, and the feed renders an Owner column and a watch star (`components/OpportunityFeed.tsx::Routing`). *Circulated to the respective Zonal Heads* is answered with no CRM. **Still missing:** inbound email (M11), which needs three forwarded GeM alerts from UML. **Added 2026-08-16:** outbound alerting — `deterministic/notify.py` (band threshold governs the inbox, never the feed), `mailer.py` with Resend primary and SMTP fallback, `GET/POST /api/notifications/{settings,dispatch}`. So a relevant tender does now email a human; it reaches them from our crawl, not from GeM's alert email, and **only when something calls `dispatch`.** |
 | 2 | Spec vs manufacturing capability | **Built** | `deterministic/spec_match.py` (interval intersection → `match / deviation / equivalent / unknown`), `deterministic/spec_params.py` (registry + units + `allows_equivalent`), `pipeline/spec_extractor.py` (schema carries no verdict field), `spec_service.py`, migration 0029. UI: `/capability` records the envelope, `/tenders/:id/schedule` shows the fit. |
 | 3 | Catalogue availability per tender schedule | **Built** | `deterministic/boq.py` finds the header row deterministically — no header found → zero line items and a manual-entry prompt. `tender_line_items` carries schedule ref, item ref, quantity, uom and a row-level anchor; technical criteria become line items too, because most GeM rope bids state the spec in NIT prose. Per line: `PUBLISHED` / `CAN BE CREATED` / `DEVIATION — CLARIFICATION NEEDED` / `NOT ASSESSED`. |
-| 4 | Post-technical-evaluation document requests | **Stage detection built; the document request itself remains unbuildable as asked** | `deterministic/stage_watch.py` (pure: first sighting is never an alert, only forward moves alert), connector `GET /bid-status`, engine `POST /api/opportunities/watch/check`, migration 0034, watch star in `OpportunityFeed`. Live 2026-08-24: `GEM/2026/B/7876746` → `bid_awarded` + deep link, no login. **What it is not:** it is the alarm clock, not the letter — the clarification lives behind the seller login (G-1/G-8), and every rendered message says so. **Also:** the check is a button, not a poller. |
+| 4 | Post-technical-evaluation document requests | **Built, both halves — 2026-08-24.** Stage from the public portal; the request itself from the customer's own forwarded mail | `deterministic/stage_watch.py` (pure: first sighting is never an alert, only forward moves alert), connector `GET /bid-status`, engine `POST /api/opportunities/watch/check`, migration 0034, watch star in `OpportunityFeed`. Live 2026-08-24: `GEM/2026/B/7876746` → `bid_awarded` + deep link, no login. **What it is not:** it is the alarm clock, not the letter — the clarification lives behind the seller login (G-1/G-8), and every rendered message says so. **Also:** the check is a button, not a poller. |
 | 5 | Five-year historical prices per scheduled item | **Award history built; the five-year window is not** | `deterministic/price_history.py` (median not mean; unit rate emitted only for single-category records), connector `GET /bid-results`, engine `GET /api/price-history` + `POST /api/price-history/refresh`, migration 0033, `/prices` screen. Live 2026-08-24: real ladders with seller, rank, MSE flag and L1/L2 prices. **Two gaps:** no date filter anywhere, so "last five years" is really "whatever the portal returned, up to `max_results`"; and GeM's full-text search matches any word — `q=wire rope` returned six unrelated bundles containing *wire* and zero rope awards. |
 
 **What is live today and worth telling UML in the reply.** Depth-1 eligibility is parsed
@@ -108,6 +108,26 @@ half UML asked about.
 
 `docs/discovery/source-gem.md` did this analysis for the bid listing on 2026-07-30. Two of
 UML's asks turn on extending it.
+
+> **Answered 2026-08-24, and the paragraph below was half wrong.** The guardrail refusal is
+> real and permanent — we will never log in to UML's GeM account. But "ask 4 is a refusal"
+> conflated the *constraint* with the *ask*. Two things were never checked:
+>
+> 1. **Is the stage public?** Yes. `b_buyer_status` on the un-gated listing carries the
+>    lifecycle, so the stage watcher shipped with no login (0034).
+> 2. **Is the request itself public?** No — now measured, not assumed. GeM publishes 34 fields
+>    per bid and none is a clarification, corrigendum or document-request field
+>    (`source-gem.md` §10). So the refusal below is confirmed *for that half*.
+>
+> What neither answered is that a third route existed the whole time: **the customer's own
+> inbox.** GeM emails the seller the request; a forwarded email involves no credential of ours
+> and no page we are not allowed to read. Shipped as `POST /api/inbound/email` + migration
+> 0035. It was blocked on two things that turned out not to block: a provider choice (solved by
+> signing the raw body ourselves, so any provider works) and never having seen a sample email
+> (solved by a parser built to be wrong — classification routes, it never discards).
+>
+> **The remaining honest limit is narrower than "unbuildable":** we see the request when UML
+> forwards it, which is as fast as their mail rule, not as fast as the portal.
 
 **Ask 4 is a guardrail refusal, not a backlog item.** Post-submission bid state — technical
 evaluation outcome, a request for additional documents, a clarification window — lives behind
