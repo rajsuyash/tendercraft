@@ -1585,6 +1585,74 @@ def get_workspace(workspace_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
+# ---------- forwarded email (UML ask 4's other half) ----------
+def get_workspace_by_inbound_token(token: str) -> dict | None:
+    """Resolve a forwarding address to its workspace.
+
+    The token is the ONLY thing that decides which tenant an inbound email lands in, so it is
+    matched exactly and nothing about the sender is consulted. Trusting the From address would
+    let anyone who learns a customer's address file mail into their workspace by spoofing a
+    header, and SPF does not survive forwarding — which is the one thing this feature asks
+    every customer to do.
+    """
+    rows = _rest(
+        "GET", "workspaces",
+        params={"inbound_token": f"eq.{token}", "select": "id,name", "limit": "1"},
+    )
+    return rows[0] if rows else None
+
+
+def find_opportunity_by_ref(workspace_id: str, portal_ref_no: str) -> dict | None:
+    """The corpus row for a bid reference, if this workspace can already see it.
+
+    Returns None freely: a forwarded email routinely names a tender we have never swept, and
+    the action is created unlinked rather than not created. `portal_ref_no` is kept on the
+    action so a later sweep can link it.
+    """
+    rows = _rest(
+        "GET", "opportunity_matches",
+        params={"workspace_id": f"eq.{workspace_id}",
+                "opportunities.portal_ref_no": f"eq.{portal_ref_no}",
+                "select": "opportunity_id,assigned_to,opportunities!inner(portal_ref_no,title)",
+                "limit": "1"},
+    )
+    return rows[0] if rows else None
+
+
+def record_inbound_message(workspace_id: str, message: dict) -> dict | None:
+    """Store a forwarded email. Returns None when this workspace already has it.
+
+    Every inbound provider retries on a non-2xx and at-least-once delivery is the norm, so a
+    duplicate is expected traffic rather than an error — and the caller needs to distinguish
+    it, because creating a second action for one request makes a bidder respond twice to a
+    buyer. `resolution=ignore-duplicates` plus an empty return says "already had it" without
+    a second round trip to check first.
+    """
+    rows = _rest(
+        "POST", "inbound_messages",
+        params={"on_conflict": "workspace_id,content_digest"},
+        json={**message, "workspace_id": workspace_id},
+        prefer="return=representation,resolution=ignore-duplicates",
+    )
+    return rows[0] if rows else None
+
+
+def create_bid_action(workspace_id: str, action: dict) -> dict:
+    rows = _rest("POST", "bid_actions", json={**action, "workspace_id": workspace_id})
+    return rows[0]
+
+
+def get_open_bid_actions(workspace_id: str, limit: int = 50) -> list[dict]:
+    """Unresolved actions, soonest deadline first. Undated ones sort last but are NOT hidden:
+    an action with no readable deadline is the one most likely to be forgotten."""
+    return _rest(
+        "GET", "bid_actions",
+        params={"workspace_id": f"eq.{workspace_id}", "resolved_at": "is.null",
+                "select": "*,inbound_messages(subject,from_address,received_at)",
+                "order": "due_at.asc.nullslast,created_at.desc", "limit": str(limit)},
+    ) or []
+
+
 # ---------- the fan-out a scheduled job iterates (UML asks 1 and 4) ----------
 #: A scheduled sweep touches every opted-in workspace, so an unbounded read here becomes an
 #: unbounded run. Far above any real tenant count, low enough that a runaway is visible.

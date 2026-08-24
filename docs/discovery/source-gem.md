@@ -216,6 +216,30 @@ from a public page and never persisted. Until that narrowing lands, the GeM list
 lives **outside** `app/discovery` (see the connector service in the build plan), which keeps the
 guardrail honest for the portals it was written for: the ones behind logins.
 
+### 10. The public bid record has no clarification surface — measured, 2026-08-24
+
+For two weeks "can we see a post-technical-evaluation document request without logging in?" was
+answered by reasoning about what a portal probably does. It is now answered by looking.
+
+`GET /diagnostics/fields` on the connector enumerates the field NAMES GeM publishes per bid
+(names and value shapes only — never values, so §8 is untouched). The public listing document
+carries **34 fields**, and the only ones touching evaluation are `b_buyer_status`,
+`ra_b_buyer_status`, `b_status`, `ra_b_status` and `b_eval_type` — the lifecycle counter we
+already read for the stage watcher, and the flag that picks the result-page URL.
+
+**There is no corrigendum, clarification, amendment, addendum, query, reply or
+document-request field of any kind.** So the split UML's ask 4 turns on is confirmed rather
+than assumed:
+
+| | Public? | Route |
+|---|---|---|
+| Evaluation **stage** | yes — `b_buyer_status` | `stage_watch.py`, polled on a schedule |
+| The **document request** itself | no — on no public surface | forwarded email only |
+
+Keep the probe. The listing's silent failure mode is a field *disappearing*: `_first` returns
+None, `normalize` emits a null, and the feed keeps working with a hole in it. A periodic diff
+of this output is how that gets caught in a day rather than a quarter.
+
 ## What this means for sequencing
 
 | Path to the GeM listing | Acquisition OK? | Verdict |

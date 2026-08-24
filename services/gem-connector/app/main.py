@@ -25,7 +25,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from .document import eligibility_for
-from .fetch import BotChallengeDetected, FetchRefused, GuardedFetcher
+from .fetch import (
+    BotChallengeDetected,
+    FetchRefused,
+    GuardedFetcher,
+    assert_no_bot_challenge,
+)
 from .listing import build_payload, extract_csrf_token, normalize, normalize_ref, parse_page
 from .results import (
     BASE_URL,
@@ -35,6 +40,7 @@ from .results import (
     result_path,
     result_stage,
 )
+from .schema_probe import describe_fields
 
 log = logging.getLogger("tendercraft.gem")
 
@@ -279,6 +285,31 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, Any]:
         return ok({"service": "gem-connector", "status": "up"})
+
+    @app.get("/diagnostics/fields")
+    def diagnostics_fields(
+        q: str = Query(default="", description="GeM full-text query"),
+        status: str = Query(default="", description="blank = open bids; else a result status"),
+    ) -> dict[str, Any]:
+        """Enumerate the field names GeM publishes per bid. Names and shapes, never values.
+
+        Exists to answer availability questions with evidence instead of inference (UML ask 4
+        was reasoned about for two weeks without anyone looking), and to catch the silent
+        failure mode of this connector: a field vanishing from the Solr document, which
+        `normalize` turns into a null rather than an error.
+        """
+        fetcher = GuardedFetcher()
+        try:
+            fetcher.reset_session()
+            landing = fetcher.get("/all-bids")
+            assert_no_bot_challenge(landing.text, "/all-bids")
+            token = extract_csrf_token(landing.text)
+            body = (build_results_payload(1, q, status) if status
+                    else build_payload(1, q)) | {"csrf_bd_gem_nk": token}
+            _, docs = parse_page(fetcher.post_form("/all-bids-data", body).text)
+            return ok(describe_fields(docs) | {"probed": status or "open_bids"})
+        finally:
+            fetcher.close()
 
     @app.get("/opportunities")
     def opportunities(
