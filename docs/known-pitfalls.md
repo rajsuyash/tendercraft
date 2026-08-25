@@ -233,3 +233,9 @@ Mumbai anyway); until then, count round trips like they cost money.
   corpus on a schedule — the digest and the watcher both READ it, so both were reporting
   confidently on a month-old snapshot. If a job keeps data current, it needs a clock; if it has
   no clock, the staleness must be visible somewhere a user will look.
+- **A long cron over HTTP dies at the request timeout, silently.** The scheduled sweep exceeded
+  Cloud Run's default 600s: the corpus phase committed first, so the data looked fresh, while
+  the per-workspace recompute never ran — and Cloud Run kills the request WITHOUT an
+  access-log line, so the only symptom was counters that did not move. Raised to 3600s, which
+  is the ceiling; anything slower has to stop being a single request. Check the log for the
+  POST's completion line, not just for errors: its ABSENCE is the failure.

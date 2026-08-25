@@ -111,6 +111,13 @@ Without it the feed only moves when someone presses **Refresh**, and it rots in 
 looks healthy — a date in the corner, rows in the table, and every tender closed weeks ago.
 That was the production state on 2026-08-25.
 
+**The engine's request timeout is 3600s because of this job.** At the default 600s the first
+scheduled sweep was killed mid-run: the corpus phase had finished, so the data looked updated,
+but the per-workspace recompute never ran and the match counts stayed on the old numbers with
+nothing logged — Cloud Run cuts the request without an access-log line, so it does not even
+look like a failure. If a future job needs longer than an hour it must stop being one HTTP
+request rather than chase the ceiling.
+
 **Auth is Google OIDC, not a Supabase session.** Both jobs run as
 `tendercraft-cron@…iam.gserviceaccount.com`, and `app/cron_auth.py` checks two things
 independently: the token's audience is this service's URL, and the caller's email is in
