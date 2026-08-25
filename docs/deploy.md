@@ -56,7 +56,7 @@ IMG="$R-docker.pkg.dev/$P/cloud-run-source-deploy/tendercraft-web:latest"
 # engine — builds from source, Dockerfile in services/engine
 cd services/engine
 gcloud run deploy $ENG --source . --project=$P --region=$R \
-  --allow-unauthenticated --memory=2Gi --cpu=2 --timeout=600 --max-instances=5 \
+  --allow-unauthenticated --memory=2Gi --cpu=2 --timeout=3600 --max-instances=5 \
   --update-env-vars="NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}" \
   --set-secrets="SUPABASE_SERVICE_JWT=tendercraft-supabase-service-key:latest,GEMINI_API_KEY=tendercraft-gemini-api-key:latest"
 
@@ -93,7 +93,7 @@ To remove cold starts entirely (roughly $15–25/month for the pair):
 
 ## Scheduled jobs
 
-Two product jobs, both in Cloud Scheduler `europe-west1`:
+Three product jobs, all in Cloud Scheduler `europe-west1`:
 
 | Job | Schedule (UTC) | Calls | Answers |
 |---|---|---|---|
@@ -118,7 +118,7 @@ nothing logged — Cloud Run cuts the request without an access-log line, so it 
 look like a failure. If a future job needs longer than an hour it must stop being one HTTP
 request rather than chase the ceiling.
 
-**Auth is Google OIDC, not a Supabase session.** Both jobs run as
+**Auth is Google OIDC, not a Supabase session.** All three run as
 `tendercraft-cron@…iam.gserviceaccount.com`, and `app/cron_auth.py` checks two things
 independently: the token's audience is this service's URL, and the caller's email is in
 `CRON_SERVICE_ACCOUNTS`. Either alone is weak — anyone can mint a valid Google token for an
