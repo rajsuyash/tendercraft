@@ -198,12 +198,23 @@ data vendors. Choosing a vendor does not make this clause go away; it only moves
    private storage, serve them to nobody, and satisfy the "resolvable source link" of F-AC7 with
    the GeM URL plus our retrieval timestamp.
 4. **Acknowledge the source prominently** on every surface that shows GeM-derived data.
-5. **Send the permission letter.** Their policy names the mechanism — *permission in writing in
-   advance* — and a granted permission removes constraints 1–3 entirely. It costs a letter and it
-   is the only thing that upgrades this source properly. Start it in parallel with the build.
+5. ~~**Send the permission letter.**~~ **Closed 2026-08-25 — the owner's legal team reviewed
+   this and cleared the current use.** Their policy names *permission in writing in advance* as
+   the mechanism, and a granted permission would remove constraints 1–3 entirely; it is no
+   longer an outstanding action, and nothing in the roadmap waits on it.
 
-None of this is legal advice; it is the engineering posture that follows from the clauses as
-written. A lawyer should read §8 before the feature is marketed.
+**Keep constraints 1–4 anyway.** They were written as a response to the copyright clause, but
+they are the right shape independently: facts and deep links make every screen cheaper to
+render, keep the source authoritative rather than mirrored, and mean a stale cache can never
+show a bidder a deadline GeM has since moved. Relaxing them should be a deliberate product
+decision with a reason of its own — not something that drifts in because the legal reason for
+them went away.
+
+The legal review above supersedes this section's original closing caution ("a lawyer should
+read §8 before the feature is marketed"). Recorded as reported by the owner on 2026-08-25; the
+scope of that review is theirs, not this document's, so anything materially new — re-hosting
+bid documents, serving raw snapshots to customers, a second portal — is worth putting back to
+them rather than assuming it was covered.
 
 ### 9. Guardrail change required
 

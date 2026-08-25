@@ -184,9 +184,10 @@ exactly what a price-history feature reads. **The existing doctrine covers ask 5
 amendment** — which is worth noticing, because it means the constraint that looked like the
 blocker is the one thing already resolved.
 
-**Send the permission letter.** `source-gem.md` §8 item 5 names it and nobody has sent it. A
-granted permission removes the display constraints entirely and costs a letter. It should go
-out in parallel with the spike, not after it.
+~~**Send the permission letter.**~~ **Closed 2026-08-25: the owner's legal team reviewed the
+copyright position and cleared the current use.** The facts-and-deep-links posture stays — see
+`source-gem.md` §8, which now records why it is worth keeping on its own merits rather than as
+a legal hedge.
 
 ## The two findings that collapse work
 
@@ -269,8 +270,9 @@ Can be created / Deviation — clarification needed**. That is asks 2 and 3 in U
 2. **Ask UML for their own contract history**, and for three forwarded GeM alert emails while
    we are asking. The first answers ask 5 by the only free route and un-suppresses Module D;
    the second resolves assumption 3. One email, two unblocked assumptions.
-3. **Send the GeM SPV permission letter.** Free, unknown lead time, and now the only thing that
-   could ever open a market-wide price feed. Named 2026-07-30, still unsent.
+3. ~~**Send the GeM SPV permission letter.**~~ **Closed 2026-08-25 — legal reviewed and
+   cleared it.** It was never a blocker on any step here; a market-wide price feed was the only
+   thing it could have unlocked, and steps 4 and 5 do not wait on it.
 4. **One hour: does any other GeM surface publish award data without a captcha?** An open-data
    portal, a statistics dashboard, `data.gov.in`. §5 of the source review scopes it. Cheap, and
    it is the difference between "the portal refuses us" and "this endpoint refuses us".
