@@ -86,8 +86,17 @@ export function PriceHistory({ initial }: { initial: PriceHistoryData }) {
         setNote(body?.error?.message ?? "Could not reach GeM.");
         return;
       }
+      // The discard count is said out loud, not hidden. GeM's search matches any word in the
+      // query, so a fetch for "wire rope" is mostly wire brushes — and "Kept 1 award" with no
+      // explanation reads as a broken fetch rather than an honest one.
+      const kept = body.data.stored as number;
+      const offTopic = (body.data.off_topic ?? 0) as number;
+      const total = (body.data.portal_total_matching as number).toLocaleString("en-IN");
       setNote(
-        `Fetched ${body.data.stored} award${body.data.stored === 1 ? "" : "s"} — GeM lists ${body.data.portal_total_matching.toLocaleString("en-IN")} for this search.`,
+        `Kept ${kept} award${kept === 1 ? "" : "s"}` +
+          (offTopic
+            ? ` — ${offTopic} more came back for this search but were not ${q.trim()}, because GeM matches any word in it.`
+            : ` — GeM lists ${total} for this search.`),
       );
       await load(q);
     } finally {

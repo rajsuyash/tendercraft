@@ -1,12 +1,20 @@
 """Pull normalized records from the GeM connector into the shared corpus, then re-run each
 workspace's gate over them.
 
-**This module deliberately contains no filtering.** It reads the connector, writes rows, and
-delegates every include/exclude decision to `app/deterministic/discovery.py`, which is
-model-import-free and enforced as such by CI. G-9 is a structural rule here, not a convention:
-the exclusion path must be somewhere a model cannot reach, and this file — which does talk to
-the network — is not that place. `tools/check-discovery-guardrails.sh` fails the build if a
-function whose name suggests filtering ever appears under `app/discovery/`.
+**Nothing here decides what a workspace may SEE.** It reads the connector, writes rows, and
+delegates every include/exclude decision on the feed to `app/deterministic/discovery.py`, which
+is model-import-free and enforced as such by CI. G-9 is a structural rule here, not a
+convention: the exclusion path must be somewhere a model cannot reach, and this file — which
+does talk to the network — is not that place. `tools/check-discovery-guardrails.sh` fails the
+build if a function whose name suggests filtering ever appears under `app/discovery/`.
+
+`refresh_awards` is the one place that discards a fetched record, and it is worth being precise
+about why that is not the same act. It drops awards the portal returned that are **not about
+the category the user searched for** — GeM's full-text search ORs the words, so a fetch for
+"wire rope" is mostly wire brushes and cable. That is a relevance check on a SEARCH the user
+typed, not an exclusion from a feed: nothing becomes invisible, the discarded count is reported
+back, and re-running the same search returns the same rows. The rule itself still lives in
+`app/deterministic/price_history.py`, so the decision remains where a model cannot reach it.
 
 Why the connector is a separate service at all is documented in
 `services/gem-connector/app/fetch.py`: GeM's listing needs an anonymous WAF cookie, and rather
@@ -25,6 +33,7 @@ import httpx
 
 from .. import db, http, service_auth
 from ..deterministic.discovery import Rule, evaluate_eligibility, evaluate_gate
+from ..deterministic.price_history import category_matches
 from . import relevance
 from .registry import for_market
 
@@ -383,12 +392,19 @@ def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
     data = _connector("/bid-results", params, base=base)
 
     stored = 0
+    off_topic = 0
     for record in data.get("results") or []:
         ref = record.get("portal_ref_no")
         if not ref:
             # No bid number means no dedup key, so re-running would duplicate it. Skipped and
             # logged rather than stored under a generated id.
             log.warning("award result with no bid number — skipped")
+            continue
+        if not category_matches(query, record.get("category")):
+            # GeM's search ORs the words, so most of what comes back for "wire rope" is not
+            # wire rope. Storing it would pollute a corpus every other search reads, and the
+            # summary cards would average steel rope against HDMI cable.
+            off_topic += 1
             continue
         result_id = db.upsert_award_result({
             "source_id": data.get("source_id") or "gem_bidplus",
@@ -414,6 +430,11 @@ def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
     return {
         "query": query,
         "stored": stored,
+        # Read from the portal and discarded as not actually about this search. Reported rather
+        # than hidden: "GeM returned 40, one was wire rope" is the honest description of the
+        # portal's search, and a user who sees `stored: 1` with no explanation reasonably
+        # concludes the fetch is broken.
+        "off_topic": off_topic,
         # What the portal holds, versus what one call read. Naming the gap is what stops a
         # 40-row sample being mistaken for the market.
         "portal_total_matching": data.get("portal_total_matching", 0),

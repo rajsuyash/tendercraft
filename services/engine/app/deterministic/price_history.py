@@ -149,3 +149,89 @@ def _number(value) -> float | None:  # noqa: ANN001
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+# ---------- which awards are actually about what was asked for ----------
+#
+# GeM's full-text search ORs the words, so `wire rope` returns anything containing *wire*:
+# measured on the live portal, one fetch of 40 awards for "wire rope" contained ONE wire rope
+# and 39 bundles with "Printer Head wire bush", "HDMI CABLWire", "Aluminium Service Wire".
+# Quoting the phrase makes it worse rather than better — `"wire rope"` returned 3.3 MILLION
+# matches against 45,559 unquoted, so the portal treats the quotes as noise. There is no query
+# that fixes this at the source; the filter has to be ours.
+#
+# **Why this is deliberately stricter than the feed's keyword rule.**
+# `deterministic/discovery.py::keyword_relevance` matches on shared stems, because a vendor
+# writing "networking" should still see "Network switch supply" — recall matters there, and a
+# wrong guess only changes the ORDER things appear in. Here a wrong match becomes a number:
+# a "typical winning price" averaged across HDMI cable and steel rope is a benchmark someone
+# prices a real bid against. So this rule wants precision, and the two are not the same rule
+# wearing different names. Anyone tempted to unify them should read this paragraph first.
+#
+# The SQL and Python forms below are two expressions of ONE rule and are pinned against each
+# other by tests, per the `auth.py` / `current_workspace_id()` precedent in known-pitfalls:
+# where a scoping rule must exist twice, write both in one place and test them together.
+
+_QUERY_WORD = re.compile(r"[a-z0-9]+")
+
+
+#: A comma in a GeM category joins two unrelated products. It is a BARRIER, not a space:
+#: turning it into one makes "Insulated copper wire,Rope ladder" read as the phrase "wire rope",
+#: which is the exact false positive this rule exists to stop. The sentinel is a character no
+#: query can contain and that `_QUERY_WORD` ignores, so single-word tokenisation still splits
+#: on it while phrase matching cannot cross it. Found by a test, not by reasoning.
+_BUNDLE_BREAK = "\x00"
+
+
+def _norm(text: str | None) -> str:
+    """Lowercase, whitespace collapsed, bundle commas turned into an uncrossable break."""
+    collapsed = re.sub(r"\s+", " ", (text or "").lower()).strip()
+    return collapsed.replace(",", _BUNDLE_BREAK)
+
+
+def _pattern(query: str) -> str:
+    """ONE pattern, used by both halves. Empty query → "" meaning no condition.
+
+    Written once because the alternative drifts, and the drift is constructible rather than
+    theoretical: a hand-written `ilike '%wire rope%'` fails on `wire  rope` — a double space,
+    which occurs in the live corpus — while a Python `in` on collapsed whitespace succeeds. Two
+    forms of "the same" rule disagreeing about a real row is the `auth.py` /
+    `current_workspace_id()` pitfall in another costume.
+
+    - `\\y` opens every term: a wire rope is not a **hard**wire rope.
+    - `\\s+` joins them: the portal's spacing is not consistent and is not meaningful.
+    - Nothing closes the pattern, so "wire rope**s**" matches — GeM writes the plural and the
+      bidder types the singular.
+    """
+    words = _QUERY_WORD.findall(_norm(query))
+    if not words:
+        return ""
+    # A single word closes with \y too, or "rope" would match "ropeway".
+    if len(words) == 1:
+        return rf"\y{re.escape(words[0])}\y"
+    return r"\y" + r"\s+".join(re.escape(w) for w in words)
+
+
+def category_matches(query: str, category: str | None) -> bool:
+    """Is this award actually about `query`? Pure; the authority for what gets STORED.
+
+    An empty query matches everything — "show me the whole corpus" is a real request, and
+    returning nothing for it would look like an empty database.
+    """
+    pattern = _pattern(query)
+    if not pattern:
+        return True
+    # `\y` is Postgres's spelling of a word boundary; Python spells it `\b`. Same assertion,
+    # and this one substitution is the entire difference between the two halves.
+    return re.search(pattern.replace(r"\y", r"\b"), _norm(category)) is not None
+
+
+def postgrest_filter(query: str) -> dict[str, str]:
+    """The same pattern as a PostgREST condition, so it runs BEFORE `limit`.
+
+    Filtering after the query would truncate newest-first and then discard, so a search whose
+    matches are all older than the page size returns nothing — the failure the date window has
+    already been through. `imatch` is PostgREST's `~*`.
+    """
+    pattern = _pattern(query)
+    return {"category": f"imatch.{pattern}"} if pattern else {}

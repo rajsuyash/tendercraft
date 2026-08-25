@@ -70,8 +70,13 @@ def test_BOTH_bounds_survive_as_one_and_clause(captured):
 
 
 def test_the_window_is_applied_alongside_the_category_match(captured):
+    """Both conditions survive together. The category form is taken from `postgrest_filter`
+    rather than spelled out here — a copy would be a third place the matching rule lives."""
+    from app.deterministic.price_history import postgrest_filter
+
     db.search_award_results("wire rope", from_date="2021-04-01", to_date="2026-03-31")
-    assert captured["params"]["category"] == "ilike.*wire rope*"
+
+    assert captured["params"]["category"] == postgrest_filter("wire rope")["category"]
     assert "and" in captured["params"]
 
 

@@ -14,6 +14,7 @@ import httpx
 
 from . import http
 from .config import get_settings
+from .deterministic.price_history import postgrest_filter
 from .envelope import ApiError
 
 
@@ -1825,11 +1826,11 @@ def search_award_results(query: str, limit: int = 60, from_date: str | None = No
         bounds.append(f"bid_end_date.lte.{to_date}")
         params.pop("bid_end_date", None)
         params["and"] = f"({','.join(bounds)})"
-    if query.strip():
-        # Case-insensitive contains. Deliberately not full-text: GeM category strings are
-        # comma-joined product names, not prose, and a stemmed match on them surprises people
-        # ("rope" matching "roping") in a screen whose whole job is to be trusted with money.
-        params["category"] = f"ilike.*{query.strip()}*"
+    # Word-boundary for a single word, phrase for several — `postgrest_filter` is the SQL half
+    # of the rule in `deterministic/price_history.py`, which also decides what gets stored.
+    # Substring was wrong in a way that only shows up on real data: it put "rope" inside
+    # "Europe" and "wire" inside "CABLWire", both live strings from this corpus.
+    params.update(postgrest_filter(query))
     return _rest("GET", "award_results", params=params) or []
 
 
