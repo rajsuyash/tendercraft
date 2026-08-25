@@ -96,6 +96,25 @@ Format: **symptom → cause → fix.**
 - A non-disabled primary `<a href>` pointing at an API that 409s ejects the user onto a raw JSON envelope with internal AC codes. Gate the element, not just the endpoint.
 - The most consequential click in a compliance product (waiving a mandatory requirement) must cost more than one unconfirmed click and must capture a reason — an audit row with no "why" is not an explanation.
 
+## Deployment configuration (found in production, 2026-08-25)
+
+- `gcloud run deploy --set-env-vars` **REPLACES** the service's entire environment; it does not
+  merge. The runbook's engine command named one variable, so every deploy that followed it
+  silently dropped the other ten. Use `--update-env-vars`. The tell is that the deploy succeeds,
+  the service is healthy, and one subsystem is dead.
+- **An env var that only a registry reads disables a feature without raising anything.**
+  `discovery/registry.py` builds `connector_url` from `GEM_CONNECTOR_URL`, and `for_market()`
+  returns only sources that HAVE one — so unset does not fail, it makes the market *vanish*: the
+  sweep finds nothing and reports success. `GEM_CONNECTOR_URL` was absent from the Cloud Run
+  engine for weeks and from `.env.example` and `docs/deploy.md` entirely, which killed four
+  paths at once — the opportunity sweep, depth-1 eligibility, price fetches and the ask-4 bid
+  status watcher. Only the price screen said anything, because `_connector` is the one caller
+  that raises ("no connector configured for this market") instead of degrading to empty.
+  **A variable no document mentions is a variable the next deploy will not set.** If code reads
+  `os.environ` for something a feature cannot work without, it belongs in `.env.example` in the
+  same commit — and prefer failing loudly at the boundary over returning an empty collection
+  that reads as "nothing matched".
+
 ## Latency (from the production audit, 2026-07-26)
 
 The app and the database must sit in the same region. When they did not — Cloud Run

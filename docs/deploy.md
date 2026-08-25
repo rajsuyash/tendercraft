@@ -57,8 +57,13 @@ IMG="$R-docker.pkg.dev/$P/cloud-run-source-deploy/tendercraft-web:latest"
 cd services/engine
 gcloud run deploy $ENG --source . --project=$P --region=$R \
   --allow-unauthenticated --memory=2Gi --cpu=2 --timeout=600 --max-instances=5 \
-  --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}" \
+  --update-env-vars="NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}" \
   --set-secrets="SUPABASE_SERVICE_JWT=tendercraft-supabase-service-key:latest,GEMINI_API_KEY=tendercraft-gemini-api-key:latest"
+
+# `--update-env-vars`, NOT `--set-env-vars`. The engine now carries eleven variables and this
+# command names one: `--set-env-vars` REPLACES the whole set, so the documented form silently
+# drops APP_URL, both connector URLs, the cron pair and the inbound domain. That is how
+# GEM_CONNECTOR_URL went missing (see the pitfall below).
 
 # web — needs build args, so it goes through a build config rather than --source
 cd ../..
