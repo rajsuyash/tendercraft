@@ -42,6 +42,7 @@ import html as html_lib
 import json
 import re
 from dataclasses import asdict, dataclass
+from datetime import datetime
 
 BASE_URL = "https://bidplus.gem.gov.in"
 
@@ -115,13 +116,59 @@ class BidResult:
         }
 
 
-def build_results_payload(page: int, search: str = "",
-                          status: str = "bid_awarded") -> dict[str, str]:
+def portal_date(value: str | None) -> str:
+    """An ISO date as GeM's filter writes it, or "" for an open end of the range.
+
+    GeM renders dates DD-MM-YYYY everywhere a human sees one, and its own filter payload uses
+    the same shape. Callers speak ISO because every other date in this system is ISO; this is
+    the single place the portal's convention exists, so getting it wrong is one edit to fix.
+
+    Raises on a malformed date rather than passing it through. A date the portal cannot parse
+    is likely to be ignored rather than rejected, and an ignored filter returns UNFILTERED
+    rows that the caller would then label as a five-year window — a wrong number wearing a
+    right one's clothes.
+    """
+    if not value:
+        return ""
+    return datetime.strptime(value, "%Y-%m-%d").strftime("%d-%m-%Y")
+
+
+def within_window(bid_end_date: str | None, from_date: str | None,
+                  to_date: str | None) -> bool:
+    """Is this record inside the requested window? Applied to what the portal RETURNS.
+
+    **This is not belt-and-braces, it is the actual guarantee.** `byEndDate` is a filter on a
+    third-party endpoint we do not control and cannot see the implementation of. If GeM ever
+    ignores it — a renamed key, a format it does not parse, a silent change — the response is
+    a normal-looking page of the wrong rows, and a price history computed from them is a
+    confidently wrong benchmark that someone prices a real bid against. Re-checking locally
+    means the worst case is fewer results, never wrong ones.
+
+    A record with no end date is EXCLUDED from a bounded window: "date unknown" cannot be
+    asserted to fall inside a range, and a five-year claim must not rest on rows that carry
+    no date at all.
+    """
+    if not from_date and not to_date:
+        return True
+    if not bid_end_date:
+        return False
+    day = bid_end_date[:10]
+    if from_date and day < from_date:
+        return False
+    return not (to_date and day > to_date)
+
+
+def build_results_payload(page: int, search: str = "", status: str = "bid_awarded",
+                          from_date: str | None = None,
+                          to_date: str | None = None) -> dict[str, str]:
     """The body `/all-bids-data` expects for PUBLISHED RESULTS rather than open bids.
 
     Raises on an unknown status instead of sending it. The portal would accept the request and
     return everything, which reads as "this category has 5.7 million awards" — a wrong answer
     that looks like a working feature.
+
+    `from_date`/`to_date` are ISO (`YYYY-MM-DD`) and answer UML ask 5's *"last five years"*.
+    Sending them narrows what the portal returns; `within_window` decides what we keep.
     """
     if status not in RESULT_STATUSES:
         raise ValueError(f"unknown result status {status!r}; expected one of {RESULT_STATUSES}")
@@ -133,7 +180,7 @@ def build_results_payload(page: int, search: str = "",
             "byStatus": status,
             "byType": "all",
             "highBidValue": "",
-            "byEndDate": {"from": "", "to": ""},
+            "byEndDate": {"from": portal_date(from_date), "to": portal_date(to_date)},
             # Latest first: price history is most useful newest-first, and an incremental
             # sweep needs the new awards on page 1 for the same reason the listing does.
             "sort": "Bid-End-Date-Latest",

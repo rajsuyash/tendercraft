@@ -1796,11 +1796,17 @@ def replace_award_prices(award_result_id: str, ladder: list[dict]) -> int:
     return len(written or [])
 
 
-def search_award_results(query: str, limit: int = 60) -> list[dict]:
+def search_award_results(query: str, limit: int = 60, from_date: str | None = None,
+                         to_date: str | None = None) -> list[dict]:
     """Award records whose category matches, newest first, each with its full ladder.
 
     One query with the ladder embedded: a 60-row history that lazily loaded each ladder would
     be 61 round trips, which is the N+1 this codebase has already measured the cost of.
+
+    `from_date`/`to_date` (ISO) bound the window — UML ask 5's *"last five years"*. Applied in
+    the query rather than after `limit`: filtering a page that was already truncated newest-
+    first would return nothing for any window that does not touch the present, which is every
+    window someone opens this screen to compare against.
     """
     params = {
         "select": "id,portal_ref_no,category,department,quantity,bid_end_date,stage,"
@@ -1809,6 +1815,16 @@ def search_award_results(query: str, limit: int = 60) -> list[dict]:
         "order": "bid_end_date.desc.nullslast",
         "limit": str(limit),
     }
+    if from_date:
+        params["bid_end_date"] = f"gte.{from_date}"
+    if to_date:
+        # PostgREST takes repeated conditions on one column as `and`, but only when they are
+        # expressed through `and=()` — two `bid_end_date` keys in a dict would silently keep
+        # the last one and quietly drop the lower bound.
+        bounds = [f"bid_end_date.gte.{from_date}"] if from_date else []
+        bounds.append(f"bid_end_date.lte.{to_date}")
+        params.pop("bid_end_date", None)
+        params["and"] = f"({','.join(bounds)})"
     if query.strip():
         # Case-insensitive contains. Deliberately not full-text: GeM category strings are
         # comma-joined product names, not prose, and a stemmed match on them surprises people

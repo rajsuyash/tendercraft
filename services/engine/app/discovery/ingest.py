@@ -358,19 +358,29 @@ AWARD_RESULT_CAP = int(os.environ.get("GEM_AWARD_RESULTS", "40"))
 
 
 def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
-                   market: str = "IN") -> dict[str, Any]:
+                   market: str = "IN", from_date: str | None = None,
+                   to_date: str | None = None) -> dict[str, Any]:
     """Pull published results for a category into the shared award corpus.
 
     Returns what the portal says it HAS alongside what we stored, because the gap between them
     is the honest answer to "is this the whole picture": 45,000 awards exist for wire rope and
     one call reads forty of them.
+
+    A window (UML ask 5) is not a nicety here. The sweep is newest-first and capped, so without
+    one an active category can never be read further back than its most recent `max_results`
+    awards — the five-year history is not merely unfiltered, it is unreachable.
     """
     sources = for_market(market)
     base = next((s.connector_url for s in sources if s.connector_url), "")
-    data = _connector("/bid-results", {
+    params = {
         "q": query, "status": "bid_awarded",
         "max_results": max_results, "max_pages": AWARD_PAGE_CAP,
-    }, base=base)
+    }
+    if from_date:
+        params["from_date"] = from_date
+    if to_date:
+        params["to_date"] = to_date
+    data = _connector("/bid-results", params, base=base)
 
     stored = 0
     for record in data.get("results") or []:

@@ -37,8 +37,10 @@ from .results import (
     RESULT_STATUSES,
     build_results_payload,
     parse_result_page,
+    portal_date,
     result_path,
     result_stage,
+    within_window,
 )
 from .schema_probe import describe_fields
 
@@ -142,6 +144,8 @@ def sweep_results(
     status: str = "bid_awarded",
     max_pages: int = 5,
     max_results: int = 40,
+    from_date: str | None = None,
+    to_date: str | None = None,
 ) -> dict[str, Any]:
     """Published bid results, with the awarded price ladder for each (UML ask 5).
 
@@ -162,14 +166,23 @@ def sweep_results(
 
     out: list[dict[str, Any]] = []
     total_found = 0
+    out_of_window = 0
     for page in range(1, max_pages + 1):
-        body = build_results_payload(page, search, status) | {"csrf_bd_gem_nk": token}
+        body = build_results_payload(page, search, status, from_date, to_date) | {
+            "csrf_bd_gem_nk": token}
         total_found, docs = parse_page(fetcher.post_form("/all-bids-data", body).text)
         if not docs:
             break
         for doc in docs:
             if len(out) >= max_results:
                 break
+            # Re-check the window on what the portal actually returned, BEFORE spending a
+            # request on this bid's result page. Two reasons, and the second is the real one:
+            # it saves a portal round trip per rejected row, and it means a `byEndDate` the
+            # portal ignores costs us results rather than correctness (see `within_window`).
+            if not within_window(_one(doc, "final_end_date_sort"), from_date, to_date):
+                out_of_window += 1
+                continue
             path = result_path(doc)
             page_html = fetcher.get(f"/{path}").text
             # The result page is a public page like any other: if the portal starts
@@ -196,6 +209,11 @@ def sweep_results(
         "status": status,
         "portal_total_matching": total_found,
         "count": len(out),
+        "window": {"from": from_date, "to": to_date},
+        # How many rows the portal returned that our own check then rejected. Zero on a
+        # working filter; a large number is the tell that `byEndDate` is being ignored, which
+        # is otherwise invisible — the response looks entirely normal either way.
+        "dropped_out_of_window": out_of_window,
         "results": out,
     }
 
@@ -336,6 +354,8 @@ def create_app() -> FastAPI:
                             description="bid_awarded | fin_evaluated | tech_evaluated"),
         max_results: int = Query(default=20, ge=1, le=100),
         max_pages: int = Query(default=5, ge=1, le=30),
+        from_date: str = Query(default="", description="ISO YYYY-MM-DD, inclusive"),
+        to_date: str = Query(default="", description="ISO YYYY-MM-DD, inclusive"),
     ) -> dict[str, Any]:
         """Published results with the awarded price ladder (UML ask 5).
 
@@ -346,10 +366,21 @@ def create_app() -> FastAPI:
         if status not in RESULT_STATUSES:
             raise ApiError(400, "BAD_STATUS",
                            f"status must be one of {', '.join(RESULT_STATUSES)}")
+        try:
+            # Validated here, at the boundary, so a malformed date is a 400 the caller can
+            # read — not a silently-blank filter that returns five years of the wrong window.
+            portal_date(from_date or None)
+            portal_date(to_date or None)
+        except ValueError as exc:
+            raise ApiError(400, "BAD_DATE", "from_date/to_date must be ISO YYYY-MM-DD") from exc
+        if from_date and to_date and from_date > to_date:
+            raise ApiError(400, "BAD_DATE", "from_date is after to_date")
+
         fetcher = GuardedFetcher()
         try:
             return ok(sweep_results(fetcher, search=q, status=status,
-                                    max_pages=max_pages, max_results=max_results))
+                                    max_pages=max_pages, max_results=max_results,
+                                    from_date=from_date or None, to_date=to_date or None))
         finally:
             fetcher.close()
 

@@ -8,6 +8,7 @@ all times: a filter you cannot see is indistinguishable from a bug that ate your
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -342,21 +343,47 @@ async def dispatch_notifications(user: CurrentUser) -> dict:
         raise ApiError(503, "SMTP_NOT_CONFIGURED", str(exc)) from exc
 
 
+def _check_window(from_date: str, to_date: str) -> None:
+    """Validate an ISO window at the boundary, or raise the envelope's own 400.
+
+    Rejected rather than coerced: a date we cannot parse would otherwise become a blank filter,
+    and a blank filter silently returns the WRONG window rather than none — the failure mode
+    this whole feature exists to avoid.
+    """
+    for value in (from_date, to_date):
+        if not value:
+            continue
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise ApiError(400, "BAD_DATE",
+                           "from_date/to_date must be ISO YYYY-MM-DD") from exc
+    if from_date and to_date and from_date > to_date:
+        raise ApiError(400, "BAD_DATE", "from_date is after to_date")
+
+
 @router.get("/api/price-history")
 async def price_history(
     user: CurrentUser,
     q: str = Query(default="", max_length=80, description="product category, e.g. 'wire rope'"),
     limit: int = Query(default=60, ge=1, le=200),
+    from_date: str = Query(default="", description="ISO YYYY-MM-DD, inclusive"),
+    to_date: str = Query(default="", description="ISO YYYY-MM-DD, inclusive"),
 ) -> dict:
     """What this category has actually been winning at (UML ask 5).
 
     Reads the stored corpus only — refreshing is a separate, explicit action because it costs
     two portal requests per award. A user searching a category they have never swept sees an
     empty history with a "fetch from GeM" affordance rather than an unexplained pause.
+
+    The window answers *"the last five years"* and, more usefully, lets two windows be
+    compared — which is what *"understanding previous price trends"* actually requires.
     """
+    _check_window(from_date, to_date)
 
     def work() -> dict:
-        rows = db.search_award_results(q, limit=limit)
+        rows = db.search_award_results(q, limit=limit,
+                                       from_date=from_date or None, to_date=to_date or None)
         awards = [to_award(r, r.get("award_prices") or []) for r in rows]
         return {
             "query": q,
@@ -364,6 +391,7 @@ async def price_history(
             "awards": [a.as_dict() for a in awards],
             # Said plainly rather than implied: this is a sample of a public corpus we have
             # pulled, not the market. The refresh endpoint is how it grows.
+            "window": {"from": from_date or None, "to": to_date or None},
             "note": "Prices are what sellers bid on GeM, as published. "
                     "This is what has been fetched so far, not every award in the category.",
         }
@@ -376,15 +404,24 @@ async def refresh_price_history(
     user: CurrentUser,
     q: str = Query(min_length=2, max_length=80),
     max_results: int = Query(default=40, ge=1, le=100),
+    from_date: str = Query(default="", description="ISO YYYY-MM-DD, inclusive"),
+    to_date: str = Query(default="", description="ISO YYYY-MM-DD, inclusive"),
 ) -> dict:
     """Fetch more published results for a category from the portal.
 
     Explicit rather than automatic: two portal requests per award against a government site is
     not something to do on a page load, and the user should know a fetch is happening.
+
+    Pass a window to reach BACK. The portal sweep is newest-first and capped, so repeating this
+    call without one just re-reads the same recent awards — for an active category the older
+    years are unreachable until asked for by date.
     """
     authz.check(user, authz.DRAFT)
+    _check_window(from_date, to_date)
     try:
-        return ok(await run_in_threadpool(ingest.refresh_awards, q, max_results))
+        return ok(await run_in_threadpool(
+            ingest.refresh_awards, q, max_results, "IN",
+            from_date or None, to_date or None))
     except RuntimeError as exc:
         raise ApiError(503, "CONNECTOR_UNAVAILABLE", str(exc)) from exc
 
