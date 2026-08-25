@@ -96,6 +96,9 @@ type FeedData = {
    *  rows: an inferred scope described the page instead of the choice, so the coverage strip
    *  went on naming a country the user had just switched off until the rows caught up. */
   markets?: string[];
+  /** When each watched market's corpus was last swept, from the server. Per market so one
+   *  healthy connector cannot vouch for a dead one. */
+  last_swept?: Record<string, string>;
   rules: Rule[];
   members?: Member[];
 };
@@ -411,7 +414,23 @@ export function OpportunityFeed({
 
   const activeRules = (data.rules ?? []).filter((r) => r.enabled);
   const swept = (data.counts?.in_scope ?? 0) + (data.counts?.excluded ?? 0);
-  const lastSwept = items[0]?.opportunities?.last_seen_at;
+
+  // From the corpus, per market — NOT from `items[0].last_seen_at`, which was the age of one
+  // tender. A closed tender stops appearing in the portal listing, so its timestamp freezes on
+  // the day it closed: a workspace whose best match closed in July read "swept 31 Jul" for
+  // weeks while the sweep ran daily.
+  const sweptByMarket = data.last_swept ?? {};
+  const sweepTimes = Object.values(sweptByMarket);
+  // The OLDEST market, not the newest. One working connector must not vouch for a broken one —
+  // reporting the freshest would let a daily GeM sweep hide a TED feed that died a month ago,
+  // which is the exact state this replaced.
+  const lastSwept = sweepTimes.length
+    ? sweepTimes.reduce((oldest, t) => (t < oldest ? t : oldest))
+    : undefined;
+  const staleMarket =
+    sweepTimes.length > 1 && lastSwept
+      ? Object.entries(sweptByMarket).find(([, t]) => t === lastSwept)?.[0]
+      : undefined;
 
   const gateOn = (data.rules ?? []).some(
     (r) => r.name === "Only my capability keywords" && r.enabled,
@@ -526,8 +545,14 @@ export function OpportunityFeed({
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-3">
           {lastSwept && (
-            <span className="hidden font-mono text-xs text-muted sm:inline">
+            <span
+              className="hidden font-mono text-xs text-muted sm:inline"
+              // Names which market the timestamp belongs to when they disagree, so "swept
+              // 31 Jul" beside a working feed is diagnosable rather than baffling.
+              title={sweepTimes.map((t, i) => `${Object.keys(sweptByMarket)[i]}: ${t}`).join("\n")}
+            >
               {t("swept")} {clock.stamp.format(new Date(lastSwept))} {clock.label}
+              {staleMarket ? ` (${staleMarket})` : ""}
             </span>
           )}
           <button

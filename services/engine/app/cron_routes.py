@@ -94,6 +94,42 @@ async def cron_watch(authorization: str | None = Header(default=None)) -> dict:
     return ok(await run_in_threadpool(work))
 
 
+@router.post("/internal/cron/sweep")
+async def cron_sweep(authorization: str | None = Header(default=None)) -> dict:
+    """Keep the corpus current, so the feed is not a photograph of the day someone last clicked.
+
+    Without this the feed only moves when a human presses Refresh — and it silently rots in a
+    way that looks fine: the header shows a date, the rows show tenders, and every one of them
+    closed weeks ago. Found in production on 2026-08-25 reading "swept 31 Jul".
+
+    The portal is swept ONCE per market across all workspaces, because the corpus is shared;
+    only the per-workspace recompute repeats. `refresh_corpus` stops as soon as a page yields
+    nothing new, so a daily run costs a few pages rather than a full enumeration.
+    """
+    caller = verify_cron_caller(authorization)
+    log.info("cron sweep requested by %s", caller)
+
+    def work() -> dict:
+        from .discovery import ingest
+
+        workspaces = db.list_workspaces_for_sweep()
+        # Deduplicated: two workspaces watching India must not sweep GeM twice.
+        markets = sorted({m for w in workspaces for m in w["markets"]})
+        swept = ingest.refresh_markets(markets, query="") if markets else {"markets": [],
+                                                                           "failed": []}
+        rematched = _sweep(
+            [w["id"] for w in workspaces],
+            ingest.recompute_matches,
+            "recompute",
+        )
+        return {"markets": markets, "swept": swept,
+                "workspaces": rematched["workspaces"],
+                "rematched": rematched["ran"], "failed": rematched["failed"],
+                "failures": rematched["failures"]}
+
+    return ok(await run_in_threadpool(work))
+
+
 @router.get("/internal/cron/health")
 async def cron_health(authorization: str | None = Header(default=None)) -> dict:
     """Prove the scheduler's identity reaches this service, without doing any work.

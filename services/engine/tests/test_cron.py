@@ -190,3 +190,53 @@ def test_fanout_queries_ask_only_for_the_opted_in(monkeypatch):
     db.list_notifying_workspaces()
     assert captured["path"] == "notification_settings"
     assert captured["params"]["enabled"] == "is.true"
+
+
+# ---------- the scheduled sweep ----------
+
+def test_a_market_is_swept_once_however_many_workspaces_watch_it(client, google, monkeypatch):
+    """The corpus is shared. Sweeping GeM once per workspace would multiply portal load by
+    customer count for identical rows."""
+    from app.discovery import ingest
+
+    monkeypatch.setattr(db, "list_workspaces_for_sweep", lambda: [
+        {"id": "w1", "name": "A", "markets": ["IN"]},
+        {"id": "w2", "name": "B", "markets": ["IN", "FR"]},
+    ])
+    seen = {}
+    monkeypatch.setattr(ingest, "refresh_markets",
+                        lambda markets, query="": seen.update(markets=markets) or
+                        {"markets": [], "failed": []})
+    monkeypatch.setattr(ingest, "recompute_matches", lambda ws: {"matched": 1})
+
+    body = client.post("/internal/cron/sweep", headers=_auth(google())).json()["data"]
+
+    assert seen["markets"] == ["FR", "IN"]
+    assert body["rematched"] == 2
+
+
+def test_one_workspace_failing_to_rematch_does_not_stop_the_others(client, google, monkeypatch):
+    from app.discovery import ingest
+
+    monkeypatch.setattr(db, "list_workspaces_for_sweep", lambda: [
+        {"id": "ok", "name": "A", "markets": ["IN"]},
+        {"id": "bad", "name": "B", "markets": ["IN"]},
+    ])
+    monkeypatch.setattr(ingest, "refresh_markets",
+                        lambda markets, query="": {"markets": [], "failed": []})
+
+    def recompute(ws):
+        if ws == "bad":
+            raise RuntimeError("profile missing")
+        return {"matched": 1}
+
+    monkeypatch.setattr(ingest, "recompute_matches", recompute)
+
+    body = client.post("/internal/cron/sweep", headers=_auth(google())).json()["data"]
+
+    assert body["rematched"] == 1
+    assert body["failed"] == 1
+
+
+def test_the_sweep_endpoint_is_behind_the_same_auth(client):
+    assert client.post("/internal/cron/sweep").status_code == 401

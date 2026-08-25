@@ -1392,6 +1392,60 @@ def count_feed(workspace_id: str, state: str, markets: list[str] | None = None) 
     return _count_matches(workspace_id, {"state": f"eq.{state}"}, markets)
 
 
+def list_workspaces_for_sweep() -> list[dict]:
+    """Every workspace, with the markets it watches — the fan-out a scheduled sweep iterates.
+
+    Unlike the digest and the watcher, there is no opt-in to filter on: a workspace that never
+    configured alerts still expects its feed to be current when someone opens it. The cost is
+    bounded by the CORPUS being shared — the portal is swept once per market however many
+    workspaces watch it, and only the per-workspace recompute repeats.
+
+    The market resolution mirrors `get_workspace_markets` exactly — `discovery_markets`, then
+    the home `market`, then "IN". Written out rather than reused because that function is
+    per-workspace and this is one query for all of them; the duplication is deliberate and the
+    two are pinned together by a test, per the `auth.py` precedent in known-pitfalls.
+    """
+    rows = _rest(
+        "GET", "workspaces",
+        params={"select": "id,name,market,discovery_markets",
+                "limit": str(_CRON_FANOUT_LIMIT)},
+    ) or []
+    return [
+        {
+            "id": r["id"],
+            "name": r.get("name"),
+            "markets": list(r.get("discovery_markets") or []) or [r.get("market") or "IN"],
+        }
+        for r in rows if r.get("id")
+    ]
+
+
+def last_swept_at(markets: list[str] | None = None) -> dict[str, str]:
+    """When each watched market was last successfully swept, newest row per market.
+
+    A CORPUS fact, not a property of whatever happens to rank first in someone's feed. The
+    feed header used to read `items[0].last_seen_at`, which is the age of one tender — and a
+    tender that has CLOSED stops appearing in the portal listing, so its timestamp freezes on
+    the day it closed. A workspace whose top match closed in July therefore read "swept 31 Jul"
+    for weeks while the sweep ran daily. Stale-looking data that is not stale is the same
+    reflex-destroying failure as fresh-looking data that is: the header must describe the
+    sweep, so it is asked about the sweep.
+
+    Per-market rather than one maximum, because a single number would let a working GeM sweep
+    hide a TED connector that stopped a month ago — which is exactly the state this query was
+    written in.
+    """
+    params = {"select": "market,last_seen_at", "order": "last_seen_at.desc", "limit": "400"}
+    if markets:
+        params["market"] = f"in.({','.join(markets)})"
+    newest: dict[str, str] = {}
+    for row in _rest("GET", "opportunities", params=params) or []:
+        market, seen = row.get("market"), row.get("last_seen_at")
+        if market and seen and market not in newest:
+            newest[market] = seen
+    return newest
+
+
 def count_comparable(workspace_id: str, markets: list[str] | None = None) -> int:
     """How many tenders in scope even STATE a turnover bar.
 

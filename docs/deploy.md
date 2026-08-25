@@ -97,8 +97,19 @@ Two product jobs, both in Cloud Scheduler `europe-west1`:
 
 | Job | Schedule (UTC) | Calls | Answers |
 |---|---|---|---|
+| `tendercraft-sweep` | `0 2,7,12 * * *` (3× daily, incl. weekends) | `POST /internal/cron/sweep` | keeps the corpus current — everything else reads it |
 | `tendercraft-alert-digest` | `0 3-13 * * 1-5` (hourly, 08:30–18:30 IST) | `POST /internal/cron/digest` | UML ask 1 — *automatically* circulate relevant tenders |
 | `tendercraft-stage-watch` | `0 5,11 * * 1-5` (10:30 + 16:30 IST) | `POST /internal/cron/watch` | UML ask 4 — monitor GeM evaluation stage |
+
+**The sweep runs first each morning and on weekends too**, because tenders are published on
+days nobody is at a desk and a Monday digest built on Friday's corpus is a digest about closed
+tenders. It sweeps each market ONCE across all workspaces (the corpus is shared) and then
+recomputes matches per workspace; `refresh_corpus` stops as soon as a page yields nothing new,
+so a routine run costs a few pages rather than a full enumeration.
+
+Without it the feed only moves when someone presses **Refresh**, and it rots in a way that
+looks healthy — a date in the corner, rows in the table, and every tender closed weeks ago.
+That was the production state on 2026-08-25.
 
 **Auth is Google OIDC, not a Supabase session.** Both jobs run as
 `tendercraft-cron@…iam.gserviceaccount.com`, and `app/cron_auth.py` checks two things

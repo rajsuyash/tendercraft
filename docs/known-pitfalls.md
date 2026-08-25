@@ -218,3 +218,18 @@ Mumbai anyway); until then, count round trips like they cost money.
 - When folding near-identical text, compare similarity in BOTH directions and let the weaker
   one decide. `answer_reuse.similarity` is deliberately asymmetric, so a two-line answer fully
   contained in a three-page one scores 1.0 one way round and would be silently swallowed by it.
+
+## Freshness that is not freshness (found in production, 2026-08-25)
+
+- **A "last updated" label read off the first ROW is the age of that row, not of the update.**
+  The opportunity feed showed `swept 31 Jul` for weeks while the GeM sweep ran fine, because it
+  used `items[0].opportunities.last_seen_at` — and a CLOSED tender stops appearing in the portal
+  listing, so its `last_seen_at` freezes on the day it closed. The workspace's best-ranked match
+  had closed in July. Ask the corpus when it was swept (`db.last_swept_at`), never the list.
+- **Report the OLDEST source, not the newest.** One number across markets let a daily GeM sweep
+  vouch for a TED connector that had not run since July. Per-market, and the header names the
+  laggard.
+- **A feature reachable only by a button is a feature that silently stops.** Nothing swept the
+  corpus on a schedule — the digest and the watcher both READ it, so both were reporting
+  confidently on a month-old snapshot. If a job keeps data current, it needs a clock; if it has
+  no clock, the staleness must be visible somewhere a user will look.

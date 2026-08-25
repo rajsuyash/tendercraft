@@ -75,6 +75,10 @@ async def list_opportunities(
                 "states_a_turnover_bar": db.count_comparable(user.workspace_id, markets),
             },
             "markets": markets,
+            # When the CORPUS was last swept, per market. The header used to infer this from
+            # the first row in the list, which is the age of one tender rather than of the
+            # sweep — and a closed tender's timestamp never moves again.
+            "last_swept": db.last_swept_at(markets),
             "rules": db.get_discovery_rules(user.workspace_id),
             # The roster the Owner column assigns from. Served here rather than fetched by the
             # page: the engine sits beside the database, so this is two co-located queries,
