@@ -10,10 +10,11 @@
 
 /**
  * The five meter stages, verbatim from `app/deterministic/submission.py::STAGES`. The journey
- * below has SIX steps, because feeding the Knowledge Base is a real thing a bidder does but is
- * not a stage the meter tracks — it feeds the ones either side of it. Rendering JOURNEY as the
- * progress strip would print "Requirements confirmed" twice and claim six stages where the
- * product counts five.
+ * below has SEVEN steps, and the mismatch is deliberate twice over: feeding the Knowledge Base
+ * is a real thing a bidder does but is not a stage the meter tracks, and discovery happens
+ * before a bid — and therefore before a meter — exists at all. Rendering JOURNEY as the
+ * progress strip would print "Requirements confirmed" three times and claim seven stages where
+ * the product counts five. Both extra steps carry a `badge` for exactly this reason.
  */
 export const METER_STAGES: string[] = [
   "Requirements confirmed",
@@ -38,6 +39,31 @@ export interface Stage {
 }
 
 export const JOURNEY: Stage[] = [
+  {
+    id: "discover",
+    meterStage: "Requirements confirmed",
+    // Before the meter exists, so naming a meter stage here would claim progress on a bid
+    // nobody has decided to pursue yet.
+    badge: "Before there is a bid",
+    title: "The tender finds you",
+    summary:
+      "Most of this journey used to start with someone spotting a tender. That step is now done for you, and it runs whether anyone is at their desk or not.",
+    youDo: [
+      "Say what you can supply — keywords, or let it read them off your website",
+      "Choose which countries your feed is drawn from",
+      "Add recipients for email alerts, and the relevance level worth interrupting someone for",
+      "Give the ones worth pursuing an owner; star the ones you submit",
+    ],
+    systemDoes: [
+      "Sweeps the portals for your markets and ranks what it finds against your capability",
+      "Emails the relevant ones to the people you named — once each, never twice",
+      "Reads eligibility straight off the bid document: turnover bar, EMD, experience required",
+      "Watches the bids you starred and tells you when evaluation moves",
+    ],
+    gate:
+      "Nothing here decides anything for you. Ranking changes the order tenders appear in; only rules you wrote can move one out of your feed, and the excluded count stays on screen.",
+    where: "Opportunities",
+  },
   {
     id: "upload",
     meterStage: "Requirements confirmed",
@@ -251,6 +277,52 @@ export const RUBRIC_DIMENSIONS: { label: string; weight: number }[] = [
 
 export const FEATURES: { name: string; href?: string; what: string; detail?: string }[] = [
   {
+    name: "Opportunities",
+    href: "/opportunities",
+    what: "Tenders found for you, ranked, before anyone on your team goes looking.",
+    detail:
+      "Swept from the portals your workspace watches and banded by relevance to your capability keywords. Your own rules can exclude what you never bid on — and the Excluded count stays visible from the feed, because a filter you cannot see is indistinguishable from a bug that ate your tenders. Assign an owner and star the ones you are pursuing.",
+  },
+  {
+    name: "Alerts",
+    href: "/settings",
+    what: "The relevant ones reach a human by email, without anyone refreshing a page.",
+    detail:
+      "Choose the recipients and the relevance threshold. Sent hourly on working hours, and never twice for the same tender. The threshold governs the inbox only — everything below it stays fully visible in the feed, because an email setting must never quietly narrow what you can see.",
+  },
+  {
+    name: "Bid status watch",
+    what: "Star a submitted bid and be told when it moves through evaluation.",
+    detail:
+      "Checked twice a day against the portal's public record: technical evaluation, financial evaluation, award. The first check sets a baseline rather than alerting, and only forward moves raise anything. What it cannot do is read the clarification itself — see the guarantee below.",
+  },
+  {
+    name: "Forwarded portal mail",
+    what: "Your workspace has an email address; forward portal notices to it.",
+    detail:
+      "One rule in your mail client. A request for additional documents becomes a dated action on the right tender, with the original email kept in full beside it. Anything it cannot classify is still filed and shown rather than dropped, and a deadline is only ever set from a date the message actually states.",
+  },
+  {
+    name: "Manufacturing capability",
+    href: "/capability",
+    what: "What you can make, recorded once, as ranges rather than a list of products.",
+    detail:
+      "Diameter, construction, grade, standard — each as the envelope you can actually produce. Recorded by you, not read from any portal catalogue. A parameter nobody has recorded reads as Not assessed, never as a deviation: a false “we cannot make this” costs a bid you would have won.",
+  },
+  {
+    name: "Schedule fit",
+    what: "Line by line: can we make this, and is it already listed?",
+    detail:
+      "Each schedule line is compared against your capability envelope by arithmetic, not judgement, and lands on Published, Can be created, Deviation — clarification needed, or Not assessed. Every cell links back to the row it was read from. It gates nothing; it tells you where to look before the bid closes.",
+  },
+  {
+    name: "Price history",
+    href: "/prices",
+    what: "What a category has actually been winning at on the portal.",
+    detail:
+      "Published award ladders — who won, at what price, and who came second. Set a date range to reach back years rather than weeks, or to compare two periods. Median rather than average, because one bundled framework contract would drag an average past every real figure. A per-unit rate is shown only where the award was a single-category bid with a known quantity.",
+  },
+  {
     name: "Dashboard",
     href: "/dashboard",
     what: "Every live bid, sorted by how soon it is due.",
@@ -320,6 +392,19 @@ export const FEATURES: { name: string; href?: string; what: string; detail?: str
     detail:
       "Switch from the top of the sidebar. Data never crosses between workspaces — each query is scoped to the one you are in.",
   },
+  {
+    name: "Countries",
+    href: "/opportunities",
+    what: "Which markets your feed is drawn from.",
+    detail:
+      "India and France today. A market sets which portals are swept and which procurement vocabulary applies — it is a default, never a hard filter, so a cross-border tender you could legally pursue is not hidden from you.",
+  },
+  {
+    name: "Is it learning?",
+    what: "Whether drafts are needing less rewriting over time.",
+    detail:
+      "Measured from how much you actually change each section, comparing the median of recent work against earlier work. Medians, not averages, because one section scrapped and rewritten from scratch would otherwise read as progress for the whole workspace.",
+  },
 ];
 
 export const ROLES: { role: string; can: string }[] = [
@@ -364,5 +449,20 @@ export const GUARANTEES: { title: string; detail: string }[] = [
     title: "It will not quietly lose the record",
     detail:
       "The audit trail is append-only. Overrides, approvals, watermark removals and exports cannot be edited or deleted afterwards — not even by an administrator.",
+  },
+  {
+    title: "It will never hold your portal password",
+    detail:
+      "No part of this system logs in to a procurement portal as you, and none of it ever will. Everything it reads is either a public page or something you forwarded to it yourself. So bid status is read from the portal's public record — it tells you evaluation has started, which is when buyers raise clarifications, and then tells you to go and look. The clarification itself sits in your portal inbox and only you can open it. A tool that implied otherwise would be worse than none, because you would stop checking.",
+  },
+  {
+    title: "It will not say “Published” unless you said so",
+    detail:
+      "Catalogue status means the catalogue you recorded here, never a live check of your listings on the portal. We do not read your seller account.",
+  },
+  {
+    title: "It will not hide a tender you did not exclude",
+    detail:
+      "Only rules you wrote can move something out of your feed, and the excluded count is on screen at all times. Relevance ranking changes the order things appear in; it never removes them.",
   },
 ];

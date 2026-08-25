@@ -87,8 +87,8 @@ export default function GuidePage() {
       <header className="mb-8">
         <h1 className="font-heading text-2xl font-semibold text-ink">User guide</h1>
         <p className="mt-1 text-sm text-muted">
-          The whole journey, from the RFP landing in your inbox to a submission-ready proposal
-          document — and what every feature along the way is actually for.
+          The whole journey, from a tender you had not yet heard of to a submission-ready
+          proposal document — and what every feature along the way is actually for.
         </p>
       </header>
 
