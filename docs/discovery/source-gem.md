@@ -58,6 +58,36 @@ Returns a raw Solr response (`content-type: text/html`, body is JSON) with
 Server-side full-text search, end-date window, value band and sort are all supported — so the
 volume is controllable without client-side enumeration.
 
+> **`searchType` takes a second value, and it changes what this source can do (2026-08-25).**
+> `fullText` ORs the query's words, which is the whole reason `price_history.category_matches`
+> exists: `wire rope` matches anything containing *wire*. **`exact` matches the whole category
+> field**, case-sensitively. Measured on the awarded corpus:
+>
+> | query | `searchType` | numFound | on-topic in one fetch |
+> |---|---|---:|---|
+> | `wire rope` | `fullText` | 44,640 | 0 of 10 |
+> | `Steel Wire Rope` | `exact` | 6 | 6 of 6, every one with a price ladder |
+> | `Wire Rope` | `exact` | 6 | — |
+> | `wire rope` | `exact` | 1 | — (case matters) |
+> | `wire` / `rope` | `exact` | 0 | — (whole field, not a substring) |
+>
+> Every OTHER value tried — `category`, `product`, `phrase`, `boq`, `bidNumber` — returned
+> 5,775,992, the unfiltered corpus. That is this payload's house failure mode, the same one
+> `bidStatusType` has: **ignored, never refused**, so both connector and engine validate
+> against an allowlist rather than passing a value through.
+>
+> There is **no category filter** on this endpoint. `filter.byCategory`, `filter.categoryName`
+> and `filter.catId` were each probed and each returned the control total. `b_cat_id` is
+> readable on the way out and unusable on the way in — and on custom/BOQ bids it is a
+> placeholder (`home_boq_boql_boql_boq`, `home_univ_univ_univ_univ`) rather than a product
+> code, so it is not a filter in either direction.
+>
+> **What follows for the product.** A category name GeM itself wrote is worth storing, because
+> it is the only key that filters at the source; a name a human retyped is worth almost
+> nothing, because `exact` silently returns zero for it. That is migration 0036
+> (`workspace_categories`), and it is why that table verifies a name at write time rather than
+> trusting it.
+
 Per-item fields available with **no document fetch at all**:
 
 | Field | Example | Use |

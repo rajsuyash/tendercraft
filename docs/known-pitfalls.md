@@ -239,3 +239,63 @@ Mumbai anyway); until then, count round trips like they cost money.
   access-log line, so the only symptom was counters that did not move. Raised to 3600s, which
   is the ceiling; anything slower has to stop being a single request. Check the log for the
   POST's completion line, not just for errors: its ABSENCE is the failure.
+
+## Asking a third-party search the right question (found 2026-08-25, migration 0036)
+
+- **A filter the portal IGNORES is worse than one it refuses, and GeM ignores everything it
+  does not recognise.** This was already known for `bidStatusType`; it is a property of the
+  whole `/all-bids-data` payload. Probed: `filter.byCategory`, `filter.categoryName`,
+  `filter.catId`, and `param.searchType` values `category`, `product`, `phrase`, `boq`,
+  `bidNumber` each returned **5,775,992** — byte-for-byte the unfiltered control. No error, no
+  warning, a 200 and a plausible page. Any new key sent to this endpoint must be allowlisted in
+  code and pinned by a test, or the first typo reports the entire corpus as one category's
+  history.
+- **Before building a client-side filter, check whether the source can be asked properly.**
+  `category_matches` was written because `fullText` ORs the query's words — correct, and it
+  shipped a 97% discard rate. `param.searchType='exact'` existed the whole time and matches the
+  whole category field: same window and same cost, `fullText q='wire rope'` kept 0 of 10 rows
+  while `exact q='Steel Wire Rope'` kept 6 of 6. The client-side rule was the right answer to
+  the wrong question, and one hour of probing the payload would have found it. **Enumerate the
+  parameter's accepted values before writing the code that compensates for it.**
+- **On a newest-first capped sweep, a precision problem IS a coverage problem.** Discarding 39
+  of 40 rows does not just waste requests: the budget is spent before the older years are
+  reached, so those awards are UNREACHABLE, not merely unfiltered. Identical in shape to the
+  missing `byEndDate` window found the same week. Whenever a sweep is capped and ordered, ask
+  what the filter costs in REACH, not only in noise.
+- **The same relevance rule cannot serve both search modes.** `category_matches` treats a comma
+  as an uncrossable barrier, because under `fullText` a comma joins unrelated products and
+  "Insulated copper wire,Rope ladder" must not read as the phrase "wire rope". Applied to an
+  `exact` result that rule discards a row **for failing to match its own name** — GeM writes
+  multi-item categories and a seller can be registered under one. `ingest._is_on_topic` branches
+  on the mode: phrase rule for `fullText`, whitespace-collapsed equality for `exact`. The check
+  stays under both modes rather than trusting the portal, so if GeM's behaviour ever changes the
+  corpus is protected and `off_topic` is where it shows.
+- **A key that is case-sensitive and whole-field cannot be retyped by a human.** `exact` returns
+  6 for `Wire Rope`, 1 for `wire rope`, and 0 for `wire` or `rope`. Guessing spellings for Usha
+  Martin's ten registered categories resolved four; harvesting GeM's own strings out of the
+  corpus found others no guess would have (`Haulage wire rope dia 32 mm IS 1856`). Store the
+  portal's string, verify it at write time, and keep an unverified row VISIBLE — a category that
+  silently matches nothing looks identical to a category with no history.
+
+## Talking to the hosted database from a script (2026-08-25)
+
+- **`SUPABASE_DB_URL` is empty in `.env`, so `psql` silently targets a local socket** and fails
+  with "is the server running locally?" — which reads as a broken local stack rather than a
+  missing variable. The route that works is the Management API:
+  `POST https://api.supabase.com/v1/projects/<ref>/database/query` with `SUPABASE_ACCESS_TOKEN`.
+  It runs DDL, so a migration can be applied from a script.
+- **That API is behind Cloudflare, which 403s `python-urllib`'s default user agent** with
+  `error code: 1010` on every request including a plain `select 1`. The same request from curl
+  succeeds. Sending a normal UA header fixes it; without one the failure looks like a
+  permissions problem and sends you hunting for the wrong thing.
+- **Its error body carries the Postgres message; the status line carries nothing.** A bare
+  `HTTPError: 400` cost a round trip that `column "discovery_markets" is of type market[] but
+  expression is of type text[]` would have answered immediately. Always read and surface the
+  body.
+- **`workspaces.discovery_markets` is `market[]`, not `text[]`.** `array['IN']` is rejected
+  outright (42804) rather than coerced — cast it: `array['IN']::public.market[]`.
+- **`services/engine` and `services/gem-connector` both name their package `app`.** Anything
+  importing across the two (a verification script, never product code — F13) must load one by
+  file path with `importlib`, AND register it in `sys.modules` first, or `@dataclass` raises
+  `AttributeError: 'NoneType' object has no attribute '__dict__'` while resolving its own
+  module.

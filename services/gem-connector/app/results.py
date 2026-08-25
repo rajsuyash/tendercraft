@@ -60,6 +60,23 @@ RESULT_STATUSES = ("tech_evaluated", "fin_evaluated", "bid_awarded")
 BUYER_STATUS_STAGE = {0: "not_evaluated", 1: "tech_evaluated", 2: "fin_evaluated",
                       3: "bid_awarded"}
 
+#: How the portal reads `searchBid`. Both values were measured on the live endpoint on
+#: 2026-08-25; every other value tried — `category`, `product`, `phrase`, `boq`, `bidNumber` —
+#: returned the unfiltered corpus (5,775,992), which is this payload's house failure mode:
+#: ignored, never refused. So the set is an allowlist and `build_results_payload` raises.
+#:
+#: `fullText` ORs the words: `wire rope` matched 73,186 awards, of which one page of ten
+#: contained zero wire ropes. `exact` matches the WHOLE category field, case-sensitively:
+#: `Wire Rope` returned 6 awards and all six were wire rope, while `wire` and `rope` alone
+#: returned nothing at all — which is the proof it is field equality rather than a phrase
+#: search, and the reason a stored category must be GeM's own string rather than a retyped one.
+#:
+#: The two are complements, not alternatives. `exact` buys precision at the source and cannot
+#: reach a bid GeM filed under a bundle or a custom-bid title; `fullText` reaches those and
+#: pays for it with a discard rate near 97%. Which one a caller wants depends on whether it
+#: has a verified category name, so neither is the default for the other's job.
+SEARCH_TYPES = ("fullText", "exact")
+
 _ROW = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S | re.I)
 _CELL = re.compile(r"<t[dh][^>]*>(.*?)</t[dh]>", re.S | re.I)
 _TAG = re.compile(r"<[^>]+>")
@@ -160,7 +177,8 @@ def within_window(bid_end_date: str | None, from_date: str | None,
 
 def build_results_payload(page: int, search: str = "", status: str = "bid_awarded",
                           from_date: str | None = None,
-                          to_date: str | None = None) -> dict[str, str]:
+                          to_date: str | None = None,
+                          search_type: str = "fullText") -> dict[str, str]:
     """The body `/all-bids-data` expects for PUBLISHED RESULTS rather than open bids.
 
     Raises on an unknown status instead of sending it. The portal would accept the request and
@@ -169,12 +187,20 @@ def build_results_payload(page: int, search: str = "", status: str = "bid_awarde
 
     `from_date`/`to_date` are ISO (`YYYY-MM-DD`) and answer UML ask 5's *"last five years"*.
     Sending them narrows what the portal returns; `within_window` decides what we keep.
+
+    `search_type` chooses how the portal reads `searchBid` (`SEARCH_TYPES`). It is validated
+    for exactly the reason `status` is, and against exactly the same measured behaviour: an
+    unrecognised value is not refused by GeM, it is ignored, and what comes back is the whole
+    corpus in the shape of an answer. Defaulting to `fullText` keeps every existing caller on
+    the behaviour it was written against.
     """
     if status not in RESULT_STATUSES:
         raise ValueError(f"unknown result status {status!r}; expected one of {RESULT_STATUSES}")
+    if search_type not in SEARCH_TYPES:
+        raise ValueError(f"unknown search type {search_type!r}; expected one of {SEARCH_TYPES}")
     payload = {
         "page": page,
-        "param": {"searchBid": search, "searchType": "fullText"},
+        "param": {"searchBid": search, "searchType": search_type},
         "filter": {
             "bidStatusType": _STATUS_TYPE,
             "byStatus": status,

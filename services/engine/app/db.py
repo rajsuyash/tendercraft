@@ -1851,6 +1851,43 @@ def replace_award_prices(award_result_id: str, ladder: list[dict]) -> int:
     return len(written or [])
 
 
+# ---------- the categories a seller is registered under (migration 0036) --------------------
+
+def list_workspace_categories(workspace_id: str, *, active_only: bool = False) -> list[dict]:
+    """This workspace's GeM categories. Unverified rows are INCLUDED and flagged, not hidden.
+
+    A category whose `verified_at` is null is one the portal has never matched — usually a
+    spelling that came from a spreadsheet. Hiding it would leave the customer looking at nine
+    of their ten categories with nothing saying where the tenth went.
+    """
+    params = {
+        "workspace_id": f"eq.{workspace_id}",
+        "select": "id,gem_name,label,standard_code,verified_at,portal_award_total,active,"
+                  "created_at,updated_at",
+        "order": "verified_at.desc.nullslast,gem_name.asc",
+    }
+    if active_only:
+        params["active"] = "is.true"
+    return _rest("GET", "workspace_categories", params=params) or []
+
+
+def upsert_workspace_category(workspace_id: str, gem_name: str, patch: dict) -> dict:
+    """Add or update one category, keyed on (workspace, GeM's own name).
+
+    `gem_name` is in the conflict target with `workspace_id` for the 0027 reason: the engine
+    writes with the service role and bypasses RLS, so a key without the scope column lets a
+    caller-supplied name overwrite another workspace's row.
+    """
+    rows = _rest(
+        "POST", "workspace_categories",
+        params={"on_conflict": "workspace_id,gem_name"},
+        json={"workspace_id": workspace_id, "gem_name": gem_name,
+              "updated_at": datetime.now(UTC).isoformat(), **patch},
+        prefer="return=representation,resolution=merge-duplicates",
+    )
+    return rows[0] if rows else {}
+
+
 def search_award_results(query: str, limit: int = 60, from_date: str | None = None,
                          to_date: str | None = None) -> list[dict]:
     """Award records whose category matches, newest first, each with its full ladder.

@@ -410,6 +410,7 @@ async def refresh_price_history(
     max_results: int = Query(default=40, ge=1, le=100),
     from_date: str = Query(default="", description="ISO YYYY-MM-DD, inclusive"),
     to_date: str = Query(default="", description="ISO YYYY-MM-DD, inclusive"),
+    search_type: str = Query(default="fullText", description="fullText | exact"),
 ) -> dict:
     """Fetch more published results for a category from the portal.
 
@@ -419,15 +420,83 @@ async def refresh_price_history(
     Pass a window to reach BACK. The portal sweep is newest-first and capped, so repeating this
     call without one just re-reads the same recent awards — for an active category the older
     years are unreachable until asked for by date.
+
+    `search_type=exact` when `q` is a registered category name (`/api/categories`): the portal
+    filters, nothing is fetched to be discarded, and the same budget reaches years instead of
+    weeks.
     """
     authz.check(user, authz.DRAFT)
     _check_window(from_date, to_date)
+    if search_type not in ("fullText", "exact"):
+        raise ApiError(400, "BAD_SEARCH_TYPE", "search_type must be fullText or exact")
     try:
         return ok(await run_in_threadpool(
             ingest.refresh_awards, q, max_results, "IN",
-            from_date or None, to_date or None))
+            from_date or None, to_date or None, search_type))
     except RuntimeError as exc:
         raise ApiError(503, "CONNECTOR_UNAVAILABLE", str(exc)) from exc
+
+
+# ---------- the categories this seller is registered under (migration 0036) -----------------
+
+@router.get("/api/categories")
+async def list_categories(user: CurrentUser) -> dict:
+    """The workspace's registered GeM categories, verified and not.
+
+    This is the input side of both UML ask 1 and ask 5: a seller's registration list is the
+    highest-precision statement of what they sell that exists, and GeM's own category mapping
+    beats any keyword stem we could infer (docs/discovery/source-gem.md finding 7).
+    """
+    def work() -> dict:
+        rows = db.list_workspace_categories(user.workspace_id)
+        return {
+            "categories": rows,
+            "verified": sum(1 for r in rows if r.get("verified_at")),
+            "unverified": sum(1 for r in rows if not r.get("verified_at")),
+        }
+
+    return ok(await run_in_threadpool(work))
+
+
+@router.post("/api/categories")
+async def add_category(
+    user: CurrentUser,
+    gem_name: str = Query(min_length=2, max_length=200),
+    label: str = Query(default="", max_length=200),
+    standard_code: str = Query(default="", max_length=40, description="e.g. IS 2266"),
+) -> dict:
+    """Register one category, checking the name against the portal as it is stored.
+
+    The check is the point. `searchType=exact` is whole-field and case-sensitive, so a name
+    retyped by a human usually matches nothing at all, and an unchecked row would sit there
+    returning an empty price history forever with nothing to distinguish it from a category
+    that genuinely has no awards. Verified at write time, the answer arrives while the person
+    who knows the right spelling is still looking at the screen.
+
+    A name the portal does not recognise is STORED, unverified. It is a fact about the name,
+    not a rejection of the customer's category — they are registered under it either way, and
+    a row that says "GeM does not match this" is more useful than a refusal.
+    """
+    authz.check(user, authz.DRAFT)
+    try:
+        probe = await run_in_threadpool(ingest.verify_category, gem_name)
+    except RuntimeError as exc:
+        raise ApiError(503, "CONNECTOR_UNAVAILABLE", str(exc)) from exc
+
+    def work() -> dict:
+        row = db.upsert_workspace_category(user.workspace_id, gem_name, {
+            "label": label or None,
+            "standard_code": standard_code or None,
+            "verified_at": probe["verified_at"],
+            "portal_award_total": probe["portal_award_total"],
+        })
+        return {"category": row, "recognised": probe["recognised"],
+                "portal_award_total": probe["portal_award_total"],
+                "note": None if probe["recognised"] else
+                        "GeM does not match this name exactly. It is stored, but price history "
+                        "cannot be swept for it until the portal's own spelling is used."}
+
+    return ok(await run_in_threadpool(work))
 
 
 @router.post("/api/opportunities/watch/check")

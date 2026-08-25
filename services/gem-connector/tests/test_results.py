@@ -16,6 +16,7 @@ import pytest
 
 from app.results import (
     RESULT_STATUSES,
+    SEARCH_TYPES,
     build_results_payload,
     parse_result_page,
     result_path,
@@ -51,6 +52,42 @@ def test_an_unknown_status_is_refused_rather_than_sent():
     """
     with pytest.raises(ValueError, match="unknown result status"):
         build_results_payload(1, "wire rope", "bid_won")
+
+
+# --- how the portal reads the query --------------------------------------------------------
+
+def test_full_text_is_the_default_so_existing_callers_do_not_move():
+    import json
+
+    p = json.loads(build_results_payload(1, "wire rope")["payload"])
+    assert p["param"]["searchType"] == "fullText"
+
+
+@pytest.mark.parametrize("search_type", SEARCH_TYPES)
+def test_every_recognised_search_type_reaches_the_payload(search_type):
+    import json
+
+    p = json.loads(build_results_payload(1, "Wire Rope", search_type=search_type)["payload"])
+    assert p["param"]["searchType"] == search_type
+
+
+def test_an_unknown_search_type_is_refused_rather_than_sent():
+    """The same trap as an unknown status, on the other half of the payload.
+
+    Measured on the live endpoint 2026-08-25: `category`, `product`, `phrase`, `boq` and
+    `bidNumber` each returned 5,775,992 — the identical unfiltered corpus the control query
+    returns — while `fullText` returned 73,186 and `exact` returned 6. An ignored searchType
+    does not fail; it answers, and the answer is every award GeM has ever published labelled
+    as this category's price history.
+    """
+    with pytest.raises(ValueError, match="unknown search type"):
+        build_results_payload(1, "Wire Rope", search_type="category")
+
+
+def test_the_search_type_guard_does_not_swallow_a_bad_status():
+    """Both guards, one call: whichever is wrong must name itself."""
+    with pytest.raises(ValueError, match="unknown result status"):
+        build_results_payload(1, "Wire Rope", "bid_won", search_type="exact")
 
 
 # --- which page holds this bid's result ----------------------------------------------------

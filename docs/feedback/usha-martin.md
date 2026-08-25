@@ -94,7 +94,7 @@ Measured by reading the code on 2026-08-07, not estimated.
 | 2 | Spec vs manufacturing capability | **Built** | `deterministic/spec_match.py` (interval intersection → `match / deviation / equivalent / unknown`), `deterministic/spec_params.py` (registry + units + `allows_equivalent`), `pipeline/spec_extractor.py` (schema carries no verdict field), `spec_service.py`, migration 0029. UI: `/capability` records the envelope, `/tenders/:id/schedule` shows the fit. |
 | 3 | Catalogue availability per tender schedule | **Built** | `deterministic/boq.py` finds the header row deterministically — no header found → zero line items and a manual-entry prompt. `tender_line_items` carries schedule ref, item ref, quantity, uom and a row-level anchor; technical criteria become line items too, because most GeM rope bids state the spec in NIT prose. Per line: `PUBLISHED` / `CAN BE CREATED` / `DEVIATION — CLARIFICATION NEEDED` / `NOT ASSESSED`. |
 | 4 | Post-technical-evaluation document requests | **Built, both halves — 2026-08-24.** Stage from the public portal; the request itself from the customer's own forwarded mail | `deterministic/stage_watch.py` (pure: first sighting is never an alert, only forward moves alert), connector `GET /bid-status`, engine `POST /api/opportunities/watch/check`, migration 0034, watch star in `OpportunityFeed`. Live 2026-08-24: `GEM/2026/B/7876746` → `bid_awarded` + deep link, no login. **What it is not:** it is the alarm clock, not the letter — the clarification lives behind the seller login (G-1/G-8), and every rendered message says so. **Also:** the check is a button, not a poller. |
-| 5 | Five-year historical prices per scheduled item | **Award history built; the five-year window is not** | `deterministic/price_history.py` (median not mean; unit rate emitted only for single-category records), connector `GET /bid-results`, engine `GET /api/price-history` + `POST /api/price-history/refresh`, migration 0033, `/prices` screen. Live 2026-08-24: real ladders with seller, rank, MSE flag and L1/L2 prices. **Date window added 2026-08-25**, closing the first gap: `from_date`/`to_date` (ISO) on `/bid-results`, `/api/price-history` and `/refresh`. GeM's `byEndDate` was in our payload all along, sent blank. Measured live — unfiltered returns 2026-08-24, `2023-01-01..2023-12-31` returns 2023-12-30, and a future window makes GeM's OWN `portal_total_matching` read 0. This mattered more than "a filter was missing": the sweep is newest-first and capped, so without a window the older years were **unreachable**, not merely unfiltered. **Gap still open:** GeM's full-text search matches any word — `q=wire rope` returns bundles containing *wire* and zero rope awards. |
+| 5 | Five-year historical prices per scheduled item | **Award history built; the five-year window is not** | `deterministic/price_history.py` (median not mean; unit rate emitted only for single-category records), connector `GET /bid-results`, engine `GET /api/price-history` + `POST /api/price-history/refresh`, migration 0033, `/prices` screen. Live 2026-08-24: real ladders with seller, rank, MSE flag and L1/L2 prices. **Date window added 2026-08-25**, closing the first gap: `from_date`/`to_date` (ISO) on `/bid-results`, `/api/price-history` and `/refresh`. GeM's `byEndDate` was in our payload all along, sent blank. Measured live — unfiltered returns 2026-08-24, `2023-01-01..2023-12-31` returns 2023-12-30, and a future window makes GeM's OWN `portal_total_matching` read 0. This mattered more than "a filter was missing": the sweep is newest-first and capped, so without a window the older years were **unreachable**, not merely unfiltered. ~~**Gap still open:** GeM's full-text search matches any word.~~ **Closed 2026-08-25, at the source rather than after it.** `param.searchType` takes a second value: `exact` matches the WHOLE category field instead of OR-ing the words. Same window, same two-portal-requests-per-row cost, measured live: `fullText q='wire rope'` → 10 fetched, **0** kept; `exact q='Steel Wire Rope'` → 6 fetched, **6** kept, every one carrying a ladder, spanning 2023–2026. This was never only a precision problem: the sweep is newest-first and capped, so under full text the budget was spent on rows that were then discarded and the older years were **unreachable** — the same failure the missing date window had, one level up. Shipped as `search_type` on the connector's `/bid-results`, `ingest.refresh_awards` and `POST /api/price-history/refresh`, plus **migration 0036 `workspace_categories`** to hold the names, because `exact` is case-sensitive and whole-field and only works with a string GeM itself wrote. |
 
 **What is live today and worth telling UML in the reply.** Depth-1 eligibility is parsed
 straight off the GeM bid document, deterministically, with **zero model calls and zero OCR** —
@@ -170,7 +170,13 @@ competitor bid.
 
 Two things must not happen here. Do not buy a commercial GeM data feed to answer this before
 UML has committed (assumption 7) and before their own history has been tried — it is ~$200/mo
-for something option one may cover for free. And do not take their GeM login "just to export
+for something option one may cover for free. **Priced 2026-08-25: the real figure is ~$1,000/yr
+(BidAssist), not ~$200/mo.** The conclusion holds and the argument weakens — at $83/mo this is
+not a spend to refuse on cost, it is one to refuse on redundancy, because about 70% of the
+columns it sells are already read by the connector and its award data carries ONE awardee where
+we read the whole L1..Ln ladder. What it would genuinely add is non-GeM portal coverage, which
+is why §Sequencing step 2b asks UML where else they bid before anyone signs anything. And do
+not take their GeM login "just to export
 it": G-1 forbids us holding a portal credential, and a human at UML exporting a spreadsheet is
 the same data with none of the exposure.
 
@@ -263,6 +269,52 @@ Can be created / Deviation — clarification needed**. That is asks 2 and 3 in U
 > recorded reads as `NOT ASSESSED`, never a deviation**, which is why `unknown` renders neutral
 > rather than borrowing the amber that means needs-review. The screen gates nothing.
 
+## Their ten categories are the asset, and four of them are worth what nine are not
+
+Added 2026-08-25, after `searchType=exact` turned a category name from prose into a key.
+
+UML listed their ten registered categories in their own words. Those words were probed against
+the portal one spelling at a time, and the result is the reason the name has to come from GeM
+rather than from the customer:
+
+| UML's category | GeM's own string | awarded |
+|---|---|---:|
+| Wire Rope per IS 4521 / API 9A | `Steel Wire Rope` | 10 |
+| MIG Welding Wire | `MIG WELDING WIRE` | 43 |
+| Wire Rope Slings, IS 2762 | `Wire Rope Sling` | 2 |
+| Round Strand Galvanised, IS 2581 | `Galvanized Steel Wire Rope` | 1 |
+| Stranded Steel Wire (Black Wire Rope) | — | — |
+| Mines winding / man-riding, IS 1855 | — | — |
+| Haulage, IS 1856 | — | — |
+| Lifts and hoists, IS 2365 | — | — |
+| General engineering, IS 2266 | — | — |
+
+**Five of nine matched nothing**, and that is the finding rather than a disappointing yield.
+`exact` is whole-field and case-sensitive, so those five are not absent from GeM — they are
+filed under a string nobody here has seen. `Wire Rope` returns 6 and `wire rope` returns 1;
+the difference between a category with history and a category that looks dead is one capital
+letter. This is why migration 0036 verifies a name when it is stored and why `verified_at`
+is nullable rather than a flag defaulted to true.
+
+Two things follow, and neither is an engineering task:
+
+1. **Ask UML for their category names as GeM writes them** — a copy-paste from their seller
+   dashboard, not a retyped list. This is one line added to §Sequencing step 2's email, which
+   is already unsent.
+2. **The names can also be READ rather than asked for.** A full-text sweep for `rope` returns
+   GeM's own category strings on every record, and harvesting the single-item ones surfaced
+   `Polypropylene Ropes as per IS 5175` (137 awarded), `Manila Ropes (V5) ISI marked to IS
+   1084`, `Sisal Ropes - IS 1321`, `Winding Ropes 20 mm Dia`, `18mm STEEL WIRE ROPE` and
+   `Un-Galvanized Round Strand Steel Wire RopeØ 24 mm Make: Usha Martin / Bharat Wire Ropes`
+   — the last of which **names UML in the buyer's own specification.** A suggest endpoint over
+   that harvest is the obvious next slice and is deliberately not built yet: it should be
+   shaped by what UML sends back in (1), not by a guess about what they will recognise.
+
+**A category is worth more than a price history.** The same stored name filters the feed at
+the source, which is ask 1's ranking problem answered with GeM's category mapping instead of
+our keyword stems — the thing finding 7 says beats us. Nothing yet reads `workspace_categories`
+on the feed side; that is a small change and a deliberate one to make separately.
+
 ## Sequencing
 
 1. ~~Spike `/view_contracts`.~~ **Done 2026-08-07. Refused (G-8, CAPTCHA)** —
@@ -270,6 +322,31 @@ Can be created / Deviation — clarification needed**. That is asks 2 and 3 in U
 2. **Ask UML for their own contract history**, and for three forwarded GeM alert emails while
    we are asking. The first answers ask 5 by the only free route and un-suppresses Module D;
    the second resolves assumption 3. One email, two unblocked assumptions.
+
+   **Two more questions belong in the same email (added 2026-08-25), and one of them decides
+   a purchase.**
+
+   a. **Their ten category names exactly as GeM writes them** — a copy-paste from the seller
+      dashboard, not a retyped list. `searchType=exact` is whole-field and case-sensitive, so
+      five of their nine rope categories currently match nothing on the portal and the
+      difference between a live category and a dead one is a capital letter (§Their ten
+      categories). Costs them a screenshot; it is the difference between four categories of
+      price history and ten.
+
+   b. **Which portals do they actually bid on besides GeM?** CPPP, state PWDs, railways, PSU
+      portals — and roughly what share. This is not curiosity: a commercial feed
+      (BidAssist, ~$1,000/yr) covers 2,000+ portals and reproduces about 70% of what the GeM
+      connector already reads. **If UML is GeM-only it buys almost nothing we do not have.**
+      If they bid across state portals it is far cheaper than building a connector each, and
+      the buy/build answer flips. Nobody has asked, so the assumption underneath every
+      "build the adapter" estimate is unexamined.
+
+   > **Assumption 8 (new, and it gates b).** *UML's tender pipeline is substantially GeM.* No
+   > confidence attached, because there is no evidence either way — their five asks all name
+   > GeM, which is suggestive and is not the same as measured. **Also supersedes the "~$200/mo"
+   > figure** quoted in §What the portal will and will not give us: the real quote is ~$83/mo,
+   > which does not change the "do not buy before UML commits" conclusion but does change how
+   > firmly it should be argued.
 3. ~~**Send the GeM SPV permission letter.**~~ **Closed 2026-08-25 — legal reviewed and
    cleared it.** It was never a blocker on any step here; a market-wide price feed was the only
    thing it could have unlocked, and steps 4 and 5 do not wait on it.
@@ -325,5 +402,8 @@ five asks and need no new module. Step 7 is a commercial decision, not an engine
 | 5 | UML's GeM catalogue can be exported and pasted or CSV'd | Medium — if not, v1 is envelope-only and every answer degrades from *Published* to *Can be created*, which is a materially weaker demo |
 | 6 | Wire-rope parameters generalise across all ten of UML's categories | **Low.** MIG welding wire shares almost nothing with rope. Verify against two real tenders from different categories before sizing Module H |
 | 7 | UML is a design partner, not a demo that gave feedback | **Unresolved, and it gates steps 5–6.** Steps 1–4 are worth doing regardless; Module H is not |
+| 8 | UML's tender pipeline is substantially GeM rather than spread across CPPP, state and PSU portals | **Untested — no evidence either way.** All five asks name GeM, which is suggestive and is not measurement. It decides whether a commercial multi-portal feed (~$1,000/yr) is redundant with the connector or cheaper than building one adapter per portal. Being asked in step 2b |
+| 9 | The category names UML sent are the strings GeM matches on | **Resolved NEGATIVE, 2026-08-25.** Five of nine matched no spelling tried; `exact` is whole-field and case-sensitive. Their own dashboard export is the fix, and it is asked for in step 2a |
 
-Assumption 7 is the one to resolve first, and it is a conversation, not a spike.
+Assumption 7 is the one to resolve first, and it is a conversation, not a spike. Assumption 8
+is the same conversation and costs one more question in the same email.

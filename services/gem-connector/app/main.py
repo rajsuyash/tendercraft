@@ -35,6 +35,7 @@ from .listing import build_payload, extract_csrf_token, normalize, normalize_ref
 from .results import (
     BASE_URL,
     RESULT_STATUSES,
+    SEARCH_TYPES,
     build_results_payload,
     parse_result_page,
     portal_date,
@@ -146,6 +147,7 @@ def sweep_results(
     max_results: int = 40,
     from_date: str | None = None,
     to_date: str | None = None,
+    search_type: str = "fullText",
 ) -> dict[str, Any]:
     """Published bid results, with the awarded price ladder for each (UML ask 5).
 
@@ -156,6 +158,14 @@ def sweep_results(
     A result page that yields no ladder is KEPT with `ladder: []` rather than dropped. The bid
     is genuinely at an earlier stage, and silently omitting it would make a price history look
     denser than the evidence supports.
+
+    `search_type='exact'` matches GeM's whole category field instead of OR-ing the query's
+    words, which is what makes this sweep affordable for a known category: under `fullText`
+    the caller pays two portal requests for every row and then discards ~97% of them
+    downstream, and because the sweep is newest-first and capped, the discarded rows are the
+    budget — the older awards were never reached. Under `exact` the rows that arrive are
+    already the right ones. It only works with a category name GeM itself wrote; see
+    `SEARCH_TYPES`.
     """
     fetcher.reset_session()
     landing = fetcher.get("/all-bids")
@@ -168,8 +178,8 @@ def sweep_results(
     total_found = 0
     out_of_window = 0
     for page in range(1, max_pages + 1):
-        body = build_results_payload(page, search, status, from_date, to_date) | {
-            "csrf_bd_gem_nk": token}
+        body = build_results_payload(page, search, status, from_date, to_date,
+                                     search_type=search_type) | {"csrf_bd_gem_nk": token}
         total_found, docs = parse_page(fetcher.post_form("/all-bids-data", body).text)
         if not docs:
             break
@@ -206,6 +216,7 @@ def sweep_results(
     return {
         "source_id": "gem_bidplus",
         "search": search,
+        "search_type": search_type,
         "status": status,
         "portal_total_matching": total_found,
         "count": len(out),
@@ -356,16 +367,32 @@ def create_app() -> FastAPI:
         max_pages: int = Query(default=5, ge=1, le=30),
         from_date: str = Query(default="", description="ISO YYYY-MM-DD, inclusive"),
         to_date: str = Query(default="", description="ISO YYYY-MM-DD, inclusive"),
+        search_type: str = Query(
+            default="fullText",
+            description="fullText (ORs the words) | exact (whole category field, case-sensitive)",
+        ),
     ) -> dict[str, Any]:
         """Published results with the awarded price ladder (UML ask 5).
 
         Costs two requests per result, so it is capped an order of magnitude tighter than the
         listing sweep. Sync for the same reason as `/opportunities`: the fetcher sleeps to
         honour the rate cap, and sleeping in an async handler stalls the loop.
+
+        `search_type=exact` is the affordable path for a category whose GeM name is known: it
+        filters at the portal instead of fetching noise and discarding it downstream. It is
+        not the default, because it silently returns nothing for a name GeM did not write, and
+        a caller that has only a human's phrasing is better served by `fullText` plus the
+        engine's `category_matches`.
         """
         if status not in RESULT_STATUSES:
             raise ApiError(400, "BAD_STATUS",
                            f"status must be one of {', '.join(RESULT_STATUSES)}")
+        if search_type not in SEARCH_TYPES:
+            # Refused here rather than sent: GeM ignores an unknown searchType and answers with
+            # the entire corpus, so passing it through would report 5.7 million awards as this
+            # category's history — the same trap `status` is guarded against.
+            raise ApiError(400, "BAD_SEARCH_TYPE",
+                           f"search_type must be one of {', '.join(SEARCH_TYPES)}")
         try:
             # Validated here, at the boundary, so a malformed date is a 400 the caller can
             # read — not a silently-blank filter that returns five years of the wrong window.
@@ -380,7 +407,8 @@ def create_app() -> FastAPI:
         try:
             return ok(sweep_results(fetcher, search=q, status=status,
                                     max_pages=max_pages, max_results=max_results,
-                                    from_date=from_date or None, to_date=to_date or None))
+                                    from_date=from_date or None, to_date=to_date or None,
+                                    search_type=search_type))
         finally:
             fetcher.close()
 

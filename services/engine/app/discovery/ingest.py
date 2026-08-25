@@ -366,9 +366,34 @@ AWARD_PAGE_CAP = int(os.environ.get("GEM_AWARD_PAGES", "5"))
 AWARD_RESULT_CAP = int(os.environ.get("GEM_AWARD_RESULTS", "40"))
 
 
+def _is_on_topic(query: str, category: str | None, search_type: str) -> bool:
+    """Is this returned award actually about what was asked for?
+
+    Two modes, because the question is genuinely different in each.
+
+    Under `fullText` the portal ORs the query's words, so the phrase rule in
+    `deterministic/price_history.py` is what decides, and it discards most of what arrives.
+
+    Under `exact` the portal matched the WHOLE category field, so the honest check is that the
+    field came back equal — and the phrase rule would be actively WRONG here: a registered
+    category containing a comma (GeM writes bundles that way, and a seller can be registered
+    under one) is normalised into an uncrossable barrier by that rule, so a row would be
+    discarded for failing to match its own name. Equality on collapsed whitespace, case-folded
+    because the field is what GeM sent back and only the outbound query is case-sensitive.
+
+    Kept as a check under BOTH modes rather than trusted to the portal. `exact` should make
+    this a no-op; if it ever stops being one, the corpus is protected and the `off_topic`
+    count is where it shows up.
+    """
+    if search_type != "exact":
+        return category_matches(query, category)
+    return " ".join((category or "").lower().split()) == " ".join(query.lower().split())
+
+
 def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
                    market: str = "IN", from_date: str | None = None,
-                   to_date: str | None = None) -> dict[str, Any]:
+                   to_date: str | None = None,
+                   search_type: str = "fullText") -> dict[str, Any]:
     """Pull published results for a category into the shared award corpus.
 
     Returns what the portal says it HAS alongside what we stored, because the gap between them
@@ -378,12 +403,25 @@ def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
     A window (UML ask 5) is not a nicety here. The sweep is newest-first and capped, so without
     one an active category can never be read further back than its most recent `max_results`
     awards — the five-year history is not merely unfiltered, it is unreachable.
+
+    `search_type='exact'` is for a REGISTERED category — a name GeM itself wrote, stored in
+    `workspace_categories` (migration 0036). Measured on the live portal 2026-08-25, on the
+    same window and the same two-requests-per-row cost:
+
+        fullText 'wire rope'      → 10 fetched,  0 kept
+        exact 'Steel Wire Rope'   →  6 fetched,  6 kept, every one with a price ladder
+
+    `off_topic` should therefore be 0 under `exact`, and a non-zero count there is worth
+    noticing rather than shrugging at: it means the portal returned a row whose category is not
+    the one asked for, which would be new behaviour. The local relevance check stays in place
+    under both modes for exactly that reason — it is the guarantee, not the optimisation.
     """
     sources = for_market(market)
     base = next((s.connector_url for s in sources if s.connector_url), "")
     params = {
         "q": query, "status": "bid_awarded",
         "max_results": max_results, "max_pages": AWARD_PAGE_CAP,
+        "search_type": search_type,
     }
     if from_date:
         params["from_date"] = from_date
@@ -400,7 +438,7 @@ def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
             # logged rather than stored under a generated id.
             log.warning("award result with no bid number — skipped")
             continue
-        if not category_matches(query, record.get("category")):
+        if not _is_on_topic(query, record.get("category"), search_type):
             # GeM's search ORs the words, so most of what comes back for "wire rope" is not
             # wire rope. Storing it would pollute a corpus every other search reads, and the
             # summary cards would average steel rope against HDMI cable.
@@ -438,6 +476,38 @@ def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
         # What the portal holds, versus what one call read. Naming the gap is what stops a
         # 40-row sample being mistaken for the market.
         "portal_total_matching": data.get("portal_total_matching", 0),
+        "search_type": search_type,
+    }
+
+
+def verify_category(gem_name: str, market: str = "IN") -> dict[str, Any]:
+    """Does GeM recognise this exact category name, and how many awards sit behind it?
+
+    One cheap portal round trip — `max_results=1`, so at most two requests — asking the only
+    question that matters before a category is swept: is this string one GeM itself wrote.
+
+    `searchType=exact` is whole-field and case-sensitive. Measured 2026-08-25: `Wire Rope`
+    → 6 awards, `wire rope` → 1, `wire` → 0, `rope` → 0. So a name a human retyped from a
+    registration certificate usually matches nothing, and the failure is silent — a category
+    that looks stored and returns an empty history forever. This turns that into an answer at
+    the moment the category is added, which is the only moment anyone is in a position to fix
+    the spelling.
+
+    `recognised: false` is a fact about the name, never an error: the caller stores the row
+    unverified and shows it as such.
+    """
+    sources = for_market(market)
+    base = next((s.connector_url for s in sources if s.connector_url), "")
+    data = _connector("/bid-results", {
+        "q": gem_name, "status": "bid_awarded", "search_type": "exact",
+        "max_results": 1, "max_pages": 1,
+    }, base=base)
+    total = data.get("portal_total_matching", 0) or 0
+    return {
+        "gem_name": gem_name,
+        "recognised": total > 0,
+        "portal_award_total": total,
+        "verified_at": datetime.now(UTC).isoformat() if total > 0 else None,
     }
 
 
