@@ -70,6 +70,13 @@ const FR: Record<string, string> = {
   "In scope": "Retenus",
   Excluded: "Écartés",
   "Only my keywords": "Uniquement mes mots-clés",
+  // "clôturé" is already this dictionary's word for a passed deadline (see `closed` below),
+  // so these follow it rather than introducing a second term for the same state.
+  "Hide closed": "Masquer les clôturées",
+  "Show closed tenders": "Afficher les consultations clôturées",
+  "Every tender in this list has closed": "Toutes les consultations de cette liste sont clôturées",
+  "All {n} matched tenders passed their deadline. Widen your capability keywords, or show them anyway.":
+    "Les {n} consultations correspondantes ont dépassé leur date limite. Élargissez vos mots-clés, ou affichez-les malgré tout.",
   Sort: "Trier",
   "Best fit": "Pertinence",
   "Closing soonest": "Clôture la plus proche",

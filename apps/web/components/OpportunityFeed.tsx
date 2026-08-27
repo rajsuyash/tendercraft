@@ -165,6 +165,17 @@ function daysUntil(iso: string | null, now: number): number | null {
   return Number.isNaN(ms) ? null : Math.ceil(ms / 86_400_000);
 }
 
+/** Has this tender's deadline passed? Exported for its own test — the null case is the whole
+ *  point and is easy to get wrong in a filter expression.
+ *
+ *  A tender with NO stated closing date is NOT closed: it is unknown. Treating unknown as
+ *  closed would drop a live opportunity on the strength of a field the portal never filled in,
+ *  which is the silent-miss failure (ET-7) arriving through a convenience filter. */
+export function hasClosed(closingAt: string | null, now: number): boolean {
+  const days = daysUntil(closingAt, now);
+  return days !== null && days < 0;
+}
+
 /** Deterministic across server and client: an explicit locale and timezone, never host defaults.
  *
  *  Both follow the MARKET, not the reader's language. A closing date is an instant in the
@@ -396,6 +407,28 @@ export function OpportunityFeed({
     };
     return [...rows].sort(by[sort]);
   }, [data.items, sort]);
+
+  // A tender whose deadline has passed cannot be bid on. That is a FACT about the row, not a
+  // judgement about the bidder, which is why it is allowed to leave the list at all — but it
+  // still leaves visibly: the toggle is on screen, the count is stated beside it, and one click
+  // brings them back. G-9 forbids an exclusion nobody authored, not an exclusion nobody can see
+  // or undo, and a feed that silently dropped rows would be the same black box the Excluded
+  // count exists to prevent.
+  //
+  // Default ON because the alternative was the state this shipped in: three in-scope tenders,
+  // all closed weeks ago, on a feed whose whole promise is "what should we bid on".
+  const [hideClosed, setHideClosed] = useState(true);
+  const closedCount = useMemo(
+    () => items.filter((m) => hasClosed(m.opportunities?.closing_at ?? null, now)).length,
+    [items, now],
+  );
+  const visibleItems = useMemo(
+    () =>
+      hideClosed
+        ? items.filter((m) => !hasClosed(m.opportunities?.closing_at ?? null, now))
+        : items,
+    [items, hideClosed, now],
+  );
 
   // Workspace-wide, from the server. Counting the rows on THIS page made the figure read 21 on
   // the In-scope tab and 0 on the Excluded tab — the same object described by two disagreeing
@@ -670,6 +703,24 @@ export function OpportunityFeed({
           {t("Only my keywords")}
         </label>
 
+        {/* Rendered only when there is something to hide, so the control never implies a
+            filter is doing work it is not. The count is inside the label rather than beside
+            it: "Hide closed" alone is a setting, "Hide closed (3)" is an explanation of why
+            the list is shorter than the bucket tab above says. */}
+        {closedCount > 0 && (
+          <label className="ml-3 flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              data-hide-closed
+              data-closed-count={closedCount}
+              checked={hideClosed}
+              onChange={(e) => setHideClosed(e.target.checked)}
+              className="h-4 w-4 rounded border-hairline accent-[color:var(--color-primary)]"
+            />
+            {t("Hide closed")} <span className="tabular-nums opacity-75">{closedCount}</span>
+          </label>
+        )}
+
         {items.length > 0 && (
           <label className="ml-auto flex items-center gap-2 text-sm text-muted">
             {t("Sort")}
@@ -700,7 +751,33 @@ export function OpportunityFeed({
         </p>
       )}
 
-      {items.length === 0 ? (
+      {/* Checked BEFORE the empty states below, because its cause is the filter rather than
+          the data. Reporting it as "no opportunities yet" would be a statement about the
+          market when the truth is a checkbox this user can untick — the same class of lie as
+          telling a workspace whose rules hid everything to go and sweep again. */}
+      {visibleItems.length === 0 && items.length > 0 ? (
+        <div
+          data-empty-state
+          data-all-closed
+          className="mt-6 rounded-card border border-hairline bg-surface p-card"
+        >
+          <p className="font-medium text-ink">
+            {t("Every tender in this list has closed")}
+          </p>
+          <p className="mt-2 max-w-prose text-sm text-muted">
+            {t(
+              "All {n} matched tenders passed their deadline. Widen your capability keywords, or show them anyway.",
+            ).replace("{n}", String(items.length))}
+          </p>
+          <button
+            type="button"
+            onClick={() => setHideClosed(false)}
+            className="mt-4 rounded-control border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-alt"
+          >
+            {t("Show closed tenders")}
+          </button>
+        </div>
+      ) : items.length === 0 ? (
         <div
           data-empty-state
           className="mt-6 rounded-card border border-hairline bg-surface p-card"
@@ -830,7 +907,7 @@ export function OpportunityFeed({
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline">
-              {items.map((server) => {
+              {visibleItems.map((server) => {
                 // The server row plus whatever this session has since routed.
                 const match = { ...server, ...routed[server.opportunity_id] } as Match;
                 const opp = match.opportunities!;
