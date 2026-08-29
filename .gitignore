@@ -31,3 +31,14 @@ apps/*/.env
 # committed even to a private repo (docs/discovery/source-gem.md §8).
 /*.png
 /gem-*.json
+
+# Vendor credential handouts. API keys arrive as a PDF or a spreadsheet attached to an email,
+# and the file lands in whatever directory the browser was pointed at — here, that is the repo
+# root. `.env` being ignored does not help when the same secret is also sitting in a document
+# beside it, and `git add -A` does not know the difference. Scoped to the root because the
+# only way one of these gets here is a download, never a build.
+/*.pdf
+/*.PDF
+/*API*Access*
+/*credential*
+/*Credential*
