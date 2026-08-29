@@ -77,6 +77,36 @@ gcloud run deploy $WEB --image="$IMG" --project=$P --region=$R \
 Confirm the service names before deploying — `gcloud run services list --project=$P` is the
 only authority, and a typo creates a new service rather than failing.
 
+### bidassist-connector — built, not deployed
+
+`services/bidassist-connector` is the licensed multi-portal Indian feed. **It is deliberately
+not running**, and it must not be deployed before a human has ruled on the two questions in
+`docs/discovery/source-bidassist.md` — whether G-8's ban on authenticated acquisition reaches a
+paid vendor's own API key, and what the partner agreement permits us to show UML.
+
+Its registry row carries a blank `terms_reviewed`, and `for_market()` refuses any source without
+one, so deploying it and setting `BIDASSIST_CONNECTOR_URL` still would not sweep. That is the
+intended order: the ruling comes first, then a date in the registry, then traffic.
+
+When it is enabled, three things are specific to this service. **The key is a Secret Manager
+secret supplied at RUNTIME, never a build arg** — a build arg is baked into an image layer and
+survives `docker history`. It is the only container in the system holding a source credential,
+so it stays `--no-allow-unauthenticated` and is reached only by the engine's service identity,
+like its siblings. And it takes **three** variables, not one: without `BIDASSIST_TENDER_FEED_ID`
+and `BIDASSIST_AWARD_FEED_ID` the endpoints refuse by name rather than sweeping zero rows,
+because an aggregator returning nothing is indistinguishable from a quiet market — the failure
+`GEM_CONNECTOR_URL` demonstrated for weeks.
+
+```bash
+# NOT YET AUTHORISED — see docs/discovery/source-bidassist.md before running this.
+# cd services/bidassist-connector
+# gcloud run deploy tendercraft-bidassist-connector --source . --project=$P --region=$R \
+#   --no-allow-unauthenticated --memory=1Gi --cpu=1 --timeout=900 --max-instances=2 \
+#   --update-env-vars="BIDASSIST_TENDER_FEED_ID=${BIDASSIST_TENDER_FEED_ID},BIDASSIST_AWARD_FEED_ID=${BIDASSIST_AWARD_FEED_ID}" \
+#   --set-secrets="BIDASSIST_API_KEY=tendercraft-bidassist-api-key:latest"
+# then, on the ENGINE: --update-env-vars="BIDASSIST_CONNECTOR_URL=<its url>"
+```
+
 ## Cost posture
 
 `min-instances` is **0** on both — they scale to zero, so idle cost is nothing. The

@@ -1,0 +1,33 @@
+[project]
+name = "tendercraft-bidassist-connector"
+version = "0.1.0"
+description = "BidAssist connector — licensed multi-portal Indian tender feed; acquisition only, no tenant data"
+requires-python = ">=3.12"
+dependencies = [
+    # Same pin as services/engine: fastapi 0.139/starlette 1.3 broke include_router
+    # (routes mount as path=None). See docs/known-pitfalls.md.
+    "fastapi>=0.115,<0.116",
+    "uvicorn[standard]>=0.32",
+    "httpx>=0.28",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]

@@ -42,6 +42,29 @@ REGISTRY: tuple[Source, ...] = (
         ),
     ),
     Source(
+        source_id="bidassist",
+        market="IN",
+        connector_url=os.environ.get("BIDASSIST_CONNECTOR_URL", ""),
+        # Not T1 (open data) and not T2 (crawled). A licensed feed is its own tier: the data
+        # arrives because a contract says it may, which is a stronger permission than either
+        # of the others and a different set of obligations.
+        tier="T1-licensed",
+        terms_reviewed="",
+        reviewer="PENDING — see docs/discovery/source-bidassist.md",
+        notes=(
+            "Licensed aggregator (Nexizo/BidAssist partner API, key issued to DONNA AI LABS). "
+            "Ten Indian portals observed in one 120-row sample, ireps.gov.in largest at 46% "
+            "and bidplus.gem.gov.in second at 43% — so roughly half of this feed duplicates "
+            "what gem_bidplus already sweeps, deliberately and visibly (records carry "
+            "source_fields.overlaps_source). TWO THINGS NEED A HUMAN BEFORE THIS IS ENABLED: "
+            "(1) G-8 forbids authenticated acquisition, and the argument that a paid vendor "
+            "key is categorically unlike a portal credential is a proposed divergence, not a "
+            "ruling; (2) the FEED_SOURCE_ID is a saved query held on the vendor's side — every "
+            "sampled row was about wire rope — so feed scope is an exclusion we neither "
+            "authored nor can inspect (G-9). Blank terms_reviewed means DO NOT ENABLE."
+        ),
+    ),
+    Source(
         source_id="ted",
         market="FR",
         connector_url=os.environ.get("TED_CONNECTOR_URL", ""),
@@ -60,5 +83,15 @@ REGISTRY: tuple[Source, ...] = (
 
 def for_market(market: str) -> tuple[Source, ...]:
     """Every enabled source for a market. Empty is a configuration error, not an empty feed —
-    a source that silently returns nothing is the ET-7 failure mode."""
-    return tuple(s for s in REGISTRY if s.market == market and s.connector_url)
+    a source that silently returns nothing is the ET-7 failure mode.
+
+    A source is enabled only when it has BOTH a connector URL and a terms-review date. The
+    docstring at the top of this file has always said a blank date means DO NOT ENABLE, and
+    until the first unreviewed row arrived nothing made that true — setting one environment
+    variable would have been enough to start crawling a source whose terms nobody had read.
+    The comment was the guardrail; now the code is.
+    """
+    return tuple(
+        s for s in REGISTRY
+        if s.market == market and s.connector_url and s.terms_reviewed.strip()
+    )

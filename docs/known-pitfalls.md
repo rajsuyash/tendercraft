@@ -299,3 +299,46 @@ Mumbai anyway); until then, count round trips like they cost money.
   file path with `importlib`, AND register it in `sys.modules` first, or `@dataclass` raises
   `AttributeError: 'NoneType' object has no attribute '__dict__'` while resolving its own
   module.
+
+## Buying a feed instead of crawling one (BidAssist, 2026-08-29)
+
+- **A secret does not arrive as a secret. It arrives as a PDF.** The partner key landed in the
+  repo root as `API Access Details for ….pdf`, untracked, one `git add -A` from being
+  committed. `.env` being gitignored protects nothing when the same value is also sitting in a
+  document beside it, and no secret scanner in this repo reads PDFs. `/​*.pdf` and
+  `/​*API*Access*` are now ignored at the root, where the only way one arrives is a download.
+- **HTTP 200 is not success.** BidAssist answers 200 with `{"data": null, "success": false,
+  "errorCode": "EIPS400"}` for an over-large page size, an unknown filter key and a bogus feed
+  id alike. `raise_for_status()` sees nothing, and a caller reading `body["data"]` gets `None`
+  — which pages as an empty feed, which reads as a quiet market. Check the body once, at the
+  fetch boundary, and raise there.
+- **The silently-ignored filter is not a GeM quirk, it is a property of search APIs.** Same
+  week, second vendor: `SEARCH`, `STATE` and an invented key were all refused, but `KEYWORD`
+  was **accepted** and returned a page identical to the unfiltered control. Sending it would
+  have made a narrow slice look like the whole feed. Allowlist the filter keys in code, pin
+  them with a test, and measure any new key against a control before trusting it.
+- **A signed URL in a hashed record makes change-detection fire forever.** Document links are
+  CloudFront-presigned, so `Signature` and `Expires` change on every fetch. Hashing the raw row
+  gives a new `raw_snapshot_ref` every sweep for a tender that did not change — a change signal
+  that always fires reports nothing. Strip volatile query params before hashing; emit the live
+  URL, and record its expiry so a dead link can be explained rather than 403-ing at a user.
+- **On an aggregated feed a reference number is only unique within its portal.** `tenderNoticeNo`
+  `77265283` is a railways number some state portal will also issue, and the corpus is unique on
+  `(source_id, portal_ref_no)` — so an unqualified ref merges two unrelated tenders into one row
+  and F-AC4 is zero-tolerance because a wrong merge deletes a tender with no error anywhere.
+  Qualify the ref with the issuing host. Accept the duplicate against your own crawler instead:
+  visible and annoying beats invisible and destructive.
+- **A vendor's estimated value must not land in the field a rule reads.** `isTenderValueEstimated`
+  marks inferred figures; put those in `source_fields` and leave `estimated_value` null, or a
+  value-band rule excludes a tender on a number nobody published. Same reasoning that leaves the
+  field null on TED.
+- **The scope of a bought feed is somebody else's setting, and it is an exclusion with no
+  author.** `FEED_SOURCE_ID` is a saved query on the vendor's side; all 120 sampled notices were
+  wire rope. G-9 forbids exactly this and cannot reach it, because it happens upstream. Report
+  the feed id with the sweep, record the observed scope in the registry, and re-verify whenever
+  the vendor changes it — a change on their side is invisible on ours.
+- **"A blank date means DO NOT ENABLE" in a docstring is not a control.** `registry.py` said it
+  from the start and `for_market()` filtered only on the connector URL, so one environment
+  variable was the whole distance between an unreviewed source and a crawling one. Found when
+  the first genuinely unreviewed row was added. If a comment states an invariant, either the
+  code enforces it or the comment is decoration.

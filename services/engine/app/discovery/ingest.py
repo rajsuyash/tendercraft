@@ -129,9 +129,19 @@ def refresh_corpus(
     pages = 0
     upserted = 0
     for source in sources:
-        params: dict[str, Any] = {"max_pages": max_pages, "q": query}
-        if source.source_id == "ted":
-            params["market"] = market
+        params: dict[str, Any] = {"max_pages": max_pages}
+        if source.source_id == "bidassist":
+            # No `q`. This source's scope is a saved query held on the VENDOR's side, and its
+            # own search body accepts exactly one filter key — probing found `KEYWORD` was
+            # accepted and then ignored, returning a page identical to the unfiltered control.
+            # Sending a term that looks honoured and is not would make the sweep report a
+            # narrow slice as if it were the whole feed, which is the GeM `bidStatusType` trap
+            # one level up. Widening coverage here happens by changing the feed, with Nexizo.
+            pass
+        else:
+            params["q"] = query
+            if source.source_id == "ted":
+                params["market"] = market
         data = _connector("/opportunities", params, base=source.connector_url)
         rows = [_to_row(r) for r in data.get("records", []) if r.get("portal_ref_no")]
         stored = db.upsert_opportunities(rows)

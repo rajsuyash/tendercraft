@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from app import db
 from app.deterministic.discovery import evaluate_eligibility
-from app.discovery.registry import REGISTRY
+from app.discovery.registry import REGISTRY, for_market
 
 
 class TestTheWatchedSetCanNeverBeEmpty:
@@ -66,6 +66,47 @@ def test_every_registered_market_is_offerable():
     never arrive — which reads to the user as a broken feed, not as a missing connector."""
     for source in REGISTRY:
         assert source.market, f"{source.source_id} has no market"
+
+
+class TestAnUnreviewedSourceCannotBeSwept:
+    """`registry.py` has always said a blank `terms_reviewed` means DO NOT ENABLE, and until
+    the first unreviewed row arrived that sentence was a comment rather than a control: one
+    environment variable was the whole distance between "written down" and "crawling".
+
+    It matters now because `bidassist` is registered, reachable, and deliberately unreviewed —
+    it is the first credentialed source in the system, and both the G-8 divergence and the
+    vendor-side feed scope are open questions for a human (docs/discovery/source-bidassist.md).
+    A source whose terms nobody has read must not start sweeping because a deploy set a URL.
+    """
+
+    def test_a_source_with_no_review_date_is_not_returned_even_with_a_url(self, monkeypatch):
+        from app.discovery import registry
+
+        unreviewed = registry.Source(
+            source_id="unreviewed", market="ZZ", connector_url="https://connector.example",
+            tier="T2", terms_reviewed="", reviewer="nobody",
+        )
+        monkeypatch.setattr(registry, "REGISTRY", (unreviewed,))
+        assert registry.for_market("ZZ") == ()
+
+    def test_the_same_source_becomes_available_once_reviewed(self, monkeypatch):
+        from app.discovery import registry
+
+        reviewed = registry.Source(
+            source_id="reviewed", market="ZZ", connector_url="https://connector.example",
+            tier="T2", terms_reviewed="2026-08-29", reviewer="a human",
+        )
+        monkeypatch.setattr(registry, "REGISTRY", (reviewed,))
+        assert [s.source_id for s in registry.for_market("ZZ")] == ["reviewed"]
+
+    def test_bidassist_ships_unreviewed_so_it_cannot_sweep_yet(self):
+        row = next(s for s in REGISTRY if s.source_id == "bidassist")
+        assert row.terms_reviewed == "", (
+            "bidassist carries a terms-review date — if that is intentional, the G-8 "
+            "divergence and the vendor-side feed scope must have been ratified by a human "
+            "first (docs/discovery/source-bidassist.md), and this test updated to say so"
+        )
+        assert "bidassist" not in [s.source_id for s in for_market("IN")]
 
 
 class TestTheFeedReadIsScopedTooNotJustTheRecompute:
