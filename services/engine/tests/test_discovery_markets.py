@@ -99,13 +99,42 @@ class TestAnUnreviewedSourceCannotBeSwept:
         monkeypatch.setattr(registry, "REGISTRY", (reviewed,))
         assert [s.source_id for s in registry.for_market("ZZ")] == ["reviewed"]
 
-    def test_bidassist_ships_unreviewed_so_it_cannot_sweep_yet(self):
-        row = next(s for s in REGISTRY if s.source_id == "bidassist")
-        assert row.terms_reviewed == "", (
-            "bidassist carries a terms-review date — if that is intentional, the G-8 "
-            "divergence and the vendor-side feed scope must have been ratified by a human "
-            "first (docs/discovery/source-bidassist.md), and this test updated to say so"
-        )
+    def test_every_registered_source_names_a_reviewer_not_a_placeholder(self):
+        """A date with no name behind it is a rubber stamp, and `PENDING` left in the reviewer
+        field while a date was added is how an unratified source quietly becomes a live one.
+
+        bidassist was ratified by the decision owner on 2026-08-29 — the G-8 reading that the
+        guardrail's subject is a *portal*, not a vendor we pay. The date and the name travel
+        together so the next person can find who decided and go read the argument.
+
+        Deliberately checks that the reviewer field does not *start* with PENDING rather than
+        that it never contains the word: `gem_bidplus` and `ted` both read "engineering
+        (agent-assisted probe, human sign-off pending)", which is an honest statement of who
+        reviewed and what is still outstanding. A field whose whole value is a placeholder is
+        the different thing — nobody reviewed it.
+        """
+        for source in REGISTRY:
+            if not source.terms_reviewed.strip():
+                continue
+            reviewer = source.reviewer.strip()
+            assert reviewer, f"{source.source_id} has a date but no reviewer"
+            assert not reviewer.upper().startswith("PENDING"), (
+                f"{source.source_id} is dated but its reviewer is still a placeholder — "
+                "either the review happened and the name belongs here, or the date does not"
+            )
+
+    def test_bidassist_is_enabled_only_where_a_connector_is_configured(self, monkeypatch):
+        """Ratified is not the same as running. The source still vanishes without its URL,
+        which is what keeps a local test run and CI from talking to a paid API."""
+        import os
+
+        from app.discovery import registry
+
+        monkeypatch.delenv("BIDASSIST_CONNECTOR_URL", raising=False)
+        assert os.environ.get("BIDASSIST_CONNECTOR_URL") is None
+        row = next(s for s in registry.REGISTRY if s.source_id == "bidassist")
+        assert row.terms_reviewed == "2026-08-29"
+        assert row.connector_url == ""
         assert "bidassist" not in [s.source_id for s in for_market("IN")]
 
 

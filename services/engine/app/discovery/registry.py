@@ -49,19 +49,26 @@ REGISTRY: tuple[Source, ...] = (
         # arrives because a contract says it may, which is a stronger permission than either
         # of the others and a different set of obligations.
         tier="T1-licensed",
-        terms_reviewed="",
-        reviewer="PENDING — see docs/discovery/source-bidassist.md",
+        terms_reviewed="2026-08-29",
+        reviewer="owner (G-8 divergence ratified; contract read pending for onward display)",
         notes=(
             "Licensed aggregator (Nexizo/BidAssist partner API, key issued to DONNA AI LABS). "
             "Ten Indian portals observed in one 120-row sample, ireps.gov.in largest at 46% "
             "and bidplus.gem.gov.in second at 43% — so roughly half of this feed duplicates "
             "what gem_bidplus already sweeps, deliberately and visibly (records carry "
-            "source_fields.overlaps_source). TWO THINGS NEED A HUMAN BEFORE THIS IS ENABLED: "
-            "(1) G-8 forbids authenticated acquisition, and the argument that a paid vendor "
-            "key is categorically unlike a portal credential is a proposed divergence, not a "
-            "ruling; (2) the FEED_SOURCE_ID is a saved query held on the vendor's side — every "
-            "sampled row was about wire rope — so feed scope is an exclusion we neither "
-            "authored nor can inspect (G-9). Blank terms_reviewed means DO NOT ENABLE."
+            "source_fields.overlaps_source). "
+            "G-8 RULED ON 2026-08-29 by the decision owner: the guardrail's subject is a "
+            "PORTAL — a system whose operator never agreed to be read — and a licensed "
+            "vendor's own API key is categorically unlike a portal credential. We still hold "
+            "no portal credential and no customer credential; G-1 is untouched. "
+            "STILL OPEN, and narrower than the ruling: nobody has read the partner agreement, "
+            "which governs showing this data to a THIRD PARTY (UML are not the licensee). "
+            "Reading it for our own workspace is squarely within any licence; onward display "
+            "is not yet cleared. "
+            "ALSO OPEN (G-9): the FEED_SOURCE_ID is a saved query held on the vendor's side — "
+            "every sampled row was about wire rope — so feed scope is an exclusion we neither "
+            "authored nor can inspect. Re-verify whenever Nexizo changes it. "
+            "See docs/discovery/source-bidassist.md."
         ),
     ),
     Source(

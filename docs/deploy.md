@@ -77,34 +77,46 @@ gcloud run deploy $WEB --image="$IMG" --project=$P --region=$R \
 Confirm the service names before deploying — `gcloud run services list --project=$P` is the
 only authority, and a typo creates a new service rather than failing.
 
-### bidassist-connector — built, not deployed
+### bidassist-connector — live since 2026-08-29
 
-`services/bidassist-connector` is the licensed multi-portal Indian feed. **It is deliberately
-not running**, and it must not be deployed before a human has ruled on the two questions in
-`docs/discovery/source-bidassist.md` — whether G-8's ban on authenticated acquisition reaches a
-paid vendor's own API key, and what the partner agreement permits us to show UML.
+`services/bidassist-connector` is the licensed multi-portal Indian feed: ten portals, railways
+ahead of GeM. Enabled after the decision owner ruled on G-8 (`docs/discovery/source-bidassist.md`
+— the guardrail's subject is a *portal*, not a vendor we pay). The registry row carries that
+date, and `for_market()` refuses any source without one, so the ruling genuinely gates traffic.
 
-Its registry row carries a blank `terms_reviewed`, and `for_market()` refuses any source without
-one, so deploying it and setting `BIDASSIST_CONNECTOR_URL` still would not sweep. That is the
-intended order: the ruling comes first, then a date in the registry, then traffic.
+Three things are specific to this service, and each is load-bearing.
 
-When it is enabled, three things are specific to this service. **The key is a Secret Manager
-secret supplied at RUNTIME, never a build arg** — a build arg is baked into an image layer and
-survives `docker history`. It is the only container in the system holding a source credential,
-so it stays `--no-allow-unauthenticated` and is reached only by the engine's service identity,
-like its siblings. And it takes **three** variables, not one: without `BIDASSIST_TENDER_FEED_ID`
-and `BIDASSIST_AWARD_FEED_ID` the endpoints refuse by name rather than sweeping zero rows,
-because an aggregator returning nothing is indistinguishable from a quiet market — the failure
-`GEM_CONNECTOR_URL` demonstrated for weeks.
+**It is the only container in the system holding a source credential.** The key is a Secret
+Manager secret injected at RUNTIME, never a build arg — a build arg is baked into an image layer
+and survives every `docker history` afterwards. It is `--no-allow-unauthenticated`, unlike
+`gem-connector-in` which permits `allUsers`: that connector reads public pages, this one spends a
+paid quota and returns licensed data, so an open invoker would let anyone bill us.
+
+**It takes three variables, not one.** Without `BIDASSIST_TENDER_FEED_ID` and
+`BIDASSIST_AWARD_FEED_ID` the endpoints refuse by name rather than sweeping zero rows — because
+an aggregator returning nothing is indistinguishable from a quiet market, which is exactly how
+`GEM_CONNECTOR_URL` stayed broken for weeks.
+
+**The runtime service account needs `roles/secretmanager.secretAccessor` on the secret itself.**
+Project-level access is not granted here; every other secret has a per-secret binding. The first
+deploy failed on this, and the error arrives at *Creating Revision* — after a full container
+build — so it reads like a deploy bug rather than a one-line IAM gap.
 
 ```bash
-# NOT YET AUTHORISED — see docs/discovery/source-bidassist.md before running this.
-# cd services/bidassist-connector
-# gcloud run deploy tendercraft-bidassist-connector --source . --project=$P --region=$R \
-#   --no-allow-unauthenticated --memory=1Gi --cpu=1 --timeout=900 --max-instances=2 \
-#   --update-env-vars="BIDASSIST_TENDER_FEED_ID=${BIDASSIST_TENDER_FEED_ID},BIDASSIST_AWARD_FEED_ID=${BIDASSIST_AWARD_FEED_ID}" \
-#   --set-secrets="BIDASSIST_API_KEY=tendercraft-bidassist-api-key:latest"
-# then, on the ENGINE: --update-env-vars="BIDASSIST_CONNECTOR_URL=<its url>"
+gcloud secrets add-iam-policy-binding tendercraft-bidassist-api-key --project=$P \
+  --member="serviceAccount:822379741897-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+cd services/bidassist-connector
+gcloud run deploy bidassist-connector --source . --project=$P --region=$R \
+  --no-allow-unauthenticated --memory=1Gi --cpu=1 --timeout=900 --max-instances=2 \
+  --service-account=822379741897-compute@developer.gserviceaccount.com \
+  --update-env-vars="BIDASSIST_TENDER_FEED_ID=${BIDASSIST_TENDER_FEED_ID},BIDASSIST_AWARD_FEED_ID=${BIDASSIST_AWARD_FEED_ID}" \
+  --set-secrets="BIDASSIST_API_KEY=tendercraft-bidassist-api-key:latest"
+
+# then, on the ENGINE (merge, never --set-env-vars):
+gcloud run services update $ENG --project=$P --region=$R \
+  --update-env-vars="BIDASSIST_CONNECTOR_URL=<its url>"
 ```
 
 ## Cost posture

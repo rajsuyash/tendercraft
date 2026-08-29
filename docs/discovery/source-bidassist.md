@@ -1,8 +1,10 @@
 # Source review — BidAssist partner API (Nexizo)
 
-**Status:** built, **NOT enabled** · **Reviewed:** 2026-08-29 (engineering, agent-assisted live
-probe) · **Human sign-off: REQUIRED and outstanding**
-**Decision owner:** human. Two questions below are not engineering's to settle.
+**Status:** **ENABLED 2026-08-29** · **Reviewed:** 2026-08-29 (engineering, agent-assisted live
+probe) · **G-8 ruling: given by the decision owner, 2026-08-29**
+**Still open:** the partner agreement is unread, which gates *onward display to a third party*
+(UML are not the licensee) — not our own use of the feed. And the vendor-side feed scope below
+remains an exclusion nobody here authored.
 
 This is the third source review, after `source-gem.md` (T2, crawled, session-gated) and the TED
 section of `docs/multi-market.md` (T1, open data). It is the first one where the data arrives
@@ -28,7 +30,19 @@ it arrived in sat untracked in the repo root; `/​*API*Access*` and `/​*.pdf`
 `.gitignore`, because `.env` being ignored does nothing when the same secret is also in a
 document beside it and `git add -A` cannot tell them apart.
 
-## The G-8 question — a proposed divergence, not a ruling
+## The G-8 question — RULED 2026-08-29
+
+> **The decision owner ratified the reading below on 2026-08-29 and the source is live.** What
+> follows is the argument that was put to them, kept verbatim so the next person can disagree
+> with the reasoning rather than with a decision that has no reasoning attached. The narrower
+> question — whether the partner agreement permits showing this data to UML, who are not the
+> licensee — was **not** settled by that ruling and is still open. Reading the feed for our own
+> workspace is squarely within any licence; onward display is not yet cleared.
+>
+> **G-8's text should now change to match**, or the next reader hits the same contradiction:
+> *"never authenticate to a **portal**; a licensed data vendor's own API key is permitted, and
+> its licence terms are recorded in the source registry."*
+
 
 > **G-8 No authenticated acquisition.** Adapters never log in, never replay a session cookie,
 > never store portal credentials, and never solve or bypass a CAPTCHA or bot check. A source
