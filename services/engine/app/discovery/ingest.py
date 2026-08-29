@@ -52,11 +52,19 @@ DEFAULT_DOC_BUDGET = int(os.environ.get("GEM_DOC_BUDGET", "25"))
 #: Per-source page budgets, because a page is not the same size at every source.
 #:
 #: `DEFAULT_PAGES` is 12 and was sized against GeM, which returns 100 rows a page. BidAssist's
-#: vendor caps a page at 20 and refuses anything larger, so the same 12 pages fetched 237 rows
-#: of a ~800-record feed — and because that API returns rows in no stable order, repeating the
-#: sweep does not walk the remainder, it re-draws from the same shuffled deck. 45 pages covers
-#: the whole feed with headroom, and the connector stops early on its `last` flag, so a shorter
-#: feed costs nothing.
+#: vendor caps a page at 20 and refuses anything larger, so the same number means an eighth of
+#: the reach.
+#:
+#: **Measured 2026-08-29, after an earlier estimate here was wrong.** The BidAssist feed is
+#: **237 records and completes in 12 pages** — `complete: true`, 19s. A first guess of "~800,
+#: so 70% is never fetched" came from seeing page 40 return empty without bisecting for where
+#: the feed actually ends, which is the difference between a measurement and an inference. The
+#: 12-page default was never starving this source.
+#:
+#: The headroom stays because it is free, not because it is needed: the connector stops on the
+#: vendor's own `last` flag, so a budget larger than the feed costs nothing, while a budget
+#: smaller than a feed that GROWS truncates it silently — and this source's scope is a saved
+#: query on the vendor's side that can change without telling us.
 SOURCE_SWEEP_PAGES = {"bidassist": int(os.environ.get("BIDASSIST_SWEEP_PAGES", "45"))}
 
 # The language our own explanations are written in, per market.

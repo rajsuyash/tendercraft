@@ -325,9 +325,14 @@ Mumbai anyway); until then, count round trips like they cost money.
   treating unknown as closed is the same silent miss arriving through the fix.
 - **A page budget belongs to its source, not to the sweep.** `DEFAULT_PAGES = 12` was sized
   against GeM's 100-row pages (1200 bids). BidAssist's vendor caps a page at 20 and refuses
-  larger, so the same 12 fetched 237 rows of a ~800-record feed — and because that API returns
-  rows in no stable order, re-sweeping re-draws from a shuffled deck instead of walking the
-  remainder. One constant shared across sources silently starves whichever pages smallest.
+  larger, so the same number buys an eighth of the reach. One constant shared across sources
+  silently starves whichever one pages smallest.
+- **"Page 40 is empty" does not tell you where a feed ends — bisect before you claim a size.**
+  Reasoning from one empty page to "~800 records, so 70% is never fetched" was wrong by more
+  than 3×: the feed is **237 records and completes in 12 pages**. The mistaken figure went into
+  a code comment and a commit message before it was checked, which is the expensive part — a
+  wrong rationale outlives the change it justified and the next person inherits it as fact.
+  The fix (per-source budgets) was still right; the reason given for it was not.
 
 ## Buying a feed instead of crawling one (BidAssist, 2026-08-29)
 
