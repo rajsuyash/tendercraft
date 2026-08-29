@@ -440,3 +440,57 @@ class TestTheCapabilityGateFollowsTheProfile:
                             lambda *a, **k: pytest.fail("rewrote the spec with no profile read"))
         rules = ingest._rules_for("w1")
         assert rules[0].spec["keywords"] == ["an old phrase nobody would ever match"]
+
+
+class TestOnlyGeMRowsGoToTheGeMDocumentParser:
+    """Found in production the hour BidAssist went live: every non-GeM row's first document
+    URL was being posted to the GeM connector's `/bids/{id}/eligibility`, which 404'd on all
+    of them.
+
+    Two failures, and the quiet one is worse. The noisy one is 25 warnings a sweep that read
+    like a portal outage and are actually a routing bug. The quiet one is that those calls
+    consumed the per-workspace document budget, so the GeM rows that WOULD have parsed never
+    got their turn — the feature silently stops working and nothing says so.
+
+    Only GeM has a document parser (`services/gem-connector/app/document.py`, reverse-engineered
+    label by label from a wkhtmltopdf form). The other connectors do not expose the endpoint at
+    all, which is why this is a source gate rather than an error handler.
+    """
+
+    GEM = {"id": "o1", "source_id": "gem_bidplus", "document_urls": ["https://x/bids/GEM-1.pdf"],
+           "closing_at": "2026-09-01"}
+    BIDASSIST = {"id": "o2", "source_id": "bidassist", "closing_at": "2026-08-30",
+                 "document_urls": ["https://cdn/f.pdf?Expires=1&Signature=abc"]}
+    TED = {"id": "o3", "source_id": "ted", "document_urls": ["https://ted/notice"],
+           "closing_at": "2026-08-31"}
+
+    def _run(self, monkeypatch, rows):
+        from app.discovery import ingest
+
+        called: list[str] = []
+        monkeypatch.setattr(ingest, "_connector",
+                            lambda path, *a, **k: called.append(path) or {"fields": {}})
+        monkeypatch.setattr(ingest.db, "set_opportunity_eligibility", lambda *a, **k: None)
+        fetched = ingest._enrich_documents(rows, budget=10)
+        return called, fetched
+
+    def test_a_bidassist_row_is_never_sent_to_the_gem_parser(self, monkeypatch):
+        called, fetched = self._run(monkeypatch, [dict(self.BIDASSIST)])
+        assert called == [] and fetched == 0
+
+    def test_a_ted_row_is_not_either(self, monkeypatch):
+        called, _ = self._run(monkeypatch, [dict(self.TED)])
+        assert called == []
+
+    def test_gem_rows_still_escalate(self, monkeypatch):
+        called, fetched = self._run(monkeypatch, [dict(self.GEM)])
+        assert called == ["/bids/GEM-1.pdf/eligibility"] and fetched == 1
+
+    def test_a_mixed_corpus_spends_the_budget_only_on_gem(self, monkeypatch):
+        """The budget-theft case: BidAssist rows close SOONER here, so before the gate they
+        sorted first and took the slots. Ordering by deadline is correct; letting an
+        unparseable source hold a slot is not."""
+        called, fetched = self._run(
+            monkeypatch, [dict(self.BIDASSIST), dict(self.TED), dict(self.GEM)]
+        )
+        assert called == ["/bids/GEM-1.pdf/eligibility"] and fetched == 1

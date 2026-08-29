@@ -332,6 +332,23 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
     }
 
 
+#: Sources whose connector can parse a bid document into eligibility fields.
+#:
+#: Only GeM, and the reason is documented at `services/gem-connector/app/document.py`: those
+#: figures had to be reverse-engineered out of a `wkhtmltopdf` form, label by label, against
+#: three template variants. Nothing generalises from that to another portal, so neither the TED
+#: nor the BidAssist connector has a `/bids/{id}/eligibility` endpoint at all.
+#:
+#: Without this gate the escalation sent every source's first document URL to the GeM connector.
+#: For a BidAssist row that URL is a signed CloudFront link, so `parent_id` came out as a PDF
+#: filename with a query string attached and GeM 404'd on all of them — 25 warnings per sweep
+#: that look like a portal problem and are actually a routing one. It also burned the whole
+#: per-workspace document budget on calls that could not succeed, which meant the GeM rows that
+#: WOULD have parsed never got their turn. A misroute that only wastes a budget is still a
+#: silent loss of the feature the budget exists for.
+SOURCES_WITH_ELIGIBILITY = frozenset({"gem_bidplus"})
+
+
 def _enrich_documents(opportunities: list[dict[str, Any]], *, budget: int) -> int:
     """Fetch and parse bid documents for in-scope items that have none yet.
 
@@ -344,6 +361,7 @@ def _enrich_documents(opportunities: list[dict[str, Any]], *, budget: int) -> in
     pending = [
         o for o in opportunities
         if not o.get("eligibility") and o.get("document_urls")
+        and o.get("source_id") in SOURCES_WITH_ELIGIBILITY
     ]
     pending.sort(key=lambda o: o.get("closing_at") or "9999")
 
