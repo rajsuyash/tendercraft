@@ -184,14 +184,22 @@ export function hasClosed(closingAt: string | null, now: number): boolean {
 /** The portal's short name. Interpolated into copy rather than written into it, because
  *  "Swept from GeM" above a feed of TED notices is a false statement in ANY language — and the
  *  English dictionary was the one still saying it after the French one had been fixed. */
-const PORTAL: Record<string, string> = { IN: "GeM", FR: "TED" };
+/** India is two sources since 2026-08-29, so the label has to be too. BidAssist is a licensed
+ *  aggregator carrying ten portals — railways ahead of GeM in the first live sweep — and
+ *  "Swept from GeM" above an IREPS notice is the same false statement this comment already
+ *  warns about, just inside one market instead of across two. Kept as bare proper nouns so
+ *  nothing here needs translating: a descriptive phrase would leak English into French chrome,
+ *  which is the trap the interpolation exists to avoid. */
+const PORTAL: Record<string, string> = { IN: "GeM + BidAssist", FR: "TED" };
 /** Only for the coverage strip's scope line — the picker on /profile owns the real labels. */
 const COUNTRY: Record<string, string> = { IN: "India", FR: "France" };
 const DEFAULT_PORTAL = "GeM";
 
 /** Named provenance per market (S14-D3). */
 const SOURCE: Record<string, string> = {
-  IN: "Government e-Marketplace (bidplus.gem.gov.in)",
+  IN:
+    "Government e-Marketplace (bidplus.gem.gov.in) and BidAssist, a licensed aggregator " +
+    "carrying Indian Railways (ireps.gov.in), state and PSU portals",
   FR: "Tenders Electronic Daily — Journal officiel de l'Union européenne (ted.europa.eu)",
 };
 
