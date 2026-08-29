@@ -49,6 +49,16 @@ DEFAULT_PAGES = int(os.environ.get("GEM_SWEEP_PAGES", "12"))
 # Fetching all 48k would be pointless and rude; this is §4.1's escalation ladder, capped.
 DEFAULT_DOC_BUDGET = int(os.environ.get("GEM_DOC_BUDGET", "25"))
 
+#: Per-source page budgets, because a page is not the same size at every source.
+#:
+#: `DEFAULT_PAGES` is 12 and was sized against GeM, which returns 100 rows a page. BidAssist's
+#: vendor caps a page at 20 and refuses anything larger, so the same 12 pages fetched 237 rows
+#: of a ~800-record feed — and because that API returns rows in no stable order, repeating the
+#: sweep does not walk the remainder, it re-draws from the same shuffled deck. 45 pages covers
+#: the whole feed with headroom, and the connector stops early on its `last` flag, so a shorter
+#: feed costs nothing.
+SOURCE_SWEEP_PAGES = {"bidassist": int(os.environ.get("BIDASSIST_SWEEP_PAGES", "45"))}
+
 # The language our own explanations are written in, per market.
 #
 # It follows the MARKET rather than the reader's EN/FR toggle, which corrects what
@@ -129,7 +139,12 @@ def refresh_corpus(
     pages = 0
     upserted = 0
     for source in sources:
-        params: dict[str, Any] = {"max_pages": max_pages}
+        # A page budget written for one source starves another. GeM pages 100 rows at a time,
+        # so 12 pages is 1200 bids; BidAssist is capped by its vendor at 20 rows a page, so the
+        # same 12 fetched 237 of a ~800-record feed and — the feed being unordered — not even a
+        # consistent 237. The budget belongs to the source, not to the sweep.
+        pages = SOURCE_SWEEP_PAGES.get(source.source_id, max_pages)
+        params: dict[str, Any] = {"max_pages": pages}
         if source.source_id == "bidassist":
             # No `q`. This source's scope is a saved query held on the VENDOR's side, and its
             # own search body accepts exactly one filter key — probing found `KEYWORD` was
@@ -269,7 +284,12 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
     # Scoped to the countries the bidder ticked. That IS a user-authored scope — the profile
     # names it and the coverage strip states it — which is what F-AC6 requires. What the rule
     # forbids is a scope nobody chose, which is precisely what a single hardcoded market was.
-    opportunities = db.get_opportunities(limit=1000, markets=watched)
+    # `open_only` is load-bearing, not an optimisation. Without it the 1000-row window is
+    # ordered closing-soonest-first across a corpus that keeps its history, so closed tenders
+    # — whose deadlines are furthest in the past — take every slot. On 2026-08-29 India held
+    # 1282 closed against a 1000 window: nothing bidable was being evaluated at all, and the
+    # feed had frozen without erroring. See db.get_opportunities.
+    opportunities = db.get_opportunities(limit=1000, markets=watched, open_only=True)
 
     matches: list[dict[str, Any]] = []
     in_scope: list[dict[str, Any]] = []

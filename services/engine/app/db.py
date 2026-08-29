@@ -1167,17 +1167,44 @@ def upsert_opportunities(records: list[dict]) -> list[dict]:
     )
 
 
-def get_opportunities(limit: int = 500, markets: list[str] | None = None) -> list[dict]:
+def get_opportunities(
+    limit: int = 500, markets: list[str] | None = None, open_only: bool = False
+) -> list[dict]:
     """The shared corpus, scoped to the countries the caller watches.
 
     A LIST rather than a single market: a bidder registered in one country routinely pursues
     tenders in another, and GeM's own listings carry `ba_is_global_tendering`. The caller
     always passes at least one — an empty list would silently mean "everything", which is the
     opposite of what a caller who lost their scope wants.
+
+    `open_only` drops tenders whose deadline has passed, and it exists because the combination
+    of `limit` and `closing_at.asc` is a trap that had already sprung in production.
+
+    Ascending closing date puts the tenders closest to their deadline first, which is the right
+    priority among tenders you can still bid on — and the exactly wrong one across a corpus
+    that keeps its history, because a CLOSED tender's date is further in the past than any open
+    one's. Closed rows therefore sort to the very front and occupy the window permanently.
+
+    Measured on 2026-08-29: the India corpus held 1282 closed tenders against a 1000-row
+    window, so **every slot was a closed tender and not one bidable tender was being
+    evaluated**. The feed had silently stopped accepting new work weeks earlier while showing a
+    healthy count, a fresh sweep timestamp and a full table — the count was a historical
+    accumulation of rows matched back when the closed total was still under the limit. Nothing
+    errored, because nothing failed; a tender never seen is the one failure in this product
+    with no natural feedback signal (ET-7).
+
+    A tender whose deadline has passed cannot be bid on, so evaluating one buys nothing. Rows
+    matched previously keep their match records — history is not rewritten, it just stops
+    crowding out the present.
+
+    `closing_at is null` is kept deliberately: a tender with NO stated deadline is unknown, not
+    closed, and dropping it would be the same silent-miss failure arriving through the fix.
     """
     params = {"select": "*", "order": "closing_at.asc", "limit": str(limit)}
     if markets:
         params["market"] = "in.({})".format(",".join(sorted(set(markets))))
+    if open_only:
+        params["or"] = "(closing_at.is.null,closing_at.gte.now())"
     return _rest("GET", "opportunities", params=params) or []
 
 

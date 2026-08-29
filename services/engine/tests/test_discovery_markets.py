@@ -236,3 +236,83 @@ class TestMoneyIsNeverComparedAcrossCurrencies:
             evaluate_eligibility(None, self.RICH, "en", same_currency=False).reason
             == "Bid document not read yet"
         )
+
+
+class TestClosedTendersCannotStarveTheWindow:
+    """The failure this class exists to prevent, measured in production on 2026-08-29 before
+    the fix: the India corpus held **1282 closed tenders against a 1000-row window**, and the
+    window is ordered `closing_at.asc`. A closed tender's deadline is further in the past than
+    any open one's, so closed rows sorted to the front and took every slot — not one bidable
+    tender was being evaluated.
+
+    Nothing errored. The tile showed 1142, the sweep timestamp was minutes old, the table was
+    full. The count was a historical accumulation from back when the closed total was under the
+    limit, and the feed had silently stopped accepting new work. ET-7 with no feedback signal:
+    integrating a whole new source moved the number not at all, which is how it was noticed.
+    """
+
+    def _params(self, monkeypatch, **kwargs):
+        seen: dict = {}
+        monkeypatch.setattr(
+            db, "_rest", lambda m, p, *, params=None, **k: (seen.update(params or {}), [])[1]
+        )
+        db.get_opportunities(**kwargs)
+        return seen
+
+    def test_the_recompute_window_asks_only_for_tenders_that_can_still_be_bid_on(
+        self, monkeypatch
+    ):
+        params = self._params(monkeypatch, markets=["IN"], open_only=True)
+        assert params["or"] == "(closing_at.is.null,closing_at.gte.now())"
+
+    def test_a_tender_with_no_stated_deadline_is_unknown_not_closed(self, monkeypatch):
+        # Dropping these would be the same silent-miss failure arriving through the fix: a
+        # portal that never filled the field has not told us the tender is over.
+        params = self._params(monkeypatch, markets=["IN"], open_only=True)
+        assert "closing_at.is.null" in params["or"]
+
+    def test_the_default_still_returns_history(self, monkeypatch):
+        # Only the recompute path narrows. Anything auditing the corpus still sees all of it.
+        assert "or" not in self._params(monkeypatch, markets=["IN"])
+
+    def test_recompute_asks_for_the_open_window(self, monkeypatch):
+        from app.discovery import ingest
+
+        seen: dict = {}
+
+        def fake_get(limit, markets=None, open_only=False):
+            seen.update({"limit": limit, "open_only": open_only})
+            return []
+
+        monkeypatch.setattr(ingest.db, "get_opportunities", fake_get)
+        monkeypatch.setattr(ingest, "_capability", lambda w: ("", []))
+        monkeypatch.setattr(ingest, "_rules_for", lambda w, k=None: [])
+        monkeypatch.setattr(ingest, "_profile_turnover_inr", lambda w: None)
+        monkeypatch.setattr(ingest.db, "get_workspace_market", lambda w: "IN")
+        monkeypatch.setattr(ingest.db, "get_workspace_markets", lambda w: ["IN"])
+        monkeypatch.setattr(ingest.db, "upsert_opportunity_matches", lambda *a, **k: None)
+        ingest.recompute_matches("w1", doc_budget=0)
+        assert seen["open_only"] is True, (
+            "recompute stopped asking for the open window — closed tenders will retake the "
+            "1000 slots and the feed will freeze again with no error anywhere"
+        )
+
+
+class TestAPageBudgetBelongsToItsSource:
+    """12 pages is 1200 GeM bids and 240 BidAssist rows, because the vendors page differently
+    and BidAssist refuses a page larger than 20. One number for both silently starved the
+    source with the smaller page — and its API returns rows unordered, so re-sweeping re-draws
+    from a shuffled deck rather than walking the remainder."""
+
+    def test_bidassist_gets_its_own_deeper_budget(self):
+        from app.discovery.ingest import DEFAULT_PAGES, SOURCE_SWEEP_PAGES
+
+        assert SOURCE_SWEEP_PAGES["bidassist"] > DEFAULT_PAGES
+        # ~800 records at the vendor's fixed 20 per page.
+        assert SOURCE_SWEEP_PAGES["bidassist"] * 20 >= 800
+
+    def test_sources_without_an_override_keep_the_sweep_default(self):
+        from app.discovery.ingest import SOURCE_SWEEP_PAGES
+
+        assert "gem_bidplus" not in SOURCE_SWEEP_PAGES
+        assert "ted" not in SOURCE_SWEEP_PAGES

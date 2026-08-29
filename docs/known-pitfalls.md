@@ -300,6 +300,35 @@ Mumbai anyway); until then, count round trips like they cost money.
   `AttributeError: 'NoneType' object has no attribute '__dict__'` while resolving its own
   module.
 
+## A capped window over a corpus that keeps its history (found 2026-08-29)
+
+- **`ORDER BY closing_at ASC` + `LIMIT` is a time bomb on any table that retains closed rows.**
+  Soonest-closing-first is the right priority *among tenders you can still bid on*, and the
+  exactly wrong one across a corpus with history: a closed tender's deadline is further in the
+  past than any open one's, so closed rows sort to the very front. Every closed tender the
+  corpus accumulates takes a slot permanently. Measured: India held **1282 closed against a
+  1000-row window**, so the recompute was evaluating a window that was 100% unbiddable and
+  **not one open tender was being matched.**
+- **The symptom is that nothing happens, which is why it survived.** No error, no exception, no
+  empty screen. The tile showed 1142, the sweep timestamp was minutes old, the table was full
+  of rows. The count was a historical accumulation from back when the closed total was under
+  the limit — the feed had stopped accepting new work weeks earlier and every visible signal
+  said it was healthy. ET-7 with no feedback channel.
+- **It was found by integrating a second source and watching the number not move.** 237 new
+  BidAssist rows landed in the corpus and the feed's total was unchanged. A count that does not
+  respond to a large input is evidence even when nothing looks broken — treat "the number is
+  suspiciously stable" as a bug report.
+- **Filter to what the feature can act on, do not just raise the cap.** Raising 1000 to 5000
+  buys time and re-arms the same trap. `open_only` drops what cannot be bid on, so the window
+  holds only rows the recompute can do something with. Keep `closing_at is null` **inside** the
+  kept set: a portal that never filled the field has not told us the tender is over, and
+  treating unknown as closed is the same silent miss arriving through the fix.
+- **A page budget belongs to its source, not to the sweep.** `DEFAULT_PAGES = 12` was sized
+  against GeM's 100-row pages (1200 bids). BidAssist's vendor caps a page at 20 and refuses
+  larger, so the same 12 fetched 237 rows of a ~800-record feed — and because that API returns
+  rows in no stable order, re-sweeping re-draws from a shuffled deck instead of walking the
+  remainder. One constant shared across sources silently starves whichever pages smallest.
+
 ## Buying a feed instead of crawling one (BidAssist, 2026-08-29)
 
 - **A secret does not arrive as a secret. It arrives as a PDF.** The partner key landed in the
