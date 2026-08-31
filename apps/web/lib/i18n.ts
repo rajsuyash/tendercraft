@@ -51,6 +51,10 @@ const FR: Record<string, string> = {
   "Could not check bid status.": "Impossible de vérifier le statut des offres.",
   "Stage only — a clarification or document request appears in your GeM seller account, which we do not access.":
     "Étape uniquement — une demande de clarification ou de document apparaît dans votre compte vendeur GeM, auquel nous n'accédons pas.",
+  // The value interpolated into {portal}. A bare portal name ("TED") needs no entry and
+  // degrades to the key; this one is a descriptive phrase, so it needs translating or it
+  // leaks English into French chrome.
+  "GeM and other Indian portals": "GeM et autres portails publics indiens",
   "Sweeping {portal}…": "Collecte {portal} en cours…",
   swept: "collecté le",
   "Swept from {portal}": "Avis collectés sur {portal}",
