@@ -18,9 +18,17 @@ def rows(monkeypatch):
     """Rows come back newest-first, which is what the query asks PostgREST for."""
     captured = {}
 
+    # Every call is recorded, not just the last. `list_workspaces_for_sweep` now makes more
+    # than one — it reads discovery_rules and vendor_profiles to decide sweep ORDER — and a
+    # fixture that keeps only the final call turns "assert the workspaces query is unfiltered"
+    # into "assert the last query happened to be workspaces", which is a different claim.
+    captured["calls"] = []
+
     def fake_rest(method, path, **kwargs):
+        params = kwargs.get("params") or {}
+        captured["calls"].append({"path": path, "params": params})
         captured["path"] = path
-        captured["params"] = kwargs.get("params") or {}
+        captured["params"] = params
         return captured.get("returns", [])
 
     monkeypatch.setattr(db, "_rest", fake_rest)
@@ -103,5 +111,64 @@ def test_the_sweep_fanout_has_no_opt_in_filter(rows):
     alerts — so this query must not learn to filter."""
     rows["returns"] = []
     db.list_workspaces_for_sweep()
-    assert "enabled" not in rows["params"]
-    assert rows["path"] == "workspaces"
+    workspaces = [c for c in rows["calls"] if c["path"] == "workspaces"]
+    assert len(workspaces) == 1, "the fan-out must read the workspace list exactly once"
+    assert "enabled" not in workspaces[0]["params"]
+
+
+def test_the_fanout_orders_configured_workspaces_first_and_drops_none(monkeypatch):
+    """Ordering, never filtering.
+
+    296 workspaces existed in production and exactly ONE had a discovery rule; the rest were
+    isolation-test debris that `audit_events` being append-only makes undeletable. The
+    per-workspace recompute is where the wall-clock goes, so a scheduled run reached the real
+    workspace hours late or not at all — and 3600s is already the platform's ceiling.
+
+    Dropping the debris would be faster and wrong: a workspace missing from the fan-out is a
+    workspace whose feed silently stops updating, which is the failure the job exists to
+    prevent. So every workspace is still returned, in a different order.
+    """
+    listing = [
+        {"id": "debris1", "name": "Dup Test", "market": "IN", "discovery_markets": ["IN"]},
+        {"id": "real", "name": "A Customer", "market": "IN", "discovery_markets": ["IN"]},
+        {"id": "debris2", "name": "RBAC Workspace", "market": "IN", "discovery_markets": ["IN"]},
+    ]
+
+    def fake_rest(method, path, **kwargs):
+        if path == "workspaces":
+            return listing
+        if path == "discovery_rules":
+            return [{"workspace_id": "real"}]
+        return []  # vendor_profiles
+
+    monkeypatch.setattr(db, "_rest", fake_rest)
+    got = db.list_workspaces_for_sweep()
+    assert [w["id"] for w in got] == ["real", "debris1", "debris2"]
+    assert len(got) == 3, "no workspace may be dropped from the fan-out"
+
+
+def test_a_vendor_profile_also_counts_as_configured(monkeypatch):
+    """A customer who filled in a profile but has not written a rule yet is still real."""
+    def fake_rest(method, path, **kwargs):
+        if path == "workspaces":
+            return [{"id": "debris", "name": "Dup Test", "market": "IN"},
+                    {"id": "real", "name": "A Customer", "market": "IN"}]
+        if path == "vendor_profiles":
+            return [{"workspace_id": "real"}]
+        return []
+
+    monkeypatch.setattr(db, "_rest", fake_rest)
+    assert [w["id"] for w in db.list_workspaces_for_sweep()] == ["real", "debris"]
+
+
+def test_an_unreadable_ordering_query_degrades_to_the_original_order(monkeypatch):
+    """The ordering is an optimisation. If the helper read fails it must fall back to sweeping
+    everything in portal order — never to an empty or truncated fan-out."""
+    def fake_rest(method, path, **kwargs):
+        if path == "workspaces":
+            return [{"id": "a", "name": "A", "market": "IN"},
+                    {"id": "b", "name": "B", "market": "IN"}]
+        raise RuntimeError("postgrest is having a moment")
+
+    monkeypatch.setattr(db, "_rest", fake_rest)
+    assert [w["id"] for w in db.list_workspaces_for_sweep()] == ["a", "b"]

@@ -7,6 +7,7 @@ ET-6 defect (known-pitfalls: service-role bypasses RLS).
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,6 +17,8 @@ from . import http
 from .config import get_settings
 from .deterministic.price_history import postgrest_filter
 from .envelope import ApiError
+
+log = logging.getLogger("tendercraft.engine")
 
 
 def _headers() -> dict[str, str]:
@@ -1437,7 +1440,7 @@ def list_workspaces_for_sweep() -> list[dict]:
         params={"select": "id,name,market,discovery_markets",
                 "limit": str(_CRON_FANOUT_LIMIT)},
     ) or []
-    return [
+    out = [
         {
             "id": r["id"],
             "name": r.get("name"),
@@ -1445,6 +1448,52 @@ def list_workspaces_for_sweep() -> list[dict]:
         }
         for r in rows if r.get("id")
     ]
+
+    # Configured workspaces first. ORDER, never filter — a workspace dropped from the fan-out
+    # is a workspace whose feed silently stops updating, which is the failure this whole job
+    # exists to prevent (ET-7). Everything still gets swept; the question is only what gets
+    # swept before the clock runs out.
+    #
+    # It matters because the recompute is per-workspace and the portal sweep is not, so the
+    # tail of this list is where the wall-clock goes. Measured 2026-08-31: 296 workspaces, of
+    # which ONE had a discovery rule — the rest are isolation-test debris that `audit_events`
+    # being append-only makes permanently undeletable (docs/known-pitfalls.md). A deploy fixing
+    # the real workspace's feed could not reach it: the run was still recomputing test
+    # workspaces hours later, and the 3600s ceiling is already the platform maximum.
+    #
+    # "Configured" is deliberately evidence a HUMAN acted — a discovery rule or a vendor
+    # profile — rather than a name pattern like "Test" or "Dup", which would be a heuristic
+    # about our own fixtures that a real customer could trip over by naming their workspace
+    # badly.
+    # Stable sort on configured-ness ALONE. An earlier version added the name as a secondary
+    # key and thereby reordered the whole list even when nothing was configured — a sweep
+    # ordering that changes for reasons unrelated to the fix is a second variable in any future
+    # "why did this workspace go last?" investigation. Equal keys keep the portal's order.
+    configured = _configured_workspace_ids()
+    out.sort(key=lambda w: w["id"] not in configured)
+    return out
+
+
+def _configured_workspace_ids() -> set[str]:
+    """Workspaces somebody has actually set up — used to order the sweep, never to filter it.
+
+    Two cheap reads rather than a join: PostgREST cannot order a parent by a child's existence,
+    and the alternative (one query per workspace) is the N+1 this codebase has been bitten by.
+    A read that fails returns an empty set, which degrades to the previous arbitrary order
+    rather than to an empty fan-out — the sweep must never be able to skip a workspace because
+    a helper query hiccuped.
+    """
+    ids: set[str] = set()
+    for table in ("discovery_rules", "vendor_profiles"):
+        try:
+            rows = _rest("GET", table,
+                         params={"select": "workspace_id",
+                                 "limit": str(_CRON_FANOUT_LIMIT * 4)}) or []
+        except Exception:  # noqa: BLE001 — ordering is an optimisation, never a gate
+            log.warning("sweep ordering: could not read %s; falling back to portal order", table)
+            continue
+        ids.update(r["workspace_id"] for r in rows if r.get("workspace_id"))
+    return ids
 
 
 def last_swept_at(markets: list[str] | None = None) -> dict[str, str]:
