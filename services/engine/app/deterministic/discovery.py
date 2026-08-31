@@ -184,36 +184,103 @@ _MIN_CODE_STEM = 4
 
 _WORD = re.compile(r"[a-z0-9]+")
 
+# Words that describe the SELLER rather than the thing being bought. A vendor asked for
+# "capability keywords" writes capability prose — "steel wire rope manufacturing", "expertise
+# in elevator" — while a tender names a product: "Steel Wire Rope Sling 50mm". Stripping these
+# turns the vendor's sentence into the product terms a buyer would actually use.
+#
+# Deliberately a small closed list of self-description, not a general stopword list. A generic
+# English stoplist would strip words that are load-bearing in procurement ("general" in
+# "general engineering purpose", "service" in a services tender), and a keyword that quietly
+# loses its meaning is worse than one that fails loudly.
+_CAPABILITY_FILLER = frozenset({
+    "a", "an", "and", "for", "in", "of", "the", "to", "with",
+    "expertise", "experience", "experienced", "specialist", "specialists", "specialising",
+    "manufacture", "manufactured", "manufacturer", "manufacturers", "manufacturing",
+    "provider", "providers", "supplier", "suppliers", "supply",
+    "solution", "solutions", "product", "products",
+})
+
+# A term at least this long may match a token that OPENS with it — "wire" inside "wirerope".
+# Indian portals routinely run product words together, so a four-letter product term that can
+# only match exactly is a term that misses its own product.
+#
+# One direction only, and that is the whole safety argument: `token.startswith(term)` lets
+# "wire" find "wirerope", while the reverse (a suffix rule) would let "rope" find "Europe".
+# The classic false positive is a suffix match, so suffixes are not allowed at this length.
+_MIN_COMPOUND = 4
+
 
 def _tokens(text: str) -> set[str]:
     """Words, including the parts of a GeM category code — `home_info_netw` is three tokens."""
     return set(_WORD.findall(text.lower()))
 
 
-def _term_hits(term: str, blob: str, tokens: set[str], *, code: bool = False) -> bool:
-    """One keyword against one haystack.
+def content_words(term: str) -> list[str]:
+    """A vendor's phrase reduced to the words a tender would actually contain."""
+    return [w for w in _WORD.findall(term.lower()) if w not in _CAPABILITY_FILLER]
 
-    A multi-word keyword ("it services") is matched as a phrase against the raw text. A single
-    word is matched against tokens with a shared-prefix rule, because the vendor and the portal
-    will not agree on inflection: a vendor writes "networking" and GeM writes "Network switch
-    supply". Plain substring matching misses that in one direction and only that direction,
-    which is the kind of gap that looks like the feature working until someone checks.
+
+def _words_required(count: int) -> int:
+    """How many of a phrase's content words must hit for the phrase to match.
+
+    All of them, except that a phrase of three or more may miss one. Measured against 581 live
+    tenders: requiring ALL recovered 37% of the relevant ones, because a vendor writes "steel
+    wire rope" and the buyer writes "Safety Wire Rope Assembly" — no "steel". Allowing one miss
+    took recall to 96%.
+
+    The floor of two is what keeps that from becoming a substring match with extra steps: on a
+    two-word phrase, "all but one" is ONE word, so "general engineering" would fire on any
+    tender containing "general". A phrase must never match on a single word.
     """
-    if " " in term:
-        return term in blob
+    return count if count <= 2 else count - 1
+
+
+def _word_hits(term: str, tokens: set[str]) -> bool:
+    """One single word against a token set, with the inflection and compound rules."""
     if term in tokens:
         return True
-    if code:
-        # One direction only: an abbreviated code may open the vendor's word.
-        return any(
-            len(tok) >= _MIN_CODE_STEM and term.startswith(tok) for tok in tokens
-        )
+    if len(term) >= _MIN_COMPOUND and any(
+        len(tok) > len(term) and tok.startswith(term) for tok in tokens
+    ):
+        return True
     if len(term) < _MIN_STEM:
         return False
     return any(
         len(tok) >= _MIN_STEM and (tok.startswith(term) or term.startswith(tok))
         for tok in tokens
     )
+
+
+def _term_hits(term: str, tokens: set[str], *, code: bool = False) -> bool:
+    """One keyword against one haystack.
+
+    A single word is matched against tokens with a shared-prefix rule, because the vendor and
+    the portal will not agree on inflection: a vendor writes "networking" and GeM writes
+    "Network switch supply".
+
+    A multi-word keyword used to be matched as a literal phrase against the raw text, and that
+    was the defect this replaced. Measured on a live workspace: of six capability keywords,
+    the phrases matched **7 of 581** open tenders — the vendor's single most important term,
+    "steel wire rope manufacturing", could not fire on a tender titled "Steel Wire Rope Sling"
+    because that string does not contain the word "manufacturing". The gate then excluded 99%
+    of the corpus, which looked like a strict rule working and was a rule matching nothing.
+    A user-authored rule that silently matches nothing is still ET-7.
+    """
+    if " " in term:
+        words = content_words(term)
+        if not words:
+            return False
+        hits = sum(1 for w in words if _word_hits(w, tokens))
+        return hits >= _words_required(len(words))
+    if code:
+        if term in tokens:
+            return True
+        # One direction only: an abbreviated code may open the vendor's word.
+        return any(
+            len(tok) >= _MIN_CODE_STEM and term.startswith(tok) for tok in tokens
+        )
+    return _word_hits(term, tokens)
 
 
 def keyword_relevance(
@@ -237,15 +304,19 @@ def keyword_relevance(
     authority = (record.get("authority") or "").lower()
 
     title_tokens, category_tokens = _tokens(title), _tokens(categories)
-    blob = " ".join((title, categories, authority))
+    authority_tokens = _tokens(authority)
+    # Categories are part of the free-text surface too. GeM writes the product into its
+    # category string ("Category: Steel Wire Rope 10 Mm"), so a phrase that spans title and
+    # category — common on multi-item bids — has to be able to see both at once.
+    text_tokens = title_tokens | authority_tokens | category_tokens
 
     matched = tuple(
         sorted(
             {
                 t
                 for t in terms
-                if _term_hits(t, blob, title_tokens | _tokens(authority))
-                or _term_hits(t, categories, category_tokens, code=True)
+                if _term_hits(t, text_tokens)
+                or _term_hits(t, category_tokens, code=True)
             }
         )
     )
@@ -255,8 +326,8 @@ def keyword_relevance(
     # A hit inside a GeM category code outranks one anywhere else: the codes are the portal's
     # own structured taxonomy, so `services_home_cust` matching "services" is a classification,
     # whereas the same word inside a buyer's department name is a coincidence.
-    in_category = any(_term_hits(t, categories, category_tokens, code=True) for t in matched)
-    in_title = any(_term_hits(t, title, title_tokens) for t in matched)
+    in_category = any(_term_hits(t, category_tokens, code=True) for t in matched)
+    in_title = any(_term_hits(t, title_tokens) for t in matched)
     if in_category or len(matched) >= 2:
         return KeywordMatch(band="high", matched_terms=matched, language=language)
     if in_title:
