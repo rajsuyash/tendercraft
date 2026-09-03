@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.deterministic.price_history import Award, summarise, to_award
+from app.deterministic.price_history import (
+    Award,
+    _median,
+    summarise,
+    to_award,
+)
 
 
 def _award(**over) -> Award:
@@ -135,3 +140,36 @@ def test_a_result_with_no_published_ladder_is_kept_without_inventing_a_price():
     assert a.winning_price is None
     assert a.participants == 4
     assert summarise([a])["with_published_price"] == 0
+
+
+# --- the arms that only a malformed or hostile row reaches -----------------------------------
+#
+# `app/deterministic/` is CI-gated at 100% branch coverage. These three are defensive and were
+# uncovered, which on a money-facing module is the wrong pair of facts to hold at once: a guard
+# nothing exercises is a guard nobody knows still works.
+
+def test_a_negative_quantity_yields_no_unit_price():
+    """Zero is caught by the truthiness test above it; a negative quantity is not, and it would
+    produce a NEGATIVE unit price that a bidder could price a real bid against."""
+    assert _award(quantity=-100).implied_unit_price is None
+
+
+def test_the_median_of_nothing_is_nothing_rather_than_a_crash():
+    """Unreachable through `summarise`, which only calls it past a minimum count — so this is
+    the only thing standing between a future caller and an IndexError on an empty list."""
+    assert _median([]) is None
+
+
+@pytest.mark.parametrize("value", ["not a number", "", {}, [], object()])
+def test_an_unparseable_price_is_absent_rather_than_zero(value):
+    """A portal field that is not a number must read as 'not published', never as 0.0 — a zero
+    winning price would render as the cheapest award in the history and anchor a bid to it."""
+    award = to_award(
+        {"portal_ref_no": "GEM/2026/B/9", "source_id": "gem_bidplus",
+         "category": "Wire Rope", "quantity": value},
+        [{"rank": 1, "seller": "X", "total_price": value}],
+    )
+
+    assert award.quantity is None
+    assert award.winning_price is None
+    assert award.implied_unit_price is None

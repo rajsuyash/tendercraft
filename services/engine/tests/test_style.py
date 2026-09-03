@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from app.deterministic.style import MIN_SENTENCES, build_profile, measure, render_brief
+from app.deterministic.style import (
+    MIN_SENTENCES,
+    StyleMetrics,
+    build_profile,
+    measure,
+    render_brief,
+)
 
 _LONG = (
     "We have consistently delivered large-scale citizen-facing platforms for state "
@@ -59,3 +65,64 @@ def test_metrics_travel_with_the_profile_for_the_ui_to_show():
     assert profile["metrics"]["sentences"] >= MIN_SENTENCES
     assert profile["built_from"] == 1
     assert 0.0 <= profile["metrics"]["first_person_ratio"] <= 1.0
+
+
+# ── every branch of the brief, built from measurements directly ──────────────
+#
+# `app/deterministic/` is CI-gated at 100% branch coverage, and these arms were only reachable
+# through a corpus that happened to measure a certain way. Constructing the metrics states the
+# case being described instead of hoping a paragraph of prose lands in the right band.
+
+def _metrics(**over) -> StyleMetrics:
+    base = {
+        "sentences": MIN_SENTENCES,
+        "mean_sentence_words": 18.0,   # between the long and short thresholds
+        "first_person_ratio": 0.5,     # between the two person thresholds
+        "bullet_ratio": 0.1,           # between the two list thresholds
+        "form_headings": False,
+        "numbered_headings": False,
+    }
+    base.update(over)
+    return StyleMetrics(**base)
+
+
+def test_a_middling_corpus_is_described_as_measured_rather_than_left_unsaid():
+    """Neither long nor short still tells the drafter something — silence would read as
+    'no house style', which is a different claim from 'an unremarkable one'."""
+    brief = render_brief(_metrics())
+
+    assert "measured register" in brief
+    # The middle bands of the other two dimensions say nothing at all, deliberately: there is no
+    # instruction to give about a bidder who uses lists sometimes.
+    assert "first person" not in brief
+    assert "lists" not in brief
+
+
+def test_heavy_list_use_is_described():
+    assert "bulleted and enumerated lists heavily" in render_brief(_metrics(bullet_ratio=0.4))
+
+
+def test_form_numbered_headings_win_over_hierarchical_ones():
+    """A bidder who labels sections with the tender's own form numbers is doing the stronger,
+    more specific thing; describing both would give the drafter two habits to follow."""
+    brief = render_brief(_metrics(form_headings=True, numbered_headings=True))
+
+    assert "the tender's own form numbers" in brief
+    assert "number headings hierarchically" not in brief
+
+
+def test_hierarchical_headings_are_described_when_there_are_no_form_numbers():
+    brief = render_brief(_metrics(numbered_headings=True))
+
+    assert "number headings hierarchically" in brief
+
+
+def test_edit_corrections_are_never_appended_to_an_empty_brief():
+    """A "learned from your corrections" note with no measured voice under it reads as the
+    system having opinions about a bidder it has never read."""
+    profile = build_profile(
+        ["We delivered a platform. It worked."],
+        edits=[("The Bidder shall deploy.", "We deploy.")],
+    )
+
+    assert profile["brief"] == ""
