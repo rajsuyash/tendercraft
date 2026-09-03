@@ -223,3 +223,110 @@ def test_an_envelope_cannot_claim_a_parent(two_manufacturers):
                            "label": "envelope with a parent",
                            "parent_envelope_id": two_manufacturers["envelope_b"]})
     assert status >= 400
+
+
+# ── pre-bid clarifications (migration 0038, UML ask 2) ───────────────────────
+
+def _clarification(ws: str, tender: str, **over) -> dict:
+    row = {
+        "workspace_id": ws, "tender_id": tender, "param_key": "diameter",
+        "kind": "relaxation", "query_text": "Is the stated diameter mandatory?",
+        "required_display": "20 mm",
+        # This column holds the comparator's reason, which names the plant's own range. It is
+        # the reason these rows are as sensitive as the envelope they were derived from.
+        "rationale": "required 20 mm is outside 6-24 mm",
+    }
+    row.update(over)
+    return row
+
+
+def test_a_clarification_never_crosses_workspaces(two_manufacturers):
+    """A pre-bid question names which requirement a bidder cannot meet — a rival reading it
+    learns where the plant stops and which tender to contest."""
+    rest("POST", "tender_clarifications", bearer=SERVICE_KEY, key=SERVICE_KEY,
+         body=_clarification(two_manufacturers["ws_a"], two_manufacturers["tender_a"],
+                             query_text="A's question"))
+
+    token_b = sign_in(EMAIL_B, PW)
+    _, rows = rest("GET", "tender_clarifications", bearer=token_b, key=ANON_KEY, query="?select=*")
+
+    assert all(r["workspace_id"] == two_manufacturers["ws_b"] for r in rows)
+    assert "A's question" not in [r["query_text"] for r in rows]
+
+
+def test_the_rationale_that_names_the_plant_stays_private(two_manufacturers):
+    """`rationale` is workspace-internal by design — it is never rendered into query text
+    because GeM publishes a buyer's answers to every bidder. RLS is what makes that hold for
+    the stored row as well as the sent one."""
+    token_b = sign_in(EMAIL_B, PW)
+    _, rows = rest("GET", "tender_clarifications", bearer=token_b, key=ANON_KEY,
+                   query=f"?tender_id=eq.{two_manufacturers['tender_a']}&select=rationale")
+
+    assert rows == []
+
+
+def test_a_workspace_cannot_plant_a_clarification_in_another(two_manufacturers):
+    token_b = sign_in(EMAIL_B, PW)
+    status, _ = rest("POST", "tender_clarifications", bearer=token_b, key=ANON_KEY,
+                     body=_clarification(two_manufacturers["ws_a"],
+                                         two_manufacturers["tender_a"]))
+    assert status >= 400
+
+
+def test_one_question_per_parameter_per_tender(two_manufacturers):
+    """The pack folds by parameter: one diameter deviating across nine schedule lines is one
+    question. A second row would make the screen ask the buyer twice."""
+    body = _clarification(two_manufacturers["ws_b"], two_manufacturers["tender_b"])
+    first, _ = rest("POST", "tender_clarifications", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                    body=body)
+    assert first < 400
+    duplicate, _ = rest("POST", "tender_clarifications", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                        body=body)
+    assert duplicate >= 400
+
+
+def test_a_sent_question_cannot_have_its_text_rewritten(two_manufacturers):
+    """The trigger, against a real database. Re-deriving the pack after a corrigendum must not
+    rewrite the record of what was actually put in front of a public buyer — and the only
+    writer that reaches this table is the service role, which bypasses everything else."""
+    _, created = rest("POST", "tender_clarifications", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                      prefer="return=representation",
+                      body=_clarification(two_manufacturers["ws_b"],
+                                          two_manufacturers["tender_b"],
+                                          param_key="min_breaking_load",
+                                          query_text="the words that went to the buyer",
+                                          status="sent", sent_at="2026-09-01T00:00:00Z"))
+    row_id = created[0]["id"]
+
+    status, _ = rest("PATCH", "tender_clarifications", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                     query=f"?id=eq.{row_id}", body={"query_text": "quietly different words"})
+    assert status >= 400
+
+    # An ANSWER on the same row is the write this table exists for, and must still go through.
+    ok_status, _ = rest("PATCH", "tender_clarifications", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                        query=f"?id=eq.{row_id}",
+                        body={"status": "answered", "answer_text": "Yes, it is mandatory.",
+                              "answer_source": "portal", "answered_at": "2026-09-02T00:00:00Z"})
+    assert ok_status < 400
+
+
+def test_an_answered_status_requires_the_reply_text(two_manufacturers):
+    """A status is a claim about something that happened. 'Answered' with no answer is a claim
+    about a public buyer that nothing supports."""
+    status, _ = rest("POST", "tender_clarifications", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                     body=_clarification(two_manufacturers["ws_b"],
+                                         two_manufacturers["tender_b"],
+                                         param_key="tensile_grade", status="answered",
+                                         sent_at="2026-09-01T00:00:00Z",
+                                         answered_at="2026-09-02T00:00:00Z"))
+    assert status >= 400
+
+
+def test_an_answer_must_say_where_it_came_from(two_manufacturers):
+    """An answer with no stated source is an unattributed claim about what a buyer said."""
+    status, _ = rest("POST", "tender_clarifications", bearer=SERVICE_KEY, key=SERVICE_KEY,
+                     body=_clarification(two_manufacturers["ws_b"],
+                                         two_manufacturers["tender_b"],
+                                         param_key="core_type",
+                                         answer_text="Yes."))
+    assert status >= 400

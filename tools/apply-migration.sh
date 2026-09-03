@@ -49,12 +49,19 @@ HTTP="$(printf '%s' "$BODY" | curl -sS -o /tmp/apply-migration.out -w '%{http_co
   -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" \
   --data-binary @-)"
 
-if [ "$HTTP" != "200" ]; then
-  echo "FAILED — HTTP $HTTP" >&2
-  cat /tmp/apply-migration.out >&2
-  echo >&2
-  exit 1
-fi
+# Any 2xx is a success. The API answers a DDL batch with 201 and an empty result array, and an
+# equality check on 200 reported that as FAILED *after applying the migration* — which is the
+# worst way to be wrong here: the change is live, the operator believes it is not, and the
+# obvious next move is to run production DDL a second time.
+case "$HTTP" in
+  2??) ;;
+  *)
+    echo "FAILED — HTTP $HTTP" >&2
+    cat /tmp/apply-migration.out >&2
+    echo >&2
+    exit 1
+    ;;
+esac
 
 echo "ok — $HTTP"
 cat /tmp/apply-migration.out

@@ -1707,6 +1707,81 @@ def replace_line_item_parameters(workspace_id: str, line_item_id: str, rows: lis
               prefer="return=minimal")
 
 
+# ── Module H: pre-bid clarifications (UML ask 2) ──────────────────────────────────────
+
+def get_clarifications(tender_id: str, workspace_id: str) -> list[dict]:
+    return _rest(
+        "GET", "tender_clarifications",
+        params={
+            "tender_id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}",
+            "select": "id,param_key,kind,query_text,required_display,rationale,line_ids,status,"
+                      "sent_at,answered_at,answer_text,answer_source,created_at,updated_at",
+            "order": "kind.asc,param_key.asc",
+        },
+    ) or []
+
+
+def get_clarification(clarification_id: str, workspace_id: str) -> dict | None:
+    """Ownership guard for any write binding a caller-supplied id (ET-6)."""
+    rows = _rest(
+        "GET", "tender_clarifications",
+        params={"id": f"eq.{clarification_id}", "workspace_id": f"eq.{workspace_id}",
+                "select": "id,tender_id,param_key,status,query_text,answer_text,sent_at"},
+    )
+    return rows[0] if rows else None
+
+
+def upsert_clarification_drafts(workspace_id: str, tender_id: str, rows: list[dict]) -> None:
+    """Store the derived pack without touching anything already asked.
+
+    Deliberately an upsert and NOT delete-then-insert, which is what every other `replace_*`
+    helper in this file does. Those rebuild rows that are pure derivation; this table also holds
+    the buyer's reply, which no re-run can reconstruct — rebuilding would destroy it, the same
+    way a re-harvest once cascaded `answer_usages` away (docs/known-pitfalls.md).
+
+    The database refuses a text rewrite on a non-draft row (trigger, migration 0038), so a
+    future caller that forgets this rule fails loudly instead of quietly rewriting the record of
+    what a public buyer was asked.
+    """
+    if not rows:
+        return
+    _rest(
+        "POST", "tender_clarifications",
+        params={"on_conflict": "workspace_id,tender_id,param_key"},
+        json=[{**r, "workspace_id": workspace_id, "tender_id": tender_id} for r in rows],
+        prefer="resolution=merge-duplicates,return=minimal",
+    )
+
+
+def update_clarification(clarification_id: str, workspace_id: str, patch: dict) -> dict | None:
+    rows = _rest(
+        "PATCH", "tender_clarifications",
+        params={"id": f"eq.{clarification_id}", "workspace_id": f"eq.{workspace_id}"},
+        json=patch,
+        prefer="return=representation",
+    )
+    return rows[0] if rows else None
+
+
+def delete_stale_clarification_drafts(
+    workspace_id: str, tender_id: str, keep_param_keys: list[str]
+) -> None:
+    """Drop DRAFT questions the schedule no longer raises — and only those.
+
+    A parameter that stopped deviating (a corrigendum relaxed it, the bidder widened the
+    envelope) should stop being asked. A question already sent stays regardless: it was asked,
+    and the record of asking it is not ours to delete.
+    """
+    params = {
+        "tender_id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}",
+        "status": "eq.draft",
+    }
+    if keep_param_keys:
+        quoted = ",".join(f'"{k}"' for k in keep_param_keys)
+        params["param_key"] = f"not.in.({quoted})"
+    _rest("DELETE", "tender_clarifications", params=params, prefer="return=minimal")
+
+
 def get_workspace(workspace_id: str) -> dict | None:
     """The workspace row. Its NAME is what a digest subject line says the tenders matched."""
     rows = _rest(

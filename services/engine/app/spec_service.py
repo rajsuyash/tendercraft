@@ -20,6 +20,7 @@ from typing import Any
 
 from . import db
 from .deterministic.boq import BoqRow
+from .deterministic.clarification import build_queries, merge_with_stored
 from .deterministic.spec_match import (
     CapabilitySpec,
     CatalogueState,
@@ -211,6 +212,96 @@ def assess_schedule(workspace_id: str, tender_id: str) -> dict[str, Any]:
         "catalogue_source": "recorded_by_you",
         "has_capability": bool(envelopes or catalogues),
     }
+
+
+# ── pre-bid clarifications (UML ask 2) ───────────────────────────────────────────────
+
+def clarification_pack(workspace_id: str, tender_id: str) -> dict[str, Any]:
+    """The questions this tender raises, joined to what has already been asked and answered.
+
+    Read-only. The pack is re-derived from the schedule on every call, so it costs one extra
+    query over `assess_schedule` and no model call — which is deliberate: a bidder checking what
+    they still need to ask, during a model outage, gets the real answer rather than a spinner.
+    """
+    assessment = assess_schedule(workspace_id, tender_id)
+    pack = build_queries(assessment["lines"])
+    stored = db.get_clarifications(tender_id, workspace_id)
+    views = merge_with_stored(pack, stored)
+
+    return {
+        "clarifications": [
+            {
+                "id": v.clarification_id,
+                "param_key": v.param_key,
+                "label": v.label,
+                "kind": v.kind.value,
+                "required": v.required_display,
+                # Workspace-internal, and it names the bidder's own capability. Safe on this
+                # screen, never in `text` — GeM publishes a buyer's answers to every bidder.
+                "rationale": v.rationale,
+                "text": v.text,
+                "lines": [
+                    {"id": ref.line_id, "schedule_ref": ref.schedule_ref,
+                     "item_ref": ref.item_ref, "anchor": ref.anchor}
+                    for ref in v.lines
+                ],
+                "status": v.status,
+                "answer_text": v.answer_text,
+                "answer_source": v.answer_source,
+                "sent_at": v.sent_at,
+                "answered_at": v.answered_at,
+                "stale": v.stale,
+            }
+            for v in views
+        ],
+        "summary": _clarification_summary(views),
+        # Said once, here. Every surface must repeat it: we do not post to GeM (G-1), so `sent`
+        # records that the BIDDER posted the question, exactly as `published` records that the
+        # bidder listed the catalogue item.
+        "posting": "by_you",
+        "schedule_lines": assessment["summary"]["total"],
+    }
+
+
+def _clarification_summary(views: Sequence[Any]) -> dict[str, int]:
+    """One function computes the counts, so no screen can show a number nothing explains."""
+    statuses = [v.status for v in views]
+    return {
+        "total": len(views),
+        "draft": statuses.count("draft"),
+        "sent": statuses.count("sent"),
+        "answered": statuses.count("answered"),
+        "withdrawn": statuses.count("withdrawn"),
+        "open": sum(1 for v in views if v.status in ("draft", "sent")),
+    }
+
+
+def save_clarification_drafts(workspace_id: str, tender_id: str, created_by: str) -> dict[str, int]:
+    """Persist the derived pack. Idempotent, and it never touches a question already asked.
+
+    Two writes, in this order for a reason: upsert first, then drop the drafts the schedule no
+    longer raises. Dropping first would leave a window in which a concurrent read shows an empty
+    pack for a tender that has questions.
+    """
+    assessment = assess_schedule(workspace_id, tender_id)
+    pack = build_queries(assessment["lines"])
+
+    db.upsert_clarification_drafts(workspace_id, tender_id, [
+        {
+            "param_key": q.param_key,
+            "kind": q.kind.value,
+            "query_text": q.text,
+            "required_display": q.required_display,
+            "rationale": q.rationale,
+            "line_ids": [ref.line_id for ref in q.lines if ref.line_id],
+            "created_by": created_by,
+        }
+        for q in pack.queries
+    ])
+    db.delete_stale_clarification_drafts(
+        workspace_id, tender_id, [q.param_key for q in pack.queries]
+    )
+    return {"saved": len(pack.queries)}
 
 
 def _anchor_label(row: dict) -> str:

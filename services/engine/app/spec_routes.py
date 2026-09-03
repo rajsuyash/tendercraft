@@ -7,6 +7,7 @@ still renders during a model outage — reporting `unknown`, which is the truth.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends
@@ -127,6 +128,108 @@ def get_schedule(tender_id: str, user: CurrentUser) -> dict:
     if not db.get_tender(tender_id, user.workspace_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found")
     return ok(spec_service.assess_schedule(user.workspace_id, tender_id))
+
+
+@router.get("/api/tenders/{tender_id}/clarifications")
+def get_clarifications(tender_id: str, user: CurrentUser) -> dict:
+    """The pre-bid questions this tender raises — UML ask 2, step 2 of their flow.
+
+    Read-only and model-free, like the schedule it derives from: a bidder deciding what to ask
+    before the clarification window closes must not be blocked by an outage.
+    """
+    if not db.get_tender(tender_id, user.workspace_id):
+        raise ApiError(404, "TENDER_NOT_FOUND", "tender not found")
+    return ok(spec_service.clarification_pack(user.workspace_id, tender_id))
+
+
+@router.post("/api/tenders/{tender_id}/clarifications")
+async def save_clarifications(tender_id: str, user: CurrentUser) -> dict:
+    """Persist the derived pack so questions can be tracked through to an answer.
+
+    Separate from the GET because the GET must stay side-effect-free — and because saving is
+    the point at which a derived list becomes a record someone is accountable for.
+    """
+    authz.check(user, authz.DRAFT)
+    if not db.get_tender(tender_id, user.workspace_id):
+        raise ApiError(404, "TENDER_NOT_FOUND", "tender not found")
+
+    def _run() -> dict:
+        saved = spec_service.save_clarification_drafts(
+            user.workspace_id, tender_id, user.user_id
+        )
+        return {**saved, **spec_service.clarification_pack(user.workspace_id, tender_id)}
+
+    return ok(await run_in_threadpool(_run))
+
+
+class ClarificationPatch(BaseModel):
+    """`exclude_unset` at the call site, not a None-filter: clearing an answer is a legitimate
+    correction, and a filter that drops nulls makes it unreachable (docs/known-pitfalls.md)."""
+
+    status: Literal["draft", "sent", "answered", "withdrawn"] | None = None
+    answer_text: str | None = Field(default=None, max_length=8000)
+    answer_source: Literal["portal", "email", "manual"] | None = None
+
+
+#: Mirrors `clarification_status` in migration 0038 and `QueryKind` in deterministic/. Three
+#: places, one vocabulary — a UI array mirroring a server enum WILL drift, so all three say so.
+_TERMINAL = ("answered", "withdrawn")
+
+
+@router.patch("/api/clarifications/{clarification_id}")
+def update_clarification(
+    clarification_id: str, body: ClarificationPatch, user: CurrentUser
+) -> dict:
+    """Record what the bidder did with a question, and what the buyer said back.
+
+    We never post to GeM (G-1/G-8), so `sent` is the bidder telling us they posted it. Every
+    transition is audited: a clarification changes what the tender requires, which makes it
+    exactly the kind of event E-FR4 exists to keep.
+    """
+    authz.check(user, authz.DRAFT)
+    existing = db.get_clarification(clarification_id, user.workspace_id)
+    if not existing:
+        raise ApiError(404, "CLARIFICATION_NOT_FOUND", "clarification not found")
+
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        raise ApiError(400, "CLARIFICATION_EMPTY_PATCH", "nothing to update")
+
+    status = patch.get("status")
+    now = datetime.now(UTC).isoformat()
+
+    if status == "sent" and not existing.get("sent_at"):
+        patch["sent_at"] = now
+    if status == "answered":
+        # The database refuses this too; a named 400 is a usable error and a PostgREST
+        # constraint violation is not.
+        answer = patch.get("answer_text", existing.get("answer_text"))
+        if not (answer or "").strip():
+            raise ApiError(400, "CLARIFICATION_NO_ANSWER",
+                           "recording an answer needs the buyer's reply text")
+        patch.setdefault("answer_source", "portal")
+        patch["answered_at"] = now
+        patch.setdefault("sent_at", existing.get("sent_at") or now)
+    if status == "draft" and existing.get("status") in _TERMINAL:
+        raise ApiError(409, "CLARIFICATION_NOT_REOPENABLE",
+                       f"a clarification already {existing['status']} cannot return to draft")
+
+    updated = db.update_clarification(clarification_id, user.workspace_id, patch)
+    if not updated:
+        raise ApiError(500, "CLARIFICATION_UPDATE_FAILED", "could not update the clarification")
+
+    db.write_audit(
+        user.workspace_id, user.user_id, "clarification_updated", "clarification",
+        clarification_id,
+        before={"status": existing.get("status"), "answer_text": existing.get("answer_text")},
+        after={"status": updated.get("status"), "answer_text": updated.get("answer_text")},
+    )
+    return ok({
+        "id": clarification_id, "status": updated.get("status"),
+        "answer_text": updated.get("answer_text"),
+        "answer_source": updated.get("answer_source"),
+        "sent_at": updated.get("sent_at"), "answered_at": updated.get("answered_at"),
+    })
 
 
 @router.post("/api/tenders/{tender_id}/schedule/extract")

@@ -151,14 +151,28 @@ export function ScheduleFit({
           </h1>
           <p className="mt-1 line-clamp-2 text-sm text-muted">{tenderTitle}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => void extract()}
-          disabled={working || lines.length === 0}
-          className="rounded-control bg-primary px-3 py-1.5 text-sm font-medium text-on-primary disabled:opacity-50"
-        >
-          {working ? "Reading schedule…" : "Read specifications"}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* The deviations below are exactly the pre-bid questions (UML ask 2). This screen
+              computed them; S21 is where they become something a buyer can be asked. */}
+          <Link
+            href={`/tenders/${tenderId}/clarifications`}
+            data-clarifications-link
+            className="rounded-control border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-alt"
+          >
+            Pre-bid questions
+            {summary.not_creatable > 0 && (
+              <span className="ml-1.5 tabular-nums text-danger">{summary.not_creatable}</span>
+            )}
+          </Link>
+          <button
+            type="button"
+            onClick={() => void extract()}
+            disabled={working || lines.length === 0}
+            className="rounded-control bg-primary px-3 py-1.5 text-sm font-medium text-on-primary disabled:opacity-50"
+          >
+            {working ? "Reading schedule…" : "Read specifications"}
+          </button>
+        </div>
       </header>
 
       {!schedule.has_capability && (
