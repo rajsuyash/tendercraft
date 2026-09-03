@@ -97,6 +97,21 @@ def _connector(path: str, params: dict[str, Any] | None = None, base: str = "") 
     return body["data"]
 
 
+#: Sources are not interchangeable once a market has more than one. `/bid-results` and
+#: `/bid-status` are GeM-connector endpoints; `/awards` is the licensed connector's. Picking
+#: "the first source with a URL" worked while India had exactly one and would silently start
+#: calling the wrong service the moment GEM_CONNECTOR_URL was the unset one — a 404 wearing a
+#: configuration problem's clothes.
+QUERYABLE_AWARD_SOURCE = "gem_bidplus"
+LICENSED_AWARD_SOURCE = "bidassist"
+
+
+def _base_for(source_id: str, market: str) -> str:
+    """This source's connector URL, or "" so `_connector` raises its named error."""
+    return next((s.connector_url for s in for_market(market)
+                 if s.source_id == source_id and s.connector_url), "")
+
+
 def _to_row(record: dict[str, Any]) -> dict[str, Any]:
     """Connector record → `opportunities` row. Absent stays absent (F-FR1).
 
@@ -472,8 +487,7 @@ def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
     the one asked for, which would be new behaviour. The local relevance check stays in place
     under both modes for exactly that reason — it is the guarantee, not the optimisation.
     """
-    sources = for_market(market)
-    base = next((s.connector_url for s in sources if s.connector_url), "")
+    base = _base_for(QUERYABLE_AWARD_SOURCE, market)
     params = {
         "q": query, "status": "bid_awarded",
         "max_results": max_results, "max_pages": AWARD_PAGE_CAP,
@@ -536,6 +550,167 @@ def refresh_awards(query: str, max_results: int = AWARD_RESULT_CAP,
     }
 
 
+# ── award history from a licensed aggregator ─────────────────────────────────────────────────
+#
+# The second award source, and it is a different SHAPE of source, not just a second URL.
+#
+#   GeM        is asked a question — `/bid-results?q=wire+rope` — and answers with matches.
+#   BidAssist  is a feed. There is no query parameter; a sweep reads the whole saved feed and
+#              the vendor decides what is in it (G-9 caveat, `registry.py` and
+#              docs/discovery/source-bidassist.md).
+#
+# So this is a sweep, not a search, and nothing here filters: every record the feed returns is
+# stored. `_is_on_topic` exists because GeM's full-text search ORs the query's words and
+# returns HDMI cable for "wire rope"; there is no query here to be loose about, and applying a
+# relevance rule in this tree would be an exclusion no user authored. The search-side rule
+# still applies at READ time — `postgrest_filter` runs on `/api/price-history`, so a category
+# search sees only matching rows whichever feed they arrived on.
+
+#: A full feed sweep. Costs about `pages` requests to the vendor, not to a government portal.
+LICENSED_AWARD_PAGES = int(os.environ.get("BIDASSIST_AWARD_PAGES", "40"))
+
+#: The interactive path gets a smaller budget than the scheduled one: a user pressing "fetch"
+#: should not wait on a 40-page sweep, and the cron run covers the tail within the day.
+LICENSED_AWARD_PAGES_INTERACTIVE = int(
+    os.environ.get("BIDASSIST_AWARD_PAGES_INTERACTIVE", "8")
+)
+
+
+def _award_ref(record: dict[str, Any]) -> str | None:
+    """The corpus key for one award record.
+
+    Both halves are load-bearing, and each was a real failure somewhere else in this codebase:
+
+    * The **tender** reference alone is not unique — a tender can be awarded in several
+      packages, and keying on it would upsert them over each other. `(source_id,
+      portal_ref_no)` is a unique constraint, so a wrong merge deletes an award silently
+      (F-AC4 is zero-tolerance for exactly this).
+    * The **award** reference alone is not unique either, on an aggregated feed: it is issued
+      by whichever portal published it, and two portals will eventually issue the same number
+      (docs/discovery/source-bidassist.md). The tender reference already carries the host.
+    """
+    tender_ref = (record.get("portal_ref_no") or "").strip()
+    award_ref = (record.get("award_ref") or "").strip()
+    if tender_ref and award_ref:
+        return f"{tender_ref}#{award_ref}"
+    return tender_ref or award_ref or None
+
+
+def _award_row(record: dict[str, Any], source_id: str) -> dict[str, Any] | None:
+    """One connector award record → an `award_results` row. Absent stays absent.
+
+    `quantity` is never written: this feed does not publish it, and the implied unit rate is
+    computed from it. A guessed quantity would produce a per-unit benchmark someone prices a
+    real bid against — the one number `deterministic/price_history.py` exists to refuse.
+    """
+    ref = _award_ref(record)
+    if not ref:
+        return None
+    categories = [c for c in (record.get("categories") or []) if c]
+    return {
+        "source_id": source_id,
+        "portal_ref_no": ref,
+        # Joined with commas because that is how GeM writes a multi-item bundle, and
+        # `Award.is_single_category` reads a comma as "these are unrelated products". A
+        # two-category award IS a bundle, so it must suppress the unit rate exactly as GeM's
+        # comma-joined string does.
+        "category": ", ".join(categories) or None,
+        "department": record.get("authority"),
+        "bid_end_date": None,
+        # What this source actually publishes: when the contract was awarded, not when bidding
+        # closed. Its own column since migration 0037; `observed_date` is what queries sort on.
+        "award_date": record.get("contract_date"),
+        "stage": "bid_awarded",
+        "participants": int(record.get("participant_count") or 0),
+        "source_url": record.get("source_url"),
+        "fetched_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _award_ladder(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """The price rows for one award. Silence is preserved, not filled in.
+
+    A bidder with no published price is dropped — `award_prices.total_price` is `not null`, and
+    a priceless row would contribute nothing to a price history while inflating every count on
+    the screen. How many bidders there were is already stored on the result itself.
+    """
+    rows = []
+    for row in record.get("ladder") or []:
+        if row.get("total_price") is None or not row.get("seller"):
+            continue
+        rows.append({
+            "seller": row["seller"],
+            # None, never False: this feed does not publish MSE status, and False would state
+            # that a named company is not a small enterprise (migration 0037).
+            "mse": row.get("mse"),
+            "total_price": row["total_price"],
+            # None where the source published no ladder position. `awarded` is what identifies
+            # the winner then; sorting by price and calling the cheapest L1 would invent one.
+            "rank": row.get("rank"),
+            "offered_item": row.get("offered_item"),
+            "awarded": bool(row.get("awarded")),
+        })
+    return rows
+
+
+def refresh_licensed_awards(market: str = "IN",
+                            max_pages: int | None = None) -> dict[str, Any]:
+    """Sweep the licensed award feed into the shared corpus.
+
+    Returns a report rather than raising when the source is not configured: this runs from the
+    scheduler beside other jobs, and one unset environment variable must not take the rest of
+    the sweep down with it. `configured: false` in the report is the visible form of what would
+    otherwise be the silent absence `GEM_CONNECTOR_URL` already taught us to fear.
+    """
+    source = next((s for s in for_market(market)
+                   if s.source_id == LICENSED_AWARD_SOURCE and s.connector_url), None)
+    if source is None:
+        return {"source_id": LICENSED_AWARD_SOURCE, "configured": False, "cleared": False,
+                "stored": 0, "skipped_no_ref": 0, "records": 0}
+
+    if not source.display_reviewed.strip():
+        # Acquisition is cleared; showing it to a customer is not. The price screen is a
+        # customer surface, so this stops here rather than at the screen — a corpus that
+        # already holds the rows is one `postgrest_filter` away from displaying them, and the
+        # gate would then depend on every future read path remembering it exists.
+        log.info("licensed award sweep declined: %s has no display review on file",
+                 source.source_id)
+        return {"source_id": source.source_id, "configured": True, "cleared": False,
+                "stored": 0, "skipped_no_ref": 0, "records": 0,
+                "reason": "onward display of this licensed feed has not been reviewed "
+                          "(registry.display_reviewed is blank)"}
+
+    data = _connector("/awards", {"max_pages": max_pages or LICENSED_AWARD_PAGES},
+                      base=source.connector_url)
+
+    stored, skipped = 0, 0
+    for record in data.get("records") or []:
+        row = _award_row(record, source.source_id)
+        if row is None:
+            # No stable key means the row re-inserts itself on every sweep. Counted, not hidden:
+            # a rising number here is the source changing shape under us.
+            skipped += 1
+            continue
+        result_id = db.upsert_award_result(row)
+        if result_id:
+            db.replace_award_prices(result_id, _award_ladder(record))
+            stored += 1
+
+    return {
+        "source_id": source.source_id,
+        "configured": True,
+        "cleared": True,
+        "stored": stored,
+        "skipped_no_ref": skipped,
+        "records": data.get("count", 0),
+        # The vendor's own saved-query id and whether the sweep reached the end of it. Both are
+        # reported for the same reason: feed scope is somebody else's setting, and a truncated
+        # sweep reads exactly like a quiet market.
+        "feed_source_id": data.get("feed_source_id"),
+        "complete": bool(data.get("complete")),
+    }
+
+
 def verify_category(gem_name: str, market: str = "IN") -> dict[str, Any]:
     """Does GeM recognise this exact category name, and how many awards sit behind it?
 
@@ -552,8 +727,7 @@ def verify_category(gem_name: str, market: str = "IN") -> dict[str, Any]:
     `recognised: false` is a fact about the name, never an error: the caller stores the row
     unverified and shows it as such.
     """
-    sources = for_market(market)
-    base = next((s.connector_url for s in sources if s.connector_url), "")
+    base = _base_for(QUERYABLE_AWARD_SOURCE, market)
     data = _connector("/bid-results", {
         "q": gem_name, "status": "bid_awarded", "search_type": "exact",
         "max_results": 1, "max_pages": 1,
@@ -569,6 +743,5 @@ def verify_category(gem_name: str, market: str = "IN") -> dict[str, Any]:
 
 def bid_stage(portal_ref_no: str, market: str = "IN") -> dict[str, Any]:
     """Ask the connector how far one bid has got. Raises if no connector serves this market."""
-    sources = for_market(market)
-    base = next((s.connector_url for s in sources if s.connector_url), "")
+    base = _base_for(QUERYABLE_AWARD_SOURCE, market)
     return _connector("/bid-status", {"ref": portal_ref_no}, base=base)

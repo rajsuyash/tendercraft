@@ -4,12 +4,15 @@ import { useState } from "react";
 
 export type AwardRow = {
   portal_ref_no: string;
+  source_id: string;
   category: string | null;
   department: string | null;
   quantity: number | null;
-  bid_end_date: string | null;
+  /** Bid close where the portal publishes it, contract award otherwise. */
+  award_date: string | null;
   winner: string | null;
-  winner_is_mse: boolean;
+  /** null = this portal does not publish MSE status. Not the same as "no". */
+  winner_is_mse: boolean | null;
   winning_price: number | null;
   runner_up_price: number | null;
   implied_unit_price: number | null;
@@ -28,9 +31,11 @@ export type PriceSummary = {
   typical_unit_price: number | null;
   single_category_awards: number;
   mse_wins: number;
+  mse_unknown: number;
   first_award: string | null;
   last_award: string | null;
   min_awards_for_typical: number;
+  by_source: Record<string, number>;
 };
 
 export type PriceHistoryData = {
@@ -46,6 +51,21 @@ const inr = (n: number | null) =>
     : `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 const day = (iso: string | null) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—");
+
+/**
+ * Which portal published this award.
+ *
+ * Read off the reference itself rather than mapped from the feed it arrived on: an aggregated
+ * feed carries ten portals, so naming the feed would tell the user nothing about where the
+ * price came from — and naming the vendor would credit a supply chain the buyer has never
+ * heard of. References from an aggregated source are host-qualified precisely so this is a
+ * fact we already hold rather than a lookup table someone has to maintain.
+ */
+const portalOf = (a: AwardRow) => {
+  const head = a.portal_ref_no.split("/")[0] ?? "";
+  if (head.includes(".")) return head.toLowerCase();
+  return a.source_id === "gem_bidplus" ? "GeM" : head || "—";
+};
 
 /**
  * Historical award prices for a product category (UML ask 5).
@@ -83,7 +103,7 @@ export function PriceHistory({ initial }: { initial: PriceHistoryData }) {
       });
       const body = await r.json().catch(() => null);
       if (!body?.ok) {
-        setNote(body?.error?.message ?? "Could not reach GeM.");
+        setNote(body?.error?.message ?? "Could not reach the portals.");
         return;
       }
       // The discard count is said out loud, not hidden. GeM's search matches any word in the
@@ -92,11 +112,29 @@ export function PriceHistory({ initial }: { initial: PriceHistoryData }) {
       const kept = body.data.stored as number;
       const offTopic = (body.data.off_topic ?? 0) as number;
       const total = (body.data.portal_total_matching as number).toLocaleString("en-IN");
+      // A second source that failed or is not configured is named. A silent zero from it is
+      // indistinguishable from a feed with nothing new in it, and the user would read the
+      // shortfall as the market being quiet.
+      const feed = (body.data.sources ?? []).find(
+        (s: { mode: string }) => s.mode === "feed",
+      ) as
+        | { stored?: number; configured?: boolean; cleared?: boolean; error?: string }
+        | undefined;
+      const feedNote = feed?.error
+        ? ` The wider portal feed could not be reached this time.`
+        : feed?.configured === false
+          ? ` Only GeM was read — the wider portal feed is not configured.`
+          : feed?.cleared === false
+            ? ` Only GeM was read — the wider portal feed is awaiting a licence review.`
+            : feed?.stored
+              ? ` ${feed.stored} more came from other Indian portals.`
+              : "";
       setNote(
         `Kept ${kept} award${kept === 1 ? "" : "s"}` +
           (offTopic
             ? ` — ${offTopic} more came back for this search but were not ${q.trim()}, because GeM matches any word in it.`
-            : ` — GeM lists ${total} for this search.`),
+            : ` — GeM lists ${total} for this search.`) +
+          feedNote,
       );
       await load(q);
     } finally {
@@ -113,7 +151,8 @@ export function PriceHistory({ initial }: { initial: PriceHistoryData }) {
           What tenders like this closed at
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-muted">
-          Published GeM award prices — the winner, what they bid, and what the runner-up bid.
+          Published award prices from GeM and other Indian portals — the winner, what they bid,
+          and what the runner-up bid where the portal published a ladder.
         </p>
       </header>
 
@@ -143,7 +182,7 @@ export function PriceHistory({ initial }: { initial: PriceHistoryData }) {
           data-fetch-more
           className="rounded-control bg-primary px-3 py-2 text-sm font-medium text-on-primary disabled:opacity-50"
         >
-          Fetch from GeM
+          Fetch latest
         </button>
       </div>
       {note && (
@@ -183,12 +222,30 @@ export function PriceHistory({ initial }: { initial: PriceHistoryData }) {
         />
         <Stat
           label="Won by an MSE"
-          value={s.with_published_price ? `${s.mse_wins}/${s.with_published_price}` : "—"}
+          value={
+            s.with_published_price
+              ? `${s.mse_wins}/${s.with_published_price - s.mse_unknown}`
+              : "—"
+          }
+          // The denominator excludes what nobody published, and says so. Counting unknowns as
+          // "not an MSE" would report large-firm wins that no portal ever stated.
           detail={
-            s.first_award ? `${day(s.first_award)} – ${day(s.last_award)}` : "no awards yet"
+            s.mse_unknown
+              ? `${s.mse_unknown} portal${s.mse_unknown === 1 ? "" : "s do"}n't publish this`
+              : s.first_award
+                ? `${day(s.first_award)} – ${day(s.last_award)}`
+                : "no awards yet"
           }
         />
       </section>
+
+      {Object.keys(s.by_source).length > 1 && (
+        <p data-price-sources className="mt-3 text-xs text-muted">
+          Blended across {Object.entries(s.by_source)
+            .map(([id, n]) => `${n} from ${id === "gem_bidplus" ? "GeM" : "other Indian portals"}`)
+            .join(" and ")}. Each row names the portal it came from.
+        </p>
+      )}
 
       <p className="mt-4 rounded-card border border-border bg-surface-alt p-card text-sm text-muted">
         <span className="font-medium text-ink">Read these as schedule totals.</span> Each price
@@ -201,7 +258,8 @@ export function PriceHistory({ initial }: { initial: PriceHistoryData }) {
         <table className="w-full min-w-[56rem] text-sm">
           <thead className="sticky top-0 bg-surface">
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
-              <th className="py-2 pr-3 font-medium">Closed</th>
+              <th className="py-2 pr-3 font-medium">Dated</th>
+              <th className="py-2 pr-3 font-medium">Portal</th>
               <th className="py-2 pr-3 font-medium">Item</th>
               <th className="py-2 pr-3 font-medium">Buyer</th>
               <th className="py-2 pr-3 text-right font-medium">Qty</th>
@@ -215,7 +273,10 @@ export function PriceHistory({ initial }: { initial: PriceHistoryData }) {
           <tbody>
             {data.awards.map((a) => (
               <tr key={a.portal_ref_no} className="border-b border-border align-top">
-                <td className="py-2 pr-3 whitespace-nowrap text-muted">{day(a.bid_end_date)}</td>
+                <td className="py-2 pr-3 whitespace-nowrap text-muted">{day(a.award_date)}</td>
+                <td className="py-2 pr-3 whitespace-nowrap text-xs text-muted" data-portal>
+                  {portalOf(a)}
+                </td>
                 <td className="py-2 pr-3">
                   <span className="text-ink">{a.category ?? "—"}</span>
                   {a.source_url && (
@@ -235,7 +296,10 @@ export function PriceHistory({ initial }: { initial: PriceHistoryData }) {
                 </td>
                 <td className="py-2 pr-3">
                   <span className="text-ink">{a.winner ?? "—"}</span>
-                  {a.winner_is_mse && (
+                  {/* Rendered only on a published true. An unpublished status shows nothing —
+                      an absent chip is already "we are not telling you they are an MSE", while
+                      a "not MSE" chip would be a claim about a real company. */}
+                  {a.winner_is_mse === true && (
                     <span className="ml-1 rounded-full bg-info-bg px-1.5 py-0.5 text-[10px] font-medium text-info">
                       MSE
                     </span>
@@ -271,7 +335,7 @@ export function PriceHistory({ initial }: { initial: PriceHistoryData }) {
         {data.awards.length === 0 && (
           <p data-empty-state className="py-8 text-center text-sm text-muted">
             No award history stored for this search yet. Press{" "}
-            <span className="text-ink">Fetch from GeM</span> to pull published results.
+            <span className="text-ink">Fetch latest</span> to pull published results.
           </p>
         )}
       </div>

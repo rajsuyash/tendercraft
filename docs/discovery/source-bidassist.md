@@ -99,6 +99,27 @@ Handled three ways, none of which is a fix:
 writing? A scope we can print beside the feed is a scope a user can disagree with. A scope we
 cannot is an exclusion with no author.
 
+## The read/show split, and where the gate lives (2026-09-03)
+
+The price screen is wired to this source's `GET /awards` end to end and **ships switched off.**
+`registry.Source` gained `display_reviewed`, and this source's is blank.
+
+The distinction it encodes is the one this page has been circling. G-8 was ruled: we may
+**read** this feed. Nobody has read the partner agreement, which is what governs **showing** it
+to a customer who is not the licensee — and unlike GeM §8, which is a copyright policy on a
+public site and was settled once for both acquisition and display, this is a commercial
+contract where the two are different clauses.
+
+`refresh_licensed_awards` checks that field before it reaches the connector and returns
+`cleared: false` with a reason; the scheduled sweep and the `/prices` "Fetch latest" button both
+report it, and the screen says *only GeM was read — the wider portal feed is awaiting a licence
+review*. The gate sits at INGEST rather than at the screen on purpose: once these rows are in
+`award_results` they are one `postgrest_filter` away from a customer, and a gate at the screen
+would depend on every future read path remembering it exists.
+
+**To enable: read the agreement, then put a date and a name in that field.** One line, one
+deploy, and a ten-portal price history appears. Nothing else about it is pending.
+
 ## Reproduction terms — UNRESOLVED
 
 `source-gem.md` §8 settled GeM: store and display **facts, not expression**; deep-link the prose.

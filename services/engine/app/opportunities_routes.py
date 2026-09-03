@@ -8,9 +8,11 @@ all times: a filter you cannot see is indistinguishable from a bug that ate your
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Annotated, Literal
 
+import httpx
 from fastapi import APIRouter, Depends, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
@@ -22,6 +24,8 @@ from .deterministic.price_history import summarise, to_award
 from .discovery import ingest
 from .discovery.registry import REGISTRY, for_market
 from .envelope import ApiError, ok
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
@@ -424,17 +428,59 @@ async def refresh_price_history(
     `search_type=exact` when `q` is a registered category name (`/api/categories`): the portal
     filters, nothing is fetched to be discarded, and the same budget reaches years instead of
     weeks.
+
+    **Two sources, asked in the two different ways they accept.** GeM is queried with `q`;
+    the licensed aggregator has no query parameter at all — it is a feed, so it is swept and
+    the category search happens at read time on the stored corpus. The user presses one button
+    either way. A source that fails is reported in `sources` rather than raised, because the
+    alternative is that one unconfigured connector makes the other one's results unreachable.
     """
     authz.check(user, authz.DRAFT)
     _check_window(from_date, to_date)
     if search_type not in ("fullText", "exact"):
         raise ApiError(400, "BAD_SEARCH_TYPE", "search_type must be fullText or exact")
-    try:
-        return ok(await run_in_threadpool(
-            ingest.refresh_awards, q, max_results, "IN",
-            from_date or None, to_date or None, search_type))
-    except RuntimeError as exc:
-        raise ApiError(503, "CONNECTOR_UNAVAILABLE", str(exc)) from exc
+
+    def work() -> dict:
+        try:
+            searched = ingest.refresh_awards(q, max_results, "IN",
+                                             from_date or None, to_date or None, search_type)
+        except RuntimeError as exc:
+            raise ApiError(503, "CONNECTOR_UNAVAILABLE", str(exc)) from exc
+
+        try:
+            # Interactive budget: the scheduled sweep reads the whole feed, this one reads the
+            # newest pages so the button stays a button rather than becoming a wait.
+            swept = ingest.refresh_licensed_awards(
+                "IN", max_pages=ingest.LICENSED_AWARD_PAGES_INTERACTIVE)
+        except (RuntimeError, httpx.HTTPError) as exc:
+            # The licensed feed is the SECOND source. Its failure must not take away the first
+            # one's results — but it is named, because a quiet zero here is indistinguishable
+            # from a feed with nothing new in it.
+            log.warning("price history: licensed award sweep failed: %s", exc)
+            swept = {"source_id": ingest.LICENSED_AWARD_SOURCE, "configured": True,
+                     "stored": 0, "error": str(exc)}
+
+        return {
+            **searched,
+            # Total across sources, so the count the screen reports is the count of what was
+            # actually added.
+            "stored": searched["stored"] + swept.get("stored", 0),
+            "sources": [
+                {"source_id": ingest.QUERYABLE_AWARD_SOURCE, "mode": "search",
+                 "stored": searched["stored"], "off_topic": searched["off_topic"]},
+                {"source_id": swept.get("source_id"), "mode": "feed",
+                 "stored": swept.get("stored", 0),
+                 "configured": swept.get("configured", False),
+                 # Whether this source's data may be SHOWN, which is not the same permission as
+                 # being allowed to read it. Reported so a zero has a reason attached.
+                 "cleared": swept.get("cleared", False),
+                 "reason": swept.get("reason"),
+                 "complete": swept.get("complete"),
+                 "error": swept.get("error")},
+            ],
+        }
+
+    return ok(await run_in_threadpool(work))
 
 
 # ---------- the categories this seller is registered under (migration 0036) -----------------

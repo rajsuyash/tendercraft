@@ -34,15 +34,26 @@ _BUNDLE = re.compile(r",|\band\b|\+", re.I)
 
 @dataclass(frozen=True)
 class Award:
-    """One published result, flattened. `winning_price` is the L1 total for the schedule."""
+    """One published result, flattened. `winning_price` is the L1 total for the schedule.
+
+    **Two fields carry a source's silence rather than an answer**, because this corpus now
+    holds records from more than one feed and they do not publish the same things:
+
+    * `winner_is_mse` is `None` where the source does not publish MSE status at all. False
+      would be a claim about a named real company that nobody made.
+    * `award_date` is whichever date the source published — bid close on GeM, contract award
+      on an aggregated feed. The two are weeks apart and the corpus keeps them in separate
+      columns; this is the axis they share.
+    """
 
     portal_ref_no: str
+    source_id: str
     category: str | None
     department: str | None
     quantity: float | None
-    bid_end_date: str | None
+    award_date: str | None
     winner: str | None
-    winner_is_mse: bool
+    winner_is_mse: bool | None
     winning_price: float | None
     runner_up_price: float | None
     participants: int
@@ -99,7 +110,11 @@ def summarise(awards: Sequence[Award]) -> dict:
     wins = [a.winning_price for a in priced if a.winning_price]
     unit_rated = [a for a in priced if a.implied_unit_price is not None]
     units = [a.implied_unit_price for a in unit_rated if a.implied_unit_price is not None]
-    dates = sorted(a.bid_end_date for a in awards if a.bid_end_date)
+    dates = sorted(a.award_date for a in awards if a.award_date)
+
+    sources: dict[str, int] = {}
+    for a in awards:
+        sources[a.source_id] = sources.get(a.source_id, 0) + 1
 
     return {
         "awards": len(awards),
@@ -116,25 +131,45 @@ def summarise(awards: Sequence[Award]) -> dict:
         # data" when it usually means "these were bundled bids" — a different fact entirely.
         "single_category_awards": len(unit_rated),
         "mse_wins": sum(1 for a in priced if a.winner_is_mse),
+        # The denominator for the line above, and the same argument as `single_category_awards`:
+        # not every source publishes MSE status, so "2 of 20" would read as eighteen wins by
+        # large firms when most of the eighteen are simply unknown.
+        "mse_unknown": sum(1 for a in priced if a.winner_is_mse is None),
         "first_award": dates[0] if dates else None,
         "last_award": dates[-1] if dates else None,
         "min_awards_for_typical": MIN_AWARDS_FOR_TYPICAL,
+        # Which feeds these numbers came from. A blended median across portals is only
+        # defensible if the screen can say what it blended.
+        "by_source": sources,
     }
 
 
 def to_award(result: dict, ladder: Sequence[dict]) -> Award:
-    """Flatten a stored result plus its price rows into one comparable record."""
+    """Flatten a stored result plus its price rows into one comparable record.
+
+    **The winner is read, never ranked by us.** Where the source published a ladder, L1 is the
+    winner and L2 is the runner-up. Where it published only who won — which is most of an
+    aggregated feed's single-bidder awards — the flagged row is the winner and there is NO
+    runner-up, because sorting the remaining bidders by price and calling the cheapest L2 would
+    invent a ladder position the portal never stated. `undercut_pct` then stays None, which is
+    the honest answer to "how much room did the winner have": unknown.
+    """
     ranked = sorted((r for r in ladder if r.get("rank")), key=lambda r: r["rank"])
-    win = ranked[0] if ranked else None
-    second = ranked[1] if len(ranked) > 1 else None
+    if ranked:
+        win, second = ranked[0], (ranked[1] if len(ranked) > 1 else None)
+    else:
+        win, second = next((r for r in ladder if r.get("awarded")), None), None
     return Award(
         portal_ref_no=result.get("portal_ref_no") or "",
+        source_id=result.get("source_id") or "gem_bidplus",
         category=result.get("category"),
         department=result.get("department"),
         quantity=_number(result.get("quantity")),
-        bid_end_date=result.get("bid_end_date"),
+        award_date=result.get("observed_date") or result.get("bid_end_date"),
         winner=(win or {}).get("seller"),
-        winner_is_mse=bool((win or {}).get("mse")),
+        # Tri-state on purpose: `bool(None)` would turn "this feed does not publish MSE status"
+        # into "this company is not an MSE".
+        winner_is_mse=None if win is None or win.get("mse") is None else bool(win["mse"]),
         winning_price=_number((win or {}).get("total_price")),
         runner_up_price=_number((second or {}).get("total_price")),
         participants=int(result.get("participants") or 0),

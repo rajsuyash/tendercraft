@@ -1976,22 +1976,26 @@ def search_award_results(query: str, limit: int = 60, from_date: str | None = No
     first would return nothing for any window that does not touch the present, which is every
     window someone opens this screen to compare against.
     """
+    # `observed_date` is the generated coalesce of bid close (GeM) and contract award (an
+    # aggregated feed) — migration 0037. Ordering and the window use it rather than
+    # `bid_end_date`, which is null for every record from a source that publishes only the
+    # award date: those rows would sort to the end and fall out of every window.
     params = {
-        "select": "id,portal_ref_no,category,department,quantity,bid_end_date,stage,"
-                  "participants,source_url,award_prices(seller,mse,total_price,rank,"
-                  "offered_item)",
-        "order": "bid_end_date.desc.nullslast",
+        "select": "id,source_id,portal_ref_no,category,department,quantity,bid_end_date,"
+                  "award_date,observed_date,stage,participants,source_url,"
+                  "award_prices(seller,mse,total_price,rank,offered_item,awarded)",
+        "order": "observed_date.desc.nullslast",
         "limit": str(limit),
     }
     if from_date:
-        params["bid_end_date"] = f"gte.{from_date}"
+        params["observed_date"] = f"gte.{from_date}"
     if to_date:
         # PostgREST takes repeated conditions on one column as `and`, but only when they are
-        # expressed through `and=()` — two `bid_end_date` keys in a dict would silently keep
+        # expressed through `and=()` — two `observed_date` keys in a dict would silently keep
         # the last one and quietly drop the lower bound.
-        bounds = [f"bid_end_date.gte.{from_date}"] if from_date else []
-        bounds.append(f"bid_end_date.lte.{to_date}")
-        params.pop("bid_end_date", None)
+        bounds = [f"observed_date.gte.{from_date}"] if from_date else []
+        bounds.append(f"observed_date.lte.{to_date}")
+        params.pop("observed_date", None)
         params["and"] = f"({','.join(bounds)})"
     # Word-boundary for a single word, phrase for several — `postgrest_filter` is the SQL half
     # of the rule in `deterministic/price_history.py`, which also decides what gets stored.

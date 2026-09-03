@@ -117,12 +117,23 @@ async def cron_sweep(authorization: str | None = Header(default=None)) -> dict:
         markets = sorted({m for w in workspaces for m in w["markets"]})
         swept = ingest.refresh_markets(markets, query="") if markets else {"markets": [],
                                                                            "failed": []}
+        # The licensed award feed has no query parameter, so nothing a user types can pull it —
+        # a category search reads the stored corpus. If this does not run on a clock, the price
+        # screen answers from whatever happened to be swept the day someone last pressed a
+        # button, which is the failure the opportunity feed already had in production.
+        awards: dict = {"stored": 0}
+        try:
+            awards = ingest.refresh_licensed_awards()
+        except Exception as exc:  # noqa: BLE001 — one source must not end the sweep
+            log.exception("licensed award sweep failed")
+            awards = {"stored": 0, "error": str(exc)}
+
         rematched = _sweep(
             [w["id"] for w in workspaces],
             ingest.recompute_matches,
             "recompute",
         )
-        return {"markets": markets, "swept": swept,
+        return {"markets": markets, "swept": swept, "awards": awards,
                 "workspaces": rematched["workspaces"],
                 "rematched": rematched["ran"], "failed": rematched["failed"],
                 "failures": rematched["failures"]}

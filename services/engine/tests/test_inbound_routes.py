@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -66,11 +67,18 @@ def post(client, payload: dict, *, secret: str = SECRET, header: str | None = No
                                 "Content-Type": "application/json"})
 
 
+#: A deadline a week out, not a fixed date. The parser will not raise an action for a date
+#: that has already passed, so a hardcoded one turns this suite red on the morning after it
+#: expires — which happened, and a permanently-failing test stops being read as a signal.
+_DUE = date.today() + timedelta(days=7)
+
+
 def mail(**over) -> dict:
     return {"to": f"{TOKEN}@inbound.tendercraft.test",
             "from": "noreply@gem.gov.in",
             "subject": "Clarification sought on your bid",
-            "text": "Submit the following documents by 02-09-2026 for GEM/2026/B/7876746.",
+            "text": f"Submit the following documents by {_DUE:%d-%m-%Y} "
+                    "for GEM/2026/B/7876746.",
             **over}
 
 
@@ -176,7 +184,7 @@ def test_a_clarification_creates_a_dated_action(client, store):
     body = post(client, mail()).json()["data"]
 
     assert body["action_created"] is True
-    assert body["due_at"] == "2026-09-02"
+    assert body["due_at"] == _DUE.isoformat()
     action = store["actions"][0]
     assert action["kind"] == "clarification_request"
     assert action["portal_ref_no"] == "GEM/2026/B/7876746"

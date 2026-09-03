@@ -2,8 +2,9 @@
  * S22 — award price history · `/prices`
  *
  * UML ask 5: "identifying and analysing the historical prices of the respective scheduled
- * items". Reads the shared award corpus (migration 0033); fetching more from GeM is an
- * explicit action on the client, because it costs two portal requests per award.
+ * items". Reads the shared award corpus (migrations 0033, 0037), which now holds awards from
+ * GeM and from a licensed multi-portal feed. Fetching more is an explicit action on the
+ * client, because the GeM half costs two portal requests per award.
  */
 import { PriceHistory, type PriceHistoryData } from "@/components/PriceHistory";
 import { engineFetch } from "@/lib/engine";

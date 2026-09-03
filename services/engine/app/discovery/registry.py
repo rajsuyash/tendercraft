@@ -24,6 +24,16 @@ class Source:
     #: Who checked the terms of use and when. A blank date means DO NOT ENABLE.
     terms_reviewed: str
     reviewer: str
+    #: When someone confirmed this source's data may be SHOWN to a customer, and by whom.
+    #:
+    #: Separate from `terms_reviewed` because acquisition and onward display are separate
+    #: permissions, and only a licensed source makes them come apart. Reading a public portal
+    #: and putting its facts on a screen were settled by one review (GeM §8). A licensed feed
+    #: is a contract between the vendor and US: reading it for our own purposes is squarely
+    #: within any licence, and showing it to a customer who is not the licensee is a term
+    #: somebody has to actually read. A blank date means acquire if you like, but never blend
+    #: into anything a customer sees.
+    display_reviewed: str = ""
     notes: str = ""
 
 
@@ -35,6 +45,8 @@ REGISTRY: tuple[Source, ...] = (
         tier="T2",
         terms_reviewed="2026-07-30",
         reviewer="engineering (agent-assisted probe, human sign-off pending)",
+        # Facts-and-deep-links, cleared by the owner's legal review (docs/feedback/usha-martin.md).
+        display_reviewed="2026-08-25",
         notes=(
             "Listing is session-gated; the anonymous WAF cookie is argued against G-8 in "
             "docs/discovery/source-gem.md. Content is copyright-restricted, so the feed shows "
@@ -51,6 +63,13 @@ REGISTRY: tuple[Source, ...] = (
         tier="T1-licensed",
         terms_reviewed="2026-08-29",
         reviewer="owner (G-8 divergence ratified; contract read pending for onward display)",
+        # DELIBERATELY BLANK. The G-8 ruling cleared ACQUISITION; nobody has read the partner
+        # agreement, which is what governs showing this data to a customer who is not the
+        # licensee. Filling this in is a human act following a contract read, not a config
+        # change — see `docs/discovery/source-bidassist.md` and assumption 10 in
+        # docs/feedback/usha-martin.md. Until it carries a date, the award sweep declines and
+        # says so, rather than quietly blending licensed data into a customer's price screen.
+        display_reviewed="",
         notes=(
             "Licensed aggregator (Nexizo/BidAssist partner API, key issued to DONNA AI LABS). "
             "Ten Indian portals observed in one 120-row sample, ireps.gov.in largest at 46% "
@@ -78,6 +97,8 @@ REGISTRY: tuple[Source, ...] = (
         tier="T1",
         terms_reviewed="2026-07-31",
         reviewer="engineering (agent-assisted probe, human sign-off pending)",
+        # Licence Ouverte / EU open data: reuse and redistribution are the licence's whole point.
+        display_reviewed="2026-07-31",
         notes=(
             "EU open data. No robots restrictions on api.ted.europa.eu, no authentication, no "
             "reproduction clause. Above EU threshold only, so smaller French tenders are out of "

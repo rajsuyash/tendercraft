@@ -44,29 +44,29 @@ def test_no_window_leaves_the_query_untouched(captured):
     """Additive: every existing caller must be unaffected."""
     db.search_award_results("wire rope", limit=60)
 
-    assert "bid_end_date" not in captured["params"]
+    assert "observed_date" not in captured["params"]
     assert "and" not in captured["params"]
 
 
 def test_a_lower_bound_alone_is_a_plain_condition(captured):
     db.search_award_results("wire rope", from_date="2021-04-01")
-    assert captured["params"]["bid_end_date"] == "gte.2021-04-01"
+    assert captured["params"]["observed_date"] == "gte.2021-04-01"
 
 
 def test_an_upper_bound_alone_is_a_plain_condition(captured):
     db.search_award_results("wire rope", to_date="2026-03-31")
-    assert captured["params"]["and"] == "(bid_end_date.lte.2026-03-31)"
+    assert captured["params"]["and"] == "(observed_date.lte.2026-03-31)"
 
 
 def test_BOTH_bounds_survive_as_one_and_clause(captured):
-    """The bug this guards: two `bid_end_date` keys in a dict keeps the LAST one, so the lower
+    """The bug this guards: two `observed_date` keys in a dict keeps the LAST one, so the lower
     bound disappears and a five-year window silently becomes "everything up to 2026"."""
     db.search_award_results("wire rope", from_date="2021-04-01", to_date="2026-03-31")
 
-    assert captured["params"]["and"] == "(bid_end_date.gte.2021-04-01,bid_end_date.lte.2026-03-31)"
+    assert captured["params"]["and"] == "(observed_date.gte.2021-04-01,observed_date.lte.2026-03-31)"
     # The plain key must be GONE, not merely overridden — leaving it would send a third,
     # contradictory condition alongside the pair.
-    assert "bid_end_date" not in captured["params"]
+    assert "observed_date" not in captured["params"]
 
 
 def test_the_window_is_applied_alongside_the_category_match(captured):
@@ -86,7 +86,7 @@ def test_the_window_is_in_the_QUERY_not_applied_after_the_limit(captured):
     db.search_award_results("wire rope", limit=60, from_date="2021-04-01")
 
     assert captured["params"]["limit"] == "60"
-    assert captured["params"]["bid_end_date"] == "gte.2021-04-01"
+    assert captured["params"]["observed_date"] == "gte.2021-04-01"
 
 
 # ---------- the boundary ----------

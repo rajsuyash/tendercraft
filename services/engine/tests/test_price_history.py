@@ -9,8 +9,9 @@ from app.deterministic.price_history import Award, summarise, to_award
 
 def _award(**over) -> Award:
     base = {
-        "portal_ref_no": "GEM/2026/B/1", "category": "Wire Rope IS 2266",
-        "department": "ONGC", "quantity": 100.0, "bid_end_date": "2026-01-01T00:00:00Z",
+        "portal_ref_no": "GEM/2026/B/1", "source_id": "gem_bidplus",
+        "category": "Wire Rope IS 2266",
+        "department": "ONGC", "quantity": 100.0, "award_date": "2026-01-01T00:00:00Z",
         "winner": "J.S TRADERS", "winner_is_mse": True, "winning_price": 10000.0,
         "runner_up_price": 12000.0, "participants": 3, "source_url": "https://x.test/1",
     }
@@ -98,9 +99,9 @@ def test_an_empty_history_reports_zeroes_not_an_error():
 
 def test_the_date_span_is_the_five_year_window_the_ask_names():
     s = summarise([
-        _award(bid_end_date="2021-04-01T00:00:00Z"),
-        _award(bid_end_date="2026-08-01T00:00:00Z"),
-        _award(bid_end_date="2023-01-01T00:00:00Z"),
+        _award(award_date="2021-04-01T00:00:00Z"),
+        _award(award_date="2026-08-01T00:00:00Z"),
+        _award(award_date="2023-01-01T00:00:00Z"),
     ])
     assert s["first_award"] == "2021-04-01T00:00:00Z"
     assert s["last_award"] == "2026-08-01T00:00:00Z"

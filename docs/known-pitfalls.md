@@ -277,6 +277,40 @@ Mumbai anyway); until then, count round trips like they cost money.
   portal's string, verify it at write time, and keep an unverified row VISIBLE — a category that
   silently matches nothing looks identical to a category with no history.
 
+## Adding a second source to a table shaped by the first (2026-09-03, migration 0037)
+
+- **A `not null default false` column turns the second source's SILENCE into the first
+  source's CLAIM.** `award_prices.mse` was correct while GeM was the only feed — GeM publishes
+  MSE status, so false is a fact. BidAssist publishes none, and the same column would have had
+  this product state that a named real company is *not* a small enterprise: a claim about a
+  third party that no source made, rendered with a price screen's authority. Same for
+  `rank not null`, where the fallback everyone reaches for — sort by price, call the cheapest
+  L1 — manufactures a ladder position the portal never published, and then `undercut_pct`
+  reports a competitive spread that does not exist. **Before wiring a second source into an
+  existing table, read every NOT NULL and every DEFAULT as a sentence and ask whether the new
+  source can honestly say it.** The ones that fail are exactly the fields the feature is about.
+- **Two sources' dates are not one column just because both are dates.** GeM publishes when
+  bidding closed; an aggregated feed publishes when the contract was awarded. Writing the
+  second into `bid_end_date` costs nothing on the day and silently makes every five-year
+  window compare two different milestones. Its own column plus a generated
+  `coalesce(...)` for the sortable axis is four lines of SQL and cannot drift, because nothing
+  writes the derived value.
+- **Order/window on the generated column, not the original.** `order=bid_end_date.desc` with a
+  source that only fills `award_date` sorts every new row to the end and drops it out of every
+  date window — a source that ingests perfectly and is invisible, with no error anywhere. Same
+  family as the closed-tender window: the failure is a query that still returns rows.
+- **"Which source" is not the same question as "which portal", once the source is an
+  aggregator.** Labelling a row with the feed it arrived on tells the user nothing (this feed
+  carries ten portals) and labelling it with the vendor names a supply chain the buyer has
+  never heard of. The reference is already host-qualified for dedup reasons — read the portal
+  off it, and no lookup table needs maintaining.
+- **Permission to READ a source is not permission to SHOW it.** For a public portal one review
+  settles both; for a licensed feed they are different clauses of a contract, and the gate
+  belongs at INGEST rather than at the screen — once the rows are in the shared corpus, they
+  are one query away from a customer, and the gate would then depend on every future read path
+  remembering it exists. `registry.Source.display_reviewed` is that gate: blank means acquire
+  if you like, never blend.
+
 ## Talking to the hosted database from a script (2026-08-25)
 
 - **`SUPABASE_DB_URL` is empty in `.env`, so `psql` silently targets a local socket** and fails
