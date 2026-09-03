@@ -311,6 +311,16 @@ Mumbai anyway); until then, count round trips like they cost money.
   remembering it exists. `registry.Source.display_reviewed` is that gate: blank means acquire
   if you like, never blend.
 
+## A success reported as a failure (2026-09-03)
+
+- **`tools/apply-migration.sh` tested `[ "$HTTP" != "200" ]`, and the Management API answers a
+  DDL batch with `201` and an empty result array.** So a migration that had just been applied to
+  production printed `FAILED — HTTP 201` and exited 1. This is the worst direction for a
+  deployment script to be wrong in: the change IS live, the operator is told it is not, and the
+  obvious next move is to run production DDL a second time. It survived because every earlier
+  migration happened to come back 200 — the check was never wrong until it was. **Accept the
+  class (`2??`), not the specimen**, on any status-code check against an API you do not own.
+
 ## Talking to the hosted database from a script (2026-08-25)
 
 - **`SUPABASE_DB_URL` is empty in `.env`, so `psql` silently targets a local socket** and fails
