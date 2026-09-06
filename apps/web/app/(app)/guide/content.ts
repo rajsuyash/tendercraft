@@ -281,7 +281,7 @@ export const FEATURES: { name: string; href?: string; what: string; detail?: str
     href: "/opportunities",
     what: "Tenders found for you, ranked, before anyone on your team goes looking.",
     detail:
-      "Swept from the portals your workspace watches and banded by relevance to your capability keywords. Your own rules can exclude what you never bid on — and the Excluded count stays visible from the feed, because a filter you cannot see is indistinguishable from a bug that ate your tenders. Assign an owner and star the ones you are pursuing.",
+      "Swept from the portals your workspace watches and banded by relevance to your capability keywords. India spans GeM and other Indian portals — Railways (IREPS), Telangana, Andhra Pradesh, Haryana, Rajasthan, SAIL, Coal India and CPPP among them — and each row names the portal you can open the notice on. Your own rules can exclude what you never bid on, and the Excluded count stays visible from the feed, because a filter you cannot see is indistinguishable from a bug that ate your tenders. Assign an owner and star the ones you are pursuing.",
   },
   {
     name: "Alerts",
@@ -313,7 +313,13 @@ export const FEATURES: { name: string; href?: string; what: string; detail?: str
     name: "Schedule fit",
     what: "Line by line: can we make this, and is it already listed?",
     detail:
-      "Each schedule line is compared against your capability envelope by arithmetic, not judgement, and lands on Published, Can be created, Deviation — clarification needed, or Not assessed. Every cell links back to the row it was read from. It gates nothing; it tells you where to look before the bid closes.",
+      "Each schedule line is compared against your capability envelope by arithmetic, not judgement, and lands on Published, Can be created, Deviation — clarification needed, or Not assessed. Every cell links back to the row it was read from. Anything needing clarification carries through to the pre-bid questions below. It gates nothing; it tells you where to look before the bid closes.",
+  },
+  {
+    name: "Pre-bid clarifications",
+    what: "The questions a tender raises, written for you, before the pre-bid window closes.",
+    detail:
+      "Every schedule line that came back Deviation or Not assessed becomes one question per parameter, folded across the lines it covers. The text is written from the comparator's own output, not generated — a pre-bid query goes to a public buyer over your name and becomes part of the tender record. Your capability never appears in the question: the buyer publishes their answers to every bidder, so a query naming your range hands it to a competitor. That range stays on this screen, marked internal. Copy the question out, post it on the portal yourself, then record the reply beside the lines it settles — nothing here changes a verdict on its own, and an empty list only means nothing you have recorded raised a question.",
   },
   {
     name: "Price history",
@@ -456,9 +462,9 @@ export const GUARANTEES: { title: string; detail: string }[] = [
       "No part of this system logs in to a procurement portal as you, and none of it ever will. Everything it reads is either a public page or something you forwarded to it yourself. So bid status is read from the portal's public record — it tells you evaluation has started, which is when buyers raise clarifications, and then tells you to go and look. The clarification itself sits in your portal inbox and only you can open it. A tool that implied otherwise would be worse than none, because you would stop checking.",
   },
   {
-    title: "It will not say “Published” unless you said so",
+    title: "It will not say you did something you did not do",
     detail:
-      "Catalogue status means the catalogue you recorded here, never a live check of your listings on the portal. We do not read your seller account.",
+      "“Published” means the catalogue you recorded here, never a live check of your listings — we do not read your seller account. “Sent” on a pre-bid question means you posted it on the portal and told us; nothing here posts on your behalf.",
   },
   {
     title: "It will not hide a tender you did not exclude",
