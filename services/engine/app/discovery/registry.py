@@ -24,15 +24,39 @@ class Source:
     #: Who checked the terms of use and when. A blank date means DO NOT ENABLE.
     terms_reviewed: str
     reviewer: str
-    #: When someone confirmed this source's data may be SHOWN to a customer, and by whom.
+    #: When someone confirmed this source's AWARD data may be shown to a customer, and by whom.
     #:
     #: Separate from `terms_reviewed` because acquisition and onward display are separate
     #: permissions, and only a licensed source makes them come apart. Reading a public portal
     #: and putting its facts on a screen were settled by one review (GeM §8). A licensed feed
     #: is a contract between the vendor and US: reading it for our own purposes is squarely
     #: within any licence, and showing it to a customer who is not the licensee is a term
-    #: somebody has to actually read. A blank date means acquire if you like, but never blend
-    #: into anything a customer sees.
+    #: somebody has to actually read.
+    #:
+    #: SCOPE — read this before adding a caller. It gates the PRICE HISTORY surface and nothing
+    #: else, and it is enforced in exactly one place, `ingest.refresh_licensed_awards`. That is
+    #: not an oversight waiting to be tidied up:
+    #:
+    #:   2026-08-29  f737145  BidAssist NOTICES enabled on the opportunity feed (G-8 ruled on)
+    #:   2026-09-03  53a000b  this field created, to ship the price screen gated
+    #:
+    #: The field postdates the notice decision by five days and was written for prices. An
+    #: architectural review read an earlier version of this comment as a universal rule,
+    #: concluded the feed was in violation, and proposed filtering un-reviewed sources out of
+    #: it — which would have removed roughly 57% of the Indian corpus (IREPS, Telangana, AP,
+    #: Haryana, SAIL, Coal India, Rajasthan, CPPP) from a live customer's feed to close a gap
+    #: that did not exist. Rejected by the decision owner, 2026-09-06.
+    #:
+    #: Why awards and notices legitimately differ: a notice is a public procurement fact the
+    #: issuing portal publishes for bidders to act on, and the feed shows facts and deep links
+    #: (efdc512 also took the vendor's name off that screen). An award ladder naming sellers and
+    #: their prices is the commercially valuable part of a licensed feed, and the part a licence
+    #: is most likely to restrict. Different exposure, different gate.
+    #:
+    #: The partner agreement is still unread (docs/feedback/usha-martin.md, assumption 10).
+    #: That is a commercial task and no code change substitutes for it. If reading it says the
+    #: notice feed must be gated too, that is a product decision with a named owner and a
+    #: visible-count requirement (S14-D2) — never a filter added while tidying.
     display_reviewed: str = ""
     notes: str = ""
 
