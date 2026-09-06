@@ -15,10 +15,34 @@ before any of this data is shown to UML. `docs/discovery/source-bidassist.md`.
 **Open for the owner, 2026-09-03 — one contract read, and ask 5 gets nine more portals.** The
 price screen is wired to the licensed feed end to end (§ask 5 below) and ships **switched off**:
 `registry.py`'s BidAssist row carries `display_reviewed=""`, the award sweep declines by name,
-and the screen says so. That field is the partner agreement, expressed as code. Reading it for
+and the screen says so. That field is the partner agreement expressed as code **for the award
+data specifically** — see the ruling below, because the original wording here said "the partner
+agreement, expressed as code" and that sentence, read broadly, later cost a day. Reading it for
 our own workspace was never in doubt; **showing it to UML, who are not the licensee, is what
 has never been checked** — and it is a commercial licence, so GeM's §8 posture does not carry
-over. Set a date in that field and the whole thing is live; nothing else is pending.
+over. Set a date in that field and the price screen is live; nothing else is pending on it.
+
+**Ruled 2026-09-06 — the opportunity feed is NOT gated on `display_reviewed`, deliberately.**
+An architectural review flagged that only `refresh_licensed_awards` checks the field and read
+the unenforced path as a compliance gap. It is not one, and the dates settle it: the field was
+created 2026-09-03 (`53a000b`) to ship the price screen gated, **five days after** notices went
+live on the feed (`f737145`, 2026-08-29). It postdates the notice decision and was written for
+prices. Gating the feed on it would have removed roughly 57% of the Indian corpus — IREPS,
+Telangana, AP, Haryana, SAIL, Coal India, Rajasthan, CPPP — from UML's screen, to close a gap
+that was an artefact of reading one docstring too broadly. Rejected by the decision owner.
+`registry.py` and `ingest.py` now state the field's scope so the same conclusion is not reached
+a third time; two independent readers reached it in one session.
+
+Why the two surfaces differ, recorded so the distinction survives: a notice is a public
+procurement fact the issuing portal publishes for bidders to act on, and the feed shows facts
+and deep links (`efdc512` also took the vendor's name off that screen). An award ladder naming
+sellers and their prices is the commercially valuable part of a licensed feed and the part a
+licence is most likely to restrict.
+
+**Assumption 10 is unchanged and remains the riskiest open item on this page.** Nobody has read
+the partner agreement. Cutting coverage was never a substitute for reading it, and the two must
+not be conflated again: one is a commercial task with a named owner, the other was a proposed
+product regression wearing a compliance argument.
 
 This is the first entry in `docs/feedback/`. The repo had no convention for recording what a
 customer actually said — design-partner language is already load-bearing in the discovery PRD
