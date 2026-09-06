@@ -669,10 +669,17 @@ def refresh_licensed_awards(market: str = "IN",
                 "stored": 0, "skipped_no_ref": 0, "records": 0}
 
     if not source.display_reviewed.strip():
-        # Acquisition is cleared; showing it to a customer is not. The price screen is a
-        # customer surface, so this stops here rather than at the screen — a corpus that
+        # Acquisition is cleared; showing AWARD DATA to a customer is not. The price screen is
+        # a customer surface, so this stops here rather than at the screen — a corpus that
         # already holds the rows is one `postgrest_filter` away from displaying them, and the
         # gate would then depend on every future read path remembering it exists.
+        #
+        # That argument does NOT extend to the opportunity feed, and its shape is exactly what
+        # makes it look like it should. Notices ship under a separate, EARLIER decision
+        # (f737145, five days before this field existed) and the feed is deliberately not gated
+        # on `display_reviewed`. Read the SCOPE note on `Source.display_reviewed` before
+        # changing either — a review already made this leap once and the resulting proposal
+        # would have cut ~57% of the Indian feed.
         log.info("licensed award sweep declined: %s has no display review on file",
                  source.source_id)
         return {"source_id": source.source_id, "configured": True, "cleared": False,
