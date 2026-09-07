@@ -200,3 +200,81 @@ def test_pursue_refuses_a_member_who_cannot_draft(reader_client, monkeypatch):
     r = reader_client.post("/api/opportunities/o-1/pursue")
 
     assert r.status_code == 403
+
+
+# ---------- ingest links the pursuit ----------
+
+from app import tenders  # noqa: E402
+
+
+def _pursuit(**opp):
+    """A pursuit in the shape `db.get_pursuit` actually selects — `*,opportunities(*)`."""
+    base = {"portal_ref_no": "GEM/2026/B/7876746", "authority": "South Eastern Railway"}
+    base.update(opp)
+    return {"id": "p-1", "state": "pursuing", "opportunities": base}
+
+
+def test_ingest_backfills_the_reference_the_document_omitted(monkeypatch):
+    """The portal published the number. A package that does not restate it should not lose it."""
+    captured: dict = {}
+    monkeypatch.setattr(tenders.db, "get_pursuit", lambda ws, pid: _pursuit())
+    monkeypatch.setattr(tenders.db, "set_tender_meta",
+                        lambda tid, ws, num, auth: captured.update({"num": num, "auth": auth}))
+    linked: dict = {}
+    monkeypatch.setattr(tenders.db, "link_pursuit_tender",
+                        lambda ws, pid, tid: linked.update({"p": pid, "t": tid}))
+
+    tenders._apply_pursuit_context("ws-1", "p-1", "t-1", tender_number="", authority="")
+
+    assert captured == {"num": "GEM/2026/B/7876746", "auth": "South Eastern Railway"}
+    assert linked == {"p": "p-1", "t": "t-1"}
+
+
+def test_the_document_wins_over_the_portal(monkeypatch):
+    """The package is the legal artefact; the feed row is a listing ABOUT it. Document first."""
+    captured: dict = {}
+    monkeypatch.setattr(tenders.db, "get_pursuit", lambda ws, pid: _pursuit())
+    monkeypatch.setattr(tenders.db, "set_tender_meta",
+                        lambda tid, ws, num, auth: captured.update({"num": num, "auth": auth}))
+    monkeypatch.setattr(tenders.db, "link_pursuit_tender", lambda ws, pid, tid: None)
+
+    tenders._apply_pursuit_context("ws-1", "p-1", "t-1",
+                                   tender_number="DOC/REF/9", authority="Doc Authority")
+
+    assert captured == {"num": "DOC/REF/9", "auth": "Doc Authority"}
+
+
+def test_a_missing_pursuit_does_not_fail_the_upload(monkeypatch):
+    """Bookkeeping must never be able to break ingest — the package is the product."""
+    monkeypatch.setattr(tenders.db, "get_pursuit", lambda ws, pid: None)
+
+    def _boom(*a, **k):
+        raise AssertionError("must not link against a pursuit that could not be read")
+
+    monkeypatch.setattr(tenders.db, "link_pursuit_tender", _boom)
+    tenders._apply_pursuit_context("ws-1", "p-gone", "t-1", tender_number="", authority="")
+
+
+def test_a_broken_link_write_does_not_fail_the_upload(monkeypatch):
+    monkeypatch.setattr(tenders.db, "get_pursuit", lambda ws, pid: _pursuit())
+    monkeypatch.setattr(tenders.db, "set_tender_meta", lambda *a, **k: None)
+
+    def _boom(*a, **k):
+        raise RuntimeError("postgrest is down")
+
+    monkeypatch.setattr(tenders.db, "link_pursuit_tender", _boom)
+    tenders._apply_pursuit_context("ws-1", "p-1", "t-1", tender_number="", authority="")
+
+
+def test_nothing_is_written_when_neither_source_states_anything(monkeypatch):
+    """An empty write is a wasted round trip and an update with nothing in it."""
+    monkeypatch.setattr(tenders.db, "get_pursuit",
+                        lambda ws, pid: _pursuit(portal_ref_no=None, authority=None))
+
+    def _boom(*a, **k):
+        raise AssertionError("set_tender_meta called with nothing to set")
+
+    monkeypatch.setattr(tenders.db, "set_tender_meta", _boom)
+    monkeypatch.setattr(tenders.db, "link_pursuit_tender", lambda ws, pid, tid: None)
+
+    tenders._apply_pursuit_context("ws-1", "p-1", "t-1", tender_number="", authority="")

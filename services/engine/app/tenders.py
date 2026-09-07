@@ -94,7 +94,41 @@ def _relocate(row: dict, page_index: dict[int, SourcePage]) -> dict:
             "anchor_document": src.document if src else None}
 
 
-def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title: str) -> dict:
+def _apply_pursuit_context(
+    workspace_id: str, pursuit_id: str, tender_id: str,
+    tender_number: str, authority: str,
+) -> None:
+    """Link the pursuit to the tender it produced, and fill in what the document did not state.
+
+    Precedence is DOCUMENT FIRST, deliberately. The uploaded package is the legal artefact and
+    `extract_meta`/`display_title` already prefer it; the feed row is a portal listing *about*
+    that document. Only where the document is silent does the portal's own published reference
+    fill the gap — and it is a value the portal published, never an inference.
+
+    Non-fatal by construction, matching the schedule-persistence call below it: a pursuit that
+    cannot be read must never fail an upload. The package is the product; the link is
+    bookkeeping, and bookkeeping that can break ingest is worse than no bookkeeping.
+    """
+    try:
+        pursuit = db.get_pursuit(workspace_id, pursuit_id)
+        if pursuit is None:
+            # Not an error the user can act on, and not a reason to lose their upload. Logged
+            # because a rising count here means the feed and the pursuit table disagree.
+            log.warning("pursuit %s not found in workspace %s — tender %s ingested unlinked",
+                        pursuit_id, workspace_id, tender_id)
+            return
+        opp = pursuit.get("opportunities") or {}
+        number = tender_number or opp.get("portal_ref_no") or ""
+        auth = authority or opp.get("authority") or ""
+        if number or auth:
+            db.set_tender_meta(tender_id, workspace_id, number, auth)
+        db.link_pursuit_tender(workspace_id, pursuit_id, tender_id)
+    except Exception:  # noqa: BLE001 — an addition must not be able to break ingest
+        log.exception("pursuit linking failed for tender %s — ingest continues", tender_id)
+
+
+def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title: str,
+                    pursuit_id: str = "") -> dict:
     """CPU/IO-bound ingest pipeline — run off the event loop via a threadpool."""
     source_pages: list[SourcePage] = []
     for filename, data in documents:
@@ -137,6 +171,11 @@ def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title
     except Exception:  # noqa: BLE001 — an addition must not be able to break ingest
         log.exception("schedule persistence failed for tender %s — ingest continues",
                       tender["id"])
+    if pursuit_id:
+        # After the tender and its criteria exist: the link should point at a tender that is
+        # actually usable, not one that may still fail mid-ingest.
+        _apply_pursuit_context(workspace_id, pursuit_id, tender["id"],
+                               meta.tender_number or "", meta.authority or "")
     return {
         "tender_id": tender["id"],
         "title": display_title(meta, title),
@@ -157,7 +196,8 @@ def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title
 
 @router.post("/api/tenders/ingest")
 async def ingest_tender(
-    user: CurrentUser, file: Annotated[list[UploadFile], File()], title: str = ""
+    user: CurrentUser, file: Annotated[list[UploadFile], File()], title: str = "",
+    pursuit_id: str = "",
 ) -> dict:
     """Ingest a tender PACKAGE — NIT, annexures and BOQ sheets — as one tender.
 
@@ -179,7 +219,9 @@ async def ingest_tender(
         documents.append((upload.filename or "Untitled document", data))
     name = title or documents[0][0] or "Untitled tender"
     # Parsing + extraction + inserts are blocking; keep the event loop free.
-    return ok(await run_in_threadpool(_process_ingest, user.workspace_id, documents, name))
+    return ok(await run_in_threadpool(
+        _process_ingest, user.workspace_id, documents, name, pursuit_id,
+    ))
 
 
 # Sync bodies (only blocking db calls) -> FastAPI runs them in a threadpool, off the loop.
