@@ -1,6 +1,18 @@
 import { describe, expect, test } from "vitest";
 
-import { hasClosed } from "./OpportunityFeed";
+import { hasClosed, pursuitHref } from "./OpportunityFeed";
+
+describe("pursuitHref", () => {
+  test("carries the pursuit id to the upload screen", () => {
+    expect(pursuitHref("p-42")).toBe("/tenders/upload?pursuit=p-42");
+  });
+
+  test("encodes an id that would otherwise break the query string", () => {
+    // Ids are uuids today. They were also 'text' in three earlier tables before somebody
+    // changed one, and a href built by concatenation is the thing that silently breaks then.
+    expect(pursuitHref("a b&c=d")).toBe("/tenders/upload?pursuit=a%20b%26c%3Dd");
+  });
+});
 
 /** A fixed instant, so these never depend on when they are run. */
 const NOW = new Date("2026-08-25T12:00:00Z").getTime();

@@ -202,6 +202,38 @@ def test_pursue_refuses_a_member_who_cannot_draft(reader_client, monkeypatch):
     assert r.status_code == 403
 
 
+def test_get_pursuit_route_404s_for_another_workspaces_pursuit(client, monkeypatch):
+    monkeypatch.setattr(db, "get_pursuit", lambda ws, pid: None)
+
+    r = client.get("/api/pursuits/p-foreign")
+
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "NOT_FOUND"
+
+
+def test_get_pursuit_route_returns_the_context_the_upload_screen_needs(client, monkeypatch):
+    """Reference, authority, closing date and document links — the things a user would
+    otherwise re-type off the portal."""
+    monkeypatch.setattr(db, "get_pursuit", lambda ws, pid: {
+        "id": pid, "state": "pursuing", "tender_id": None,
+        "opportunities": {
+            "portal_ref_no": "GEM/2026/B/7876746",
+            "authority": "South Eastern Railway",
+            "title": "Supply of steel wire rope",
+            "closing_at": "2026-10-01T09:30:00Z",
+            "document_urls": ["https://bidplus.gem.gov.in/showbidDocument/1"],
+            "source_id": "gem_bidplus",
+        },
+    })
+
+    body = client.get("/api/pursuits/p-1").json()
+
+    assert body["ok"] is True
+    opp = body["data"]["opportunities"]
+    assert opp["portal_ref_no"] == "GEM/2026/B/7876746"
+    assert opp["document_urls"] == ["https://bidplus.gem.gov.in/showbidDocument/1"]
+
+
 # ---------- ingest links the pursuit ----------
 
 from app import tenders  # noqa: E402

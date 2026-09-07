@@ -305,6 +305,12 @@ const FR: Record<string, string> = {
   "Former member": "Ancien membre",
   "Watch this tender": "Suivre cette consultation",
   "Stop watching": "Ne plus suivre",
+  Pursue: "Répondre",
+  "Claiming…": "Enregistrement…",
+  "Claim this tender and upload its documents":
+    "Prendre en charge cette consultation et déposer son dossier",
+  "Could not claim this tender. Nothing was changed.":
+    "Impossible de prendre en charge cette consultation. Rien n'a été modifié.",
   "Could not route this tender. Nothing was changed.":
     "Impossible d'attribuer cette consultation. Rien n'a été modifié.",
 

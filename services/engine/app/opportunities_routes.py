@@ -316,6 +316,22 @@ async def pursue(opportunity_id: str, user: CurrentUser) -> dict:
     return ok(await run_in_threadpool(work))
 
 
+@router.get("/api/pursuits/{pursuit_id}")
+async def get_pursuit(pursuit_id: str, user: CurrentUser) -> dict:
+    """One pursuit with its opportunity embedded — the context the upload screen shows.
+
+    Reference, authority, closing date and the portal's own document links: everything the
+    bidder would otherwise copy off the portal by hand. Read from the pursuit rather than
+    passed through the URL, because a tender reference rendered as authoritative must come
+    from the row, not from a query string anyone can edit.
+    """
+    authz.check(user, authz.READ)
+    row = await run_in_threadpool(db.get_pursuit, user.workspace_id, pursuit_id)
+    if row is None:
+        raise ApiError(404, "NOT_FOUND", "no such pursuit in this workspace")
+    return ok(row)
+
+
 class NotificationSettingsIn(BaseModel):
     enabled: bool | None = None
     recipients: list[str] | None = None

@@ -310,17 +310,31 @@ function Coverage({
  * The star is a `button` with `aria-pressed` rather than a checkbox: it toggles workspace state
  * the moment it is clicked, and a checkbox implies a form that is submitted later.
  */
+/**
+ * Where a claimed opportunity sends the user next.
+ *
+ * Built rather than concatenated: the id is a uuid today, and a href assembled by hand is what
+ * silently breaks on the day one is not.
+ */
+export function pursuitHref(pursuitId: string): string {
+  return `/tenders/upload?pursuit=${encodeURIComponent(pursuitId)}`;
+}
+
 function Routing({
   match,
   members,
   disabled,
   onRoute,
+  onPursue,
+  pursuing,
   t,
 }: {
   match: Match;
   members: Member[];
   disabled: boolean;
   onRoute: (patch: { assigned_to?: string | null; watched?: boolean }) => void;
+  onPursue: () => void;
+  pursuing: boolean;
   t: (k: string) => string;
 }) {
   const owner = match.assigned_to ?? "";
@@ -362,6 +376,19 @@ function Routing({
           </option>
         ))}
       </select>
+      {/* Claim it and go straight to upload with the reference, authority and deadline already
+          carried across. Disabled while in flight: the endpoint is idempotent, but two clicks
+          producing two navigations is still a bug. */}
+      <button
+        type="button"
+        data-pursue={match.opportunity_id}
+        disabled={disabled || pursuing}
+        onClick={onPursue}
+        title={t("Claim this tender and upload its documents")}
+        className="shrink-0 rounded-control border border-hairline bg-surface px-2 py-1 text-[12px] text-ink hover:bg-surface-alt disabled:opacity-50"
+      >
+        {pursuing ? t("Claiming…") : t("Pursue")}
+      </button>
     </div>
   );
 }
@@ -406,6 +433,8 @@ export function OpportunityFeed({
   // away. Keyed by opportunity, overlaid on the server rows — never a second copy of the feed.
   const [routed, setRouted] = useState<Record<string, Partial<Match>>>({});
   const [routeError, setRouteError] = useState<string | null>(null);
+  /** The row whose claim is in flight, so only that button disables — not the whole table. */
+  const [pursuingId, setPursuingId] = useState<string | null>(null);
   const members = data.members ?? [];
 
   const items = useMemo(() => {
@@ -523,6 +552,32 @@ export function OpportunityFeed({
       // this feature exists to prevent (ET-7) — worse than a visible failure.
       setRouted((r) => ({ ...r, [id]: before ?? {} }));
       setRouteError(body?.error?.message ?? t("Could not route this tender. Nothing was changed."));
+    }
+  }
+
+  /** Claim an opportunity, then go to upload carrying its context.
+   *
+   *  We do not fetch the tender documents — this product never signs in to a portal (G-1/G-8).
+   *  What the pursuit removes is the re-typing: the reference, authority and deadline travel
+   *  with it, and everything downstream gets one key to join on.
+   *
+   *  On failure we stay put and say so. Navigating to an upload screen whose pursuit does not
+   *  exist would strand the user mid-flow with no way to read what went wrong. */
+  async function pursue(id: string) {
+    setPursuingId(id);
+    setRouteError(null);
+    try {
+      const res = await fetch(`/api/opportunities/${id}/pursue`, { method: "POST" });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.ok || !body?.data?.id) {
+        setRouteError(
+          body?.error?.message ?? t("Could not claim this tender. Nothing was changed."),
+        );
+        return;
+      }
+      router.push(pursuitHref(body.data.id));
+    } finally {
+      setPursuingId(null);
     }
   }
 
@@ -1026,6 +1081,8 @@ export function OpportunityFeed({
                           members={members}
                           disabled={busy}
                           onRoute={(patch) => void route(match.opportunity_id, patch)}
+                          onPursue={() => void pursue(match.opportunity_id)}
+                          pursuing={pursuingId === match.opportunity_id}
                           t={t}
                         />
                       </td>

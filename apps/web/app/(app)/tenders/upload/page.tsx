@@ -1,18 +1,59 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { StageProgress } from "@/components/StageProgress";
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+
+/** The pursuit context, in the shape `GET /api/pursuits/{id}` returns. */
+type Pursuit = {
+  id: string;
+  opportunities: {
+    portal_ref_no: string | null;
+    authority: string | null;
+    title: string | null;
+    closing_at: string | null;
+    document_urls: string[] | null;
+  } | null;
+};
 
 // S3 — Upload Tender. Drop the package -> engine ingest (OCR/extract) -> verification queue.
 // One tender per PACKAGE, not per file: annexures carry eligibility clauses, and three
 // separate tenders with three readiness checklists is not what the buyer published.
+//
+// `useSearchParams` forces a Suspense boundary in the App Router, so the page is split: the
+// default export supplies the boundary and UploadForm does the work.
 export default function UploadPage() {
+  return (
+    <Suspense fallback={<main className="mx-auto max-w-2xl p-page" />}>
+      <UploadForm />
+    </Suspense>
+  );
+}
+
+function UploadForm() {
   const router = useRouter();
+  const search = useSearchParams();
+  const pursuitId = search.get("pursuit") ?? "";
   const [status, setStatus] = useState<"idle" | "processing" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [illegible, setIllegible] = useState<{ tenderId: string; pages: string[] } | null>(null);
+  const [pursuit, setPursuit] = useState<Pursuit | null>(null);
+
+  // Fetched, never read out of the query string. A tender reference shown as authoritative has
+  // to come from the row; the URL only says WHICH row.
+  useEffect(() => {
+    if (!pursuitId) return;
+    let live = true;
+    void (async () => {
+      const r = await fetch(`/api/pursuits/${encodeURIComponent(pursuitId)}`);
+      const body = await r.json().catch(() => null);
+      if (live && r.ok && body?.ok) setPursuit(body.data as Pursuit);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [pursuitId]);
 
   async function upload(files: FileList) {
     const chosen = Array.from(files);
@@ -31,6 +72,10 @@ export default function UploadPage() {
     // The title is a fallback the engine uses only when no document states its own (the
     // first file is the notice by convention; ordering beyond that does not matter).
     form.append("title", first.name.replace(/\.[^.]+$/, ""));
+    // Links the resulting tender back to the opportunity it came from, and lets the engine fill
+    // in a reference or authority the document itself does not state. Document wins; the portal
+    // only fills gaps.
+    if (pursuitId) form.append("pursuit_id", pursuitId);
     const res = await fetch("/api/tenders/ingest", { method: "POST", body: form });
     const body = await res.json();
     if (!res.ok) {
@@ -56,6 +101,76 @@ export default function UploadPage() {
         The whole package at once — notice, annexures and BOQ sheets (PDF, XLSX, CSV) become one
         tender. Scanned pages route to manual review when text is illegible.
       </p>
+
+      {pursuit?.opportunities && (
+        <section
+          data-pursuit-context={pursuit.id}
+          className="mb-6 rounded-card border border-border bg-surface-alt p-card"
+        >
+          <p className="text-xs font-medium uppercase tracking-wide text-muted">
+            Uploading for
+          </p>
+          <p className="mt-1 font-heading text-base font-medium text-ink">
+            {pursuit.opportunities.title ?? "Tender"}
+          </p>
+          <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+            {pursuit.opportunities.portal_ref_no && (
+              <div className="flex gap-2">
+                <dt className="text-muted">Reference</dt>
+                <dd className="text-ink">{pursuit.opportunities.portal_ref_no}</dd>
+              </div>
+            )}
+            {pursuit.opportunities.authority && (
+              <div className="flex gap-2">
+                <dt className="text-muted">Authority</dt>
+                <dd className="text-ink">{pursuit.opportunities.authority}</dd>
+              </div>
+            )}
+            {pursuit.opportunities.closing_at && (
+              <div className="flex gap-2">
+                <dt className="text-muted">Closes</dt>
+                <dd className="text-ink">
+                  {new Date(pursuit.opportunities.closing_at).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    timeZone: "UTC",
+                  })}
+                </dd>
+              </div>
+            )}
+          </dl>
+
+          {(pursuit.opportunities.document_urls ?? []).length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                On the portal
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {(pursuit.opportunities.document_urls ?? []).map((url, i) => (
+                  <li key={url}>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline"
+                    >
+                      Document {i + 1} ↗
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Said out loud, in the same shape as "Published means recorded by you" on S20:
+              the user must never think we fetched these for them. */}
+          <p className="mt-3 text-xs text-muted">
+            We do not download these for you — this product never signs in to a portal. Open
+            each link, download the package, and drop it below.
+          </p>
+        </section>
+      )}
 
       <label
         data-dropzone
