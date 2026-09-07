@@ -284,6 +284,38 @@ async def patch_match(opportunity_id: str, body: MatchPatch, user: CurrentUser) 
     return ok(await run_in_threadpool(work))
 
 
+@router.post("/api/opportunities/{opportunity_id}/pursue")
+async def pursue(opportunity_id: str, user: CurrentUser) -> dict:
+    """Claim an opportunity from the feed and open a pursuit against it.
+
+    This is the missing arrow. `opportunities` is a shared corpus row and `tenders` is
+    workspace-private, and nothing joined them — so a client who found a tender here opened the
+    portal, downloaded the package, uploaded it back, and re-typed the reference, the authority
+    and the deadline, on every pursuit, with the discovery provenance lost each time.
+
+    Membership is not the check. The opportunity must be in THIS workspace's feed: the corpus is
+    shared and its ids are guessable, so a bare workspace check would let a caller open a
+    pursuit against a row their own rules keep off their screen. 404 rather than 403 for a
+    miss — a distinguishable 403 confirms the opportunity exists in someone else's feed.
+
+    We do not fetch the tender documents. The bidder downloads them from the portal and uploads
+    the package; this carries the reference, authority and deadline across so none of it is
+    re-typed, and gives everything downstream one key to join on (G-1/G-8 — this product never
+    signs in to a portal).
+
+    Idempotent: the unique key on (workspace_id, opportunity_id) makes a double-click one
+    pursuit, so no read-then-insert race with itself.
+    """
+    authz.check(user, authz.DRAFT)
+
+    def work() -> dict:
+        if db.get_match(user.workspace_id, opportunity_id) is None:
+            raise ApiError(404, "NOT_FOUND", "opportunity not in this workspace's feed")
+        return db.create_pursuit(user.workspace_id, opportunity_id, user.user_id)
+
+    return ok(await run_in_threadpool(work))
+
+
 class NotificationSettingsIn(BaseModel):
     enabled: bool | None = None
     recipients: list[str] | None = None

@@ -2108,6 +2108,24 @@ def set_match_stage(workspace_id: str, opportunity_id: str, stage: str, when_iso
     )
 
 
+def get_match(workspace_id: str, opportunity_id: str) -> dict | None:
+    """This workspace's feed row for one opportunity, or None.
+
+    Scoped by workspace only — deliberately NOT by the watched markets. `_market_scope` is a
+    DISPLAY filter and its own docstring says match rows are preserved when a country is
+    un-ticked, precisely because they carry the user's state. Letting a display preference
+    decide what a workspace may ACT on would mean un-ticking a country silently made a tender
+    the workspace had already starred or assigned unreachable.
+    """
+    rows = _rest(
+        "GET", "opportunity_matches",
+        params={"workspace_id": f"eq.{workspace_id}",
+                "opportunity_id": f"eq.{opportunity_id}",
+                "select": "*,opportunities(*)"},
+    ) or []
+    return rows[0] if rows else None
+
+
 # ---------- pursuits (0039) ----------
 def create_pursuit(workspace_id: str, opportunity_id: str, user_id: str) -> dict:
     """Claim an opportunity from the feed. Idempotent by the unique key, not by a read first.
