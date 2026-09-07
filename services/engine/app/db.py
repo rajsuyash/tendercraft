@@ -2106,3 +2106,57 @@ def set_match_stage(workspace_id: str, opportunity_id: str, stage: str, when_iso
                 "opportunity_id": f"eq.{opportunity_id}"},
         json={"last_stage": stage, "stage_checked_at": when_iso},
     )
+
+
+# ---------- pursuits (0039) ----------
+def create_pursuit(workspace_id: str, opportunity_id: str, user_id: str) -> dict:
+    """Claim an opportunity from the feed. Idempotent by the unique key, not by a read first.
+
+    `unique (workspace_id, opportunity_id)` plus `merge-duplicates` is what makes a double
+    click one pursuit. A read-then-insert would be a race with itself, and this endpoint is
+    reachable from a button.
+
+    `on_conflict` carries workspace_id because the engine writes with the service role and
+    bypasses RLS — a conflict target omitting the scope column can reassign another
+    workspace's row (docs/known-pitfalls.md, 0027).
+    """
+    rows = _rest(
+        "POST", "pursuits",
+        params={"on_conflict": "workspace_id,opportunity_id"},
+        json={"workspace_id": workspace_id, "opportunity_id": opportunity_id,
+              "created_by": user_id, "owner": user_id},
+        headers={"Prefer": "resolution=merge-duplicates,return=representation"},
+    ) or []
+    return rows[0] if rows else {}
+
+
+def get_pursuit(workspace_id: str, pursuit_id: str) -> dict | None:
+    """One pursuit with its corpus opportunity embedded.
+
+    Embedded rather than fetched separately: the caller wants the portal reference, authority
+    and closing date, and the entire point of a pursuit is that nobody re-types those.
+    """
+    rows = _rest(
+        "GET", "pursuits",
+        params={"workspace_id": f"eq.{workspace_id}", "id": f"eq.{pursuit_id}",
+                "select": "*,opportunities(*)"},
+    ) or []
+    return rows[0] if rows else None
+
+
+def link_pursuit_tender(workspace_id: str, pursuit_id: str, tender_id: str) -> dict | None:
+    """Attach the ingested tender and advance the state in the same write.
+
+    Both fields move together on purpose: `pursuits_ingested_has_a_tender` would still be
+    satisfied by setting the state first and the tender later, and the row would claim an
+    ingest that has not happened for however long the gap lasts.
+
+    Workspace-filtered so a foreign pursuit id cannot be bound to this workspace's tender.
+    """
+    rows = _rest(
+        "PATCH", "pursuits",
+        params={"workspace_id": f"eq.{workspace_id}", "id": f"eq.{pursuit_id}"},
+        json={"tender_id": tender_id, "state": "ingested"},
+        headers={"Prefer": "return=representation"},
+    ) or []
+    return rows[0] if rows else None
