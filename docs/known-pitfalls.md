@@ -321,6 +321,35 @@ Mumbai anyway); until then, count round trips like they cost money.
   migration happened to come back 200 — the check was never wrong until it was. **Accept the
   class (`2??`), not the specimen**, on any status-code check against an API you do not own.
 
+## The isolation suite points at PRODUCTION by default (found 2026-09-07)
+
+- **`tests/isolation/conftest.py` reads the repo-root `.env`, and `.env` is production.** Every
+  document says to run this suite against an ephemeral stack — `test-strategy.md`, the suite's
+  own docstrings, the known-pitfall two sections down about append-only `audit_events` making
+  those workspaces permanently undeletable. Nothing in the code makes it so. A developer who
+  follows the documented command `supabase start && ./tools/local-db.sh && uv run pytest
+  tests/isolation/` gets a local database built correctly and then a test run **against the
+  live project**, because `local-db.sh` takes `DB_URL`/`API_URL` arguments and the suite takes
+  its target from `.env` instead. The two halves of the same workflow read different sources.
+- **The symptom is a 401 that reads as a broken local stack.** `local-db.sh`'s final PostgREST
+  smoke check sends `.env`'s production anon key to `127.0.0.1` and gets
+  `PostgREST did not serve public.workspaces after the reload (last status 401)`. It looks like
+  the schema or the grants failed. The schema is fine; the key belongs to another server. Set
+  `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_ANON_JWT` and `SUPABASE_SERVICE_JWT` to the local
+  stack's values (`supabase status`) and the same command answers `ready after 1s`.
+- **`SUPABASE_ANON_JWT` must be overridden by name.** The suite resolves
+  `ENV.get("SUPABASE_ANON_JWT") or ENV.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")`, so exporting only
+  the `NEXT_PUBLIC_` name leaves the production JWT winning — the run still targets production
+  while looking overridden.
+- **Why this is worse than an ordinary misconfiguration:** it fails *safely-looking*. The suite
+  passes against production, because production has the same schema. Nothing errors. The cost
+  is silent and permanent: `audit_events` is append-only, so every run deposits workspaces that
+  can never be deleted, and that has already blocked one schema change (a `unique(org_id,name)`
+  on `workspaces`, see the section below).
+- **The fix is a guard, not a note.** A check that refuses to run when `SUPABASE_URL` is not
+  localhost belongs in `conftest.py`, mirroring the hard guard `local-db.sh` already has for
+  `DB_URL`. Until that exists, export the three variables explicitly every time.
+
 ## Talking to the hosted database from a script (2026-08-25)
 
 - **`SUPABASE_DB_URL` is empty in `.env`, so `psql` silently targets a local socket** and fails
