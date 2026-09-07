@@ -11,6 +11,7 @@ import json
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -40,7 +41,58 @@ SUPABASE_URL = ENV.get("NEXT_PUBLIC_SUPABASE_URL", "")
 ANON_KEY = ENV.get("SUPABASE_ANON_JWT") or ENV.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
 SERVICE_KEY = ENV.get("SUPABASE_SERVICE_JWT") or ENV.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
+#: Hosts that are a throwaway stack. `db` and `kong` are the service names a compose-based CI
+#: reaches the stack by; the rest are loopback.
+_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "db", "kong", "supabase_kong"})
+
+
+def is_local_target(url: str) -> bool:
+    """Is `url` an ephemeral stack we may create and destroy workspaces in?
+
+    Compares the PARSED hostname, never a substring: `https://localhost.evil.example.com`
+    contains "localhost" and is not local, and a guard defeated by a substring is decoration.
+    An empty url is not local — absent configuration must never read as permission.
+    """
+    try:
+        host = urllib.parse.urlparse(url).hostname or ""
+    except ValueError:
+        return False
+    return host in _LOCAL_HOSTS
+
+
 _creds_missing = not (SUPABASE_URL and ANON_KEY and SERVICE_KEY)
+_target_is_local = is_local_target(SUPABASE_URL)
+
+# ---------------------------------------------------------------------------------------
+# HARD GUARD, mirroring the one `tools/local-db.sh` already has for DB_URL. This suite CREATES
+# workspaces, users and audited actions. `audit_events` is append-only, so a workspace it
+# touches on a hosted project can NEVER be deleted — that has already blocked a schema change
+# once (docs/known-pitfalls.md).
+#
+# Why this was needed: SUPABASE_URL comes from the repo-root `.env`, which is production, and
+# the only check here was whether credentials EXIST. So a bare `uv run pytest` on any machine
+# with a working `.env` ran all 89 tests against the live database. It fails in the worst
+# direction — production has the same schema, so the suite PASSES and the run is reported as
+# clean verification. Measured 2026-09-07: 148 of 347 production workspaces were debris, in
+# dated batches matching full-suite runs.
+#
+# Point it at a throwaway stack instead:
+#   supabase start
+#   eval "$(supabase status -o env | grep -E '^[A-Z_]+=' | sed 's/^/export /')"
+#   NEXT_PUBLIC_SUPABASE_URL="$API_URL" SUPABASE_ANON_JWT="$ANON_KEY" \
+#     SUPABASE_SERVICE_JWT="$SERVICE_ROLE_KEY" uv run pytest tests/isolation
+# ---------------------------------------------------------------------------------------
+if not _creds_missing and not _target_is_local:
+    _host = urllib.parse.urlparse(SUPABASE_URL).hostname or SUPABASE_URL
+    if os.environ.get("CI"):
+        # In CI this is a misconfiguration of the job, not a developer convenience. Refuse
+        # loudly rather than skipping a Sev-1 control.
+        raise RuntimeError(
+            f"ET-6 isolation suite is pointed at a hosted project ({_host}). It creates "
+            "permanently undeletable rows. Point it at the ephemeral stack — see the guard "
+            "comment in tests/isolation/conftest.py."
+        )
+
 # Fail CLOSED in CI: the ET-6 mitigation is "isolation tests in CI" (PRD §3.2). A silent
 # skip when secrets are un-wired would let a Sev-1 control go unverified. Locally (no CI env)
 # we skip so a fresh clone without creds still runs the unit suite.
@@ -48,8 +100,19 @@ if _creds_missing and os.environ.get("CI"):
     raise RuntimeError(
         "ET-6 isolation suite requires live Supabase creds in CI — refusing to skip silently"
     )
+
 requires_supabase = pytest.mark.skipif(
-    _creds_missing, reason="live Supabase credentials not present in .env"
+    _creds_missing or not _target_is_local,
+    reason=(
+        "live Supabase credentials not present in .env"
+        if _creds_missing
+        else (
+            f"REFUSING to run the ET-6 suite against a hosted project "
+            f"({urllib.parse.urlparse(SUPABASE_URL).hostname}). It creates permanently "
+            "undeletable rows. Start a local stack and export NEXT_PUBLIC_SUPABASE_URL, "
+            "SUPABASE_ANON_JWT and SUPABASE_SERVICE_JWT from `supabase status`."
+        )
+    ),
 )
 
 

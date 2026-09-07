@@ -346,9 +346,33 @@ Mumbai anyway); until then, count round trips like they cost money.
   is silent and permanent: `audit_events` is append-only, so every run deposits workspaces that
   can never be deleted, and that has already blocked one schema change (a `unique(org_id,name)`
   on `workspaces`, see the section below).
-- **The fix is a guard, not a note.** A check that refuses to run when `SUPABASE_URL` is not
-  localhost belongs in `conftest.py`, mirroring the hard guard `local-db.sh` already has for
-  `DB_URL`. Until that exists, export the three variables explicitly every time.
+- **Measured before fixing: 148 of 347 production workspaces were test debris**, in dated
+  batches matching full-suite runs across several sessions. Not a theoretical risk — the
+  accumulation was already there and growing on every `uv run pytest`.
+- **Fixed 2026-09-07: `conftest.is_local_target()` now refuses any non-loopback host**, mirroring
+  the hard guard `local-db.sh` already had for `DB_URL`. Hosted target → the whole suite skips
+  with a reason naming the host; in CI it raises instead, because there it is a broken job
+  rather than a developer convenience. The comparison is on the PARSED hostname, never a
+  substring — `https://localhost.evil.example.com` contains "localhost" and is not local.
+- **Its own test lives in the UNIT suite** (`tests/test_isolation_target_guard.py`), not in
+  `tests/isolation/`. A guard that only runs once you have reached the thing it guards is not a
+  guard, and this one's whole job is to stop that directory executing.
+- **Verify a guard from BOTH sides.** "Everything skipped" is what a correct refusal and a
+  totally broken suite look like, identically. The check that matters is that the local path
+  still RUNS: hosted → 87 skipped, local stack → 89 passed. One number without the other proves
+  nothing. (Side benefit that reads as a smell test: the unit suite went from ~50s to 4.7s once
+  it stopped making network calls to Stockholm.)
+- **To run it, point it at a throwaway stack:**
+  ```bash
+  supabase start
+  eval "$(supabase status -o env | grep -E '^[A-Z_]+=' | sed 's/^/export /')"
+  SUPABASE_SERVICE_JWT="$SERVICE_ROLE_KEY" DB_URL="$DB_URL" API_URL="$API_URL" \
+    NEXT_PUBLIC_SUPABASE_URL="$API_URL" SUPABASE_ANON_JWT="$ANON_KEY" ./tools/local-db.sh
+  cd services/engine && NEXT_PUBLIC_SUPABASE_URL="$API_URL" SUPABASE_ANON_JWT="$ANON_KEY" \
+    SUPABASE_SERVICE_JWT="$SERVICE_ROLE_KEY" uv run pytest tests/isolation
+  ```
+  If another project holds ports 5432x, shift this project's ports in `supabase/config.toml`
+  rather than stopping their stack, and restore the file afterwards.
 
 ## Talking to the hosted database from a script (2026-08-25)
 
