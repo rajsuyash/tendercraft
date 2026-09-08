@@ -72,4 +72,14 @@ def estimate(
         "weak_sections": weak,
         "attribution": attribution,
         "cluster_outcomes": cluster_outcome_count,
+        # Whether anything has ever checked that these predictions come true. False today for
+        # every caller: `analyze_routes.run_estimate` does not pass `directional_accuracy`, so
+        # the RB-4 branch in `evaluate_suppression` cannot fire.
+        #
+        # It is returned rather than assumed because the BAND is `20 * (30 / count)` — driven by
+        # the NUMBER of comparable outcomes and nothing else. More rows tighten the interval
+        # even if every prediction was wrong, and a tightening interval reads as a system
+        # learning. Without this field the UI had no way to tell the difference, and called it
+        # "calibrated on N comparable outcomes".
+        "accuracy_measured": directional_accuracy is not None,
     }

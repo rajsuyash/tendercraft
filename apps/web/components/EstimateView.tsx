@@ -18,6 +18,9 @@ export interface Estimate {
   clears_threshold_likelihood?: number;
   weak_sections?: WeakSection[];
   cluster_outcomes?: number;
+  /** Whether anything has checked that these predictions come true. False for every caller
+   *  today — see the note beside the threshold line. */
+  accuracy_measured?: boolean;
 }
 
 // S11 — Score estimate. Range band (S11-D1) OR suppressed state (S11-D2); weak sections (S11-D3).
@@ -98,9 +101,17 @@ export function EstimateView({
                 title={`Qualifying threshold ${estimate.threshold}`}
               />
             </div>
+            {/* Not "calibrated". The band is 20 * (30 / cluster_outcomes) — driven by the
+                NUMBER of comparable outcomes, never by whether any past estimate came true.
+                Nothing measures that yet (`accuracy_measured`), so a tightening range means
+                more history, not a better predictor, and saying "calibrated" would sell the
+                second on the strength of the first. */}
             <p className="mt-2 text-xs text-muted">
               Threshold {estimate.threshold} · {estimate.clears_threshold_likelihood}% likelihood of
-              clearing · calibrated on {estimate.cluster_outcomes} comparable outcomes.
+              clearing · a heuristic over {estimate.cluster_outcomes} comparable outcomes
+              {estimate.accuracy_measured
+                ? "."
+                : ", whose accuracy against real results has not been measured yet."}
             </p>
           </div>
 
