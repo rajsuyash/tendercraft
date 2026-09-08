@@ -316,3 +316,63 @@ class TestAPageBudgetBelongsToItsSource:
 
         assert "gem_bidplus" not in SOURCE_SWEEP_PAGES
         assert "ted" not in SOURCE_SWEEP_PAGES
+
+
+# ---------- the recompute window must not fill silently ----------
+#
+# `recompute_matches` evaluates a capped window of open opportunities. When the corpus outgrows
+# that cap the remainder is never matched, and nothing errors — the feed simply stops growing.
+# That already happened once (2026-08-29: 1282 closed rows held every slot and no open tender
+# was evaluated at all; docs/known-pitfalls.md). `open_only` fixed that cause; it did not make
+# the NEXT saturation visible. Measured 2026-09-08: France holds 3097 open against a 1000
+# window, so this is live, not hypothetical.
+
+def test_a_full_window_is_reported_as_saturated(monkeypatch):
+    from app.discovery import ingest as ing
+
+    monkeypatch.setattr(ing, "_capability", lambda ws: ("", []))
+    monkeypatch.setattr(ing, "_rules_for", lambda ws, kw: [])
+    monkeypatch.setattr(ing, "_profile_turnover_inr", lambda ws: None)
+    monkeypatch.setattr(ing.db, "get_workspace_market", lambda ws: "FR")
+    monkeypatch.setattr(ing.db, "get_workspace_markets", lambda ws: ["FR"])
+    monkeypatch.setattr(ing.db, "upsert_opportunity_matches", lambda ws, rows: len(rows))
+    monkeypatch.setattr(ing, "_enrich_documents", lambda items, budget: 0)
+    # Exactly a full window: every row excluded, so no model call is reached.
+    monkeypatch.setattr(
+        ing.db, "get_opportunities",
+        lambda limit, markets, open_only: [
+            {"id": f"o-{i}", "market": "FR"} for i in range(limit)
+        ],
+    )
+    monkeypatch.setattr(ing, "evaluate_gate",
+                        lambda o, r: type("G", (), {"in_scope": False,
+                                                    "excluded_by_rule": "test"})())
+
+    result = ing.recompute_matches("ws-1")
+
+    assert result["window_saturated"] is True, (
+        "a full window means rows went unevaluated and nobody was told"
+    )
+    assert result["window_limit"] == result["evaluated"]
+
+
+def test_a_partial_window_is_not_saturated(monkeypatch):
+    from app.discovery import ingest as ing
+
+    monkeypatch.setattr(ing, "_capability", lambda ws: ("", []))
+    monkeypatch.setattr(ing, "_rules_for", lambda ws, kw: [])
+    monkeypatch.setattr(ing, "_profile_turnover_inr", lambda ws: None)
+    monkeypatch.setattr(ing.db, "get_workspace_market", lambda ws: "IN")
+    monkeypatch.setattr(ing.db, "get_workspace_markets", lambda ws: ["IN"])
+    monkeypatch.setattr(ing.db, "upsert_opportunity_matches", lambda ws, rows: len(rows))
+    monkeypatch.setattr(ing, "_enrich_documents", lambda items, budget: 0)
+    monkeypatch.setattr(
+        ing.db, "get_opportunities",
+        lambda limit, markets, open_only: [{"id": "o-1", "market": "IN"}],
+    )
+    monkeypatch.setattr(ing, "evaluate_gate",
+                        lambda o, r: type("G", (), {"in_scope": False,
+                                                    "excluded_by_rule": "test"})())
+
+    result = ing.recompute_matches("ws-1")
+    assert result["window_saturated"] is False
