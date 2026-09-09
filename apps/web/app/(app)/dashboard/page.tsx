@@ -77,6 +77,8 @@ export default async function DashboardPage() {
   const portal = PORTAL[market] ?? "GeM";
 
   const hasTenders = (tenders?.length ?? 0) > 0;
+  // Narrowed once here so the resume panel does not index a possibly-empty array.
+  const firstTender = tenders?.[0];
 
   return (
     <main className="p-page">
@@ -101,6 +103,38 @@ export default async function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Resume before acquire. A workspace that already has tenders was being shown "Find
+          opportunities" and "Start a new bid" first, with its actual work below the fold under
+          a "Deadlines" heading that reads as empty when no deadline was published. The path to
+          continue already exists — ReadinessHub and readiness_routes own confirm-then-analyse;
+          the landing page simply never pointed at it. Counts are inventory, deliberately not a
+          readiness percentage: we have not checked anything yet and must not imply we have. */}
+      {firstTender && (
+        <section data-resume-work className="mb-6">
+          <div className="rounded-card border border-primary bg-primary/5 p-card">
+            <p className="font-heading text-base font-medium text-ink">
+              {tenders!.length === 1
+                ? t("1 tender imported. Open it to confirm its requirements.")
+                : t("{n} tenders imported. Choose one to assess.").replace(
+                    "{n}",
+                    String(tenders!.length),
+                  )}
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              {t(
+                "Confirming requirements is what unlocks eligibility analysis and drafting.",
+              )}
+            </p>
+            <Link
+              href={`/tenders/${firstTender.id}/readiness`}
+              className="mt-3 inline-block text-sm font-medium text-primary"
+            >
+              {t("Review requirements")} →
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* Discovery comes BEFORE upload in the journey: the bidder's first question is "what
           could we bid on", not "here is a document I already found". */}

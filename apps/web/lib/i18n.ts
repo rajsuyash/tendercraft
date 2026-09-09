@@ -197,6 +197,14 @@ const FR: Record<string, string> = {
   Deadlines: "Échéances",
   "No deadline set": "Aucune échéance définie",
   "Deadline not recorded": "Échéance non renseignée",
+  "1 tender imported. Open it to confirm its requirements.":
+    "1 consultation importée. Ouvrez-la pour confirmer ses exigences.",
+  "{n} tenders imported. Choose one to assess.":
+    "{n} consultations importées. Choisissez-en une à évaluer.",
+  "Confirming requirements is what unlocks eligibility analysis and drafting.":
+    "La confirmation des exigences débloque l'analyse d'éligibilité et la rédaction.",
+  "Review requirements": "Vérifier les exigences",
+  Insight: "Analyses",
   Closed: "Clôturé",
   "Due in": "Dans",
   Due: "Le",

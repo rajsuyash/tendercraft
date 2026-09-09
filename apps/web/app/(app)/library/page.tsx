@@ -73,10 +73,6 @@ export default async function LibraryPage() {
         <KnowledgeUpload />
       </div>
 
-      <div className="mb-6">
-        <PastBids initial={pastBids} styleBrief={styleProfile?.brief ?? ""} />
-      </div>
-
       {expiredCount > 0 && (
         <div
           data-expiry-banner
@@ -148,6 +144,14 @@ export default async function LibraryPage() {
           </tbody>
         </table>
       )}
+
+      {/* Optional, and secondary to the documents above. This panel sat ABOVE the table, so a
+          workspace with 18 uploaded documents opened on two empty boxes ("Past bids — 0",
+          "House style not measured yet") and had to scroll past its own evidence to find it.
+          Put the populated asset first; the things a user has not done yet come after. */}
+      <div className="mt-8">
+        <PastBids initial={pastBids} styleBrief={styleProfile?.brief ?? ""} />
+      </div>
     </main>
   );
 }
