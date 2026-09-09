@@ -66,7 +66,18 @@ def parse_pdf_pages(data: bytes) -> list[tuple[int, str]]:
     pages: list[tuple[int, str]] = []
     for i, page in enumerate(reader.pages, 1):
         try:
-            text = (page.extract_text() or "").strip()
+            # NUL bytes must not survive this function. Postgres `text` cannot store one, so a
+            # page carrying it makes every writer downstream fail with 22P05 ("\\u0000 cannot be
+            # converted to text") — surfaced to the user as a 502 on an ordinary upload. pypdf
+            # emits them from PDFs with broken font encodings, which is common in the
+            # scanned-and-recombined packages this product exists to read: four of eight real
+            # bidder documents hit it on 2026-09-09.
+            #
+            # Stripped HERE rather than at each writer because the knowledge base, the tender
+            # ingest (criteria, matrix_unmapped) and past-bid upload all take PDF text from this
+            # one function. Only the NUL is removed — tabs and newlines are legal in Postgres and
+            # carry the layout that page anchors and sentence splitting depend on.
+            text = (page.extract_text() or "").replace("\x00", "").strip()
         except Exception:  # noqa: BLE001 — a single unreadable page shouldn't 500; treat as illegible
             text = ""
         pages.append((i, text))
