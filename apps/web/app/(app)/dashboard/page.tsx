@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { SlaChip } from "@/components/design/SlaChip";
+import { countOrUnknown, formatKpi } from "./kpis";
 import { engineFetch } from "@/lib/engine";
 import { translator } from "@/lib/i18n";
 import { getLocale } from "@/lib/locale";
@@ -17,7 +18,10 @@ function deadlineLabel(
   t: (key: string) => string,
   locale: string,
 ): string {
-  if (!deadline) return t("No deadline set");
+  // "No deadline" asserts the tender has none. We may simply not have read one: GeM does
+  // not always publish a closing date, and the discovery feed already treats a missing
+  // date as unknown rather than closed (known-pitfalls). Say which it is.
+  if (!deadline) return t("Deadline not recorded");
   const h = hoursUntil(deadline);
   if (h < 0) return t("Closed");
   if (h < 48) return `${t("Due in")} ${Math.max(1, Math.round(h))}h`;
@@ -41,13 +45,30 @@ export default async function DashboardPage() {
   const t = translator(locale);
   // Bounded list for display; exact count fetched separately (head-only) so the KPI
   // never depends on how many rows we happened to render (known-pitfalls: pagination).
-  const [{ data: tenders }, { count: activeCount }] = await Promise.all([
+  // Every KPI is measured. Two of these used to be the literal `0`, rendered identically to
+  // the one real count — and a workspace with 861 unconfirmed criteria read "Awaiting
+  // verification 0". In a product whose position is that it never asserts what it has not
+  // checked, a front-page tile inventing a measurement is the worst possible place to do it.
+  const [
+    { data: tenders },
+    { count: activeCount },
+    { count: awaitingCount },
+    { count: inReviewCount },
+  ] = await Promise.all([
     supabase
       .from("tenders")
       .select("id,title,status,deadline,tender_number,authority")
       .order("created_at", { ascending: false })
       .limit(20),
     supabase.from("tenders").select("id", { count: "exact", head: true }),
+    supabase
+      .from("criteria")
+      .select("id", { count: "exact", head: true })
+      .eq("confirmed", false),
+    supabase
+      .from("proposals")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "review"),
   ]);
 
   const meRes = await engineFetch("/api/me").catch(() => null);
@@ -66,9 +87,12 @@ export default async function DashboardPage() {
 
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { label: t("Active tenders"), value: activeCount ?? 0 },
-          { label: t("Awaiting verification"), value: 0 },
-          { label: t("Drafts in review"), value: 0 },
+          // `countOrUnknown` keeps a failed count as null so it renders "—". Coercing it to 0
+          // would put the same bug back through the fallback instead of through a literal:
+          // "we could not read this" and "there is nothing to do" are different claims.
+          { label: t("Active tenders"), value: formatKpi(countOrUnknown(activeCount)) },
+          { label: t("Awaiting verification"), value: formatKpi(countOrUnknown(awaitingCount)) },
+          { label: t("Drafts in review"), value: formatKpi(countOrUnknown(inReviewCount)) },
           { label: t("Analyses left"), value: t("Unlimited") },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-card border border-border bg-surface p-card">

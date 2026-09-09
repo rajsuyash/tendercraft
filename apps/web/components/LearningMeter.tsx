@@ -132,13 +132,19 @@ export function LearningMeter({ maturity }: { maturity: Maturity }) {
               {edits.trend.length} of {edits.floor * 2} edits needed to read a trend
             </span>
           ) : (
+            // Neutral/primary, NOT success/danger. Those three hues are reserved for
+            // Pass / Fail / Needs-review (docs/conventions.md), and a compliance screen one
+            // click away uses them to mean exactly that. A green "drafts are improving"
+            // teaches the eye that green is approval, which is the reading the export gate
+            // depends on NOT being diluted. `data-trend` still carries the direction, so
+            // nothing that tests behaviour is weakened by dropping the colour.
             <span
               data-trend={direction}
               className={`text-sm font-medium ${
                 direction === "improving"
-                  ? "text-success"
+                  ? "text-primary"
                   : direction === "worsening"
-                    ? "text-danger"
+                    ? "text-ink"
                     : "text-muted"
               }`}
             >

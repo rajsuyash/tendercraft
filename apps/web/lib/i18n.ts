@@ -196,6 +196,7 @@ const FR: Record<string, string> = {
     "Déposez le dossier de consultation et nous en extrairons les exigences",
   Deadlines: "Échéances",
   "No deadline set": "Aucune échéance définie",
+  "Deadline not recorded": "Échéance non renseignée",
   Closed: "Clôturé",
   "Due in": "Dans",
   Due: "Le",

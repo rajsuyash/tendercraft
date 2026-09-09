@@ -2,11 +2,16 @@ import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/server";
 
+// Workflow status, NOT a verdict. success/danger/warning are reserved for Pass/Fail/
+// Needs-review (docs/conventions.md), and the compliance matrix one click away uses them to
+// mean exactly that. "Exported" rendered in the same green as "Pass" teaches the eye that
+// green means approved — which is the reading the export gate depends on not being diluted.
+// Progress reads as emphasis instead: primary for the finished states, neutral for in-flight.
 const STATUS_STYLE: Record<string, string> = {
-  exported: "bg-success-bg text-success",
-  approved: "bg-success-bg text-success",
-  review: "bg-warning-bg text-warning",
-  draft: "bg-info-bg text-info",
+  exported: "bg-primary-tint text-primary",
+  approved: "bg-primary-tint text-primary",
+  review: "bg-surface-alt text-ink",
+  draft: "bg-surface-alt text-muted",
 };
 
 // Proposals list — every tender is a potential proposal; locked ones can be drafted.

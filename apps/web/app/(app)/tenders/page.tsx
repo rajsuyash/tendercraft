@@ -147,9 +147,15 @@ export default async function TendersPage({
                   <div className="flex items-center gap-3">
                     {/* deadline was selected but never rendered before */}
                     <span data-deadline className={`text-xs ${slaClass(t.deadline)}`}>
+                      {/* "No deadline" asserted the tender has none. We may simply not have
+                          read one — GeM does not always publish a closing date, and the feed
+                          already treats a missing date as unknown rather than closed. Bare
+                          string because this page has no translator; every other label here is
+                          bare too, and half-translating it would make the page look localised
+                          when it is not. */}
                       {t.deadline
                         ? new Date(t.deadline).toLocaleDateString("en-IN")
-                        : "No deadline"}
+                        : "Deadline not recorded"}
                     </span>
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
