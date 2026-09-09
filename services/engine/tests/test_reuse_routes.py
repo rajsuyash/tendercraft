@@ -240,3 +240,60 @@ def test_the_corpus_query_actually_fetches_the_usage_counts_the_ranker_reads():
     src = inspect.getsource(db.get_answers_with_bids)
     assert "answer_usages(count)" in src
     assert "times_used" in src
+
+
+# --- the acceptance receipt must exist before the text does (G-AC6) ---
+#
+# `_apply` wrote the draft text first and `record_answer_usage` second. A failure between them
+# left reused text in a proposal with NO record that anyone accepted it — and that receipt is
+# the only evidence supporting G-AC6's claim that no suggestion enters a draft unaccepted.
+# The two failure modes are not symmetric: a receipt with no text over-reports a control and is
+# detectable; text with no receipt silently voids the control and cannot be reconstructed.
+
+def test_the_usage_receipt_is_written_before_the_section_text(monkeypatch):
+    order: list[str] = []
+    monkeypatch.setattr(reuse_routes, "_library_chunks", lambda ws: [])
+    monkeypatch.setattr(
+        reuse_routes, "_revalidate",
+        lambda text, chunks, kind: {"sentences": [], "status": "draft", "flags": []},
+    )
+    monkeypatch.setattr(
+        db, "append_reused_section_text",
+        lambda *a, **k: order.append("text"),
+    )
+    monkeypatch.setattr(
+        db, "record_answer_usage",
+        lambda *a, **k: (order.append("receipt"), {"id": "u-1"})[1],
+    )
+    monkeypatch.setattr(db, "write_audit", lambda *a, **k: None)
+
+    reuse_routes._apply(
+        "t1", "u1", "p1", {"id": "a-1", "answer_text": _ANSWER_TEXT},
+        reuse_routes.ReuseIn(answer_id="a-1", target_kind="section", target="qa"),
+    )
+
+    assert order == ["receipt", "text"], (
+        "the acceptance receipt must be durable before the text it authorises"
+    )
+
+
+def test_the_usage_receipt_is_written_before_a_criterion_response(monkeypatch):
+    order: list[str] = []
+    monkeypatch.setattr(reuse_routes, "_library_chunks", lambda ws: [])
+    monkeypatch.setattr(
+        reuse_routes, "_revalidate",
+        lambda text, chunks, kind: {"sentences": [], "status": "draft", "flags": []},
+    )
+    monkeypatch.setattr(db, "upsert_response", lambda *a, **k: order.append("text"))
+    monkeypatch.setattr(
+        db, "record_answer_usage",
+        lambda *a, **k: (order.append("receipt"), {"id": "u-1"})[1],
+    )
+    monkeypatch.setattr(db, "write_audit", lambda *a, **k: None)
+
+    reuse_routes._apply(
+        "t1", "u1", "p1", {"id": "a-1", "answer_text": _ANSWER_TEXT},
+        reuse_routes.ReuseIn(answer_id="a-1", target_kind="criterion", target="c-1"),
+    )
+
+    assert order == ["receipt", "text"]

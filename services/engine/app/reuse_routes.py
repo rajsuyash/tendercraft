@@ -173,6 +173,21 @@ def _apply(workspace_id: str, actor: str, proposal_id: str, answer: dict, body: 
     )
     validation = _revalidate(answer["answer_text"], chunks, kind)
 
+    # The receipt goes FIRST. `answer_usages` is the only evidence behind G-AC6's claim that no
+    # suggestion ever entered a draft unaccepted, and these are two separate PostgREST calls
+    # with no transaction between them. Written second, a failure in between left reused text in
+    # the proposal with no record anyone accepted it — the control silently void and impossible
+    # to reconstruct afterwards. The two failure modes are not symmetric: a receipt with no text
+    # over-reports the control and is detectable by looking at the target; text with no receipt
+    # under-reports it and is not.
+    #
+    # ponytail: ordering, not atomicity. True atomicity needs a Postgres function taking both
+    # writes; do that when a second caller appears, or when a compensating cleanup is wanted for
+    # the receipt-without-text case.
+    usage = db.record_answer_usage(
+        workspace_id, answer["id"], proposal_id, f"{body.target_kind}:{body.target}", actor,
+    )
+
     if body.target_kind == "section":
         db.append_reused_section_text(
             workspace_id, proposal_id, body.target, answer["answer_text"], validation,
@@ -187,10 +202,6 @@ def _apply(workspace_id: str, actor: str, proposal_id: str, answer: dict, body: 
                 "flags": validation["flags"],
             },
         )
-
-    usage = db.record_answer_usage(
-        workspace_id, answer["id"], proposal_id, f"{body.target_kind}:{body.target}", actor,
-    )
     db.write_audit(
         workspace_id, actor, "answer_reused", "proposal", proposal_id,
         after={"answer_id": answer["id"], "target": f"{body.target_kind}:{body.target}",
