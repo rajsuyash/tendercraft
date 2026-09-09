@@ -107,10 +107,47 @@ def test_empty_experience_does_not_fabricate():
 # --- pre-qualification sheet ---
 
 
-def test_pq_sheet_computes_average_turnover_from_rows():
+# --- average turnover: the FY window is part of the requirement, not a property of us ---
+#
+# The old test asserted the average of EVERY stored FY under a "CA-certified" label with the
+# unqualified ref `profile_financials:avg.turnover_cr`. It encoded the defect: a GeM tender asks
+# for "Minimum Average Annual Turnover (For 3 Years)", so confirming FY26 silently changed the
+# number answering a FY23-FY25 requirement, and the token named no window and no versions. It
+# changed with the code, deliberately.
+
+
+def test_pq_sheet_averages_only_the_required_financial_years():
+    out = assemble_compliance_pq(PROFILE, [], TODAY, required_fys=["FY24", "FY25"])
+    assert "₹8.90 Cr" in out.body_md  # (8.1+9.7)/2 — FY23 is on file and correctly ignored
+    assert any(
+        s.source_ref == "profile_financials:avg.turnover_cr[FY24|FY25]" for s in out.sentences
+    ), "the token must name the FY window, or it identifies no computable quantity"
+
+
+def test_a_later_fy_does_not_move_an_earlier_window():
+    """The whole point. Confirming FY26 must not change the answer to a FY23-FY25 tender."""
+    profile = {**PROFILE, "financials": [*PROFILE["financials"],
+                                         {"fy_label": "FY26", "turnover_cr": 40.0}]}
+    before = assemble_compliance_pq(PROFILE, [], TODAY, required_fys=["FY23", "FY24", "FY25"])
+    after = assemble_compliance_pq(profile, [], TODAY, required_fys=["FY23", "FY24", "FY25"])
+    assert "₹8.20 Cr" in before.body_md
+    assert "₹8.20 Cr" in after.body_md
+
+
+def test_a_missing_required_fy_asserts_nothing():
+    """Averaging the years we happen to hold would manufacture a number for a window we
+    cannot answer — on a hard, non-overridable financial gate."""
+    out = assemble_compliance_pq(PROFILE, [], TODAY, required_fys=["FY25", "FY26"])
+    assert "₹" not in out.body_md.split("Average annual turnover")[1].split("\n")[0]
+    assert not any("avg.turnover_cr" in (s.source_ref or "") for s in out.sentences)
+    assert "FY26" in out.body_md, "name the FY that is missing, so the gap is actionable"
+
+
+def test_no_required_window_asserts_no_average():
+    """Without the requirement's window there is no correct average. Say so; do not guess."""
     out = assemble_compliance_pq(PROFILE, [], TODAY)
-    assert "₹8.20 Cr" in out.body_md  # (6.8+8.1+9.7)/3
-    assert any(s.source_ref == "profile_financials:avg.turnover_cr" for s in out.sentences)
+    assert not any("avg.turnover_cr" in (s.source_ref or "") for s in out.sentences)
+    assert "not confirmed" in out.body_md.lower()
 
 
 def test_pq_sheet_marks_an_expired_certification():

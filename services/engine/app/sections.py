@@ -16,9 +16,11 @@ Assemblers are pure functions over already-fetched rows (no I/O) so they unit-te
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .deterministic.drafting import DraftSentence
+from .deterministic.eligibility import average_annual_turnover
 from .deterministic.types import SectionKind, SentenceClass
 
 
@@ -148,14 +150,34 @@ def assemble_project_citations(experience: list[dict]) -> AssembledSection:
 
 
 def assemble_compliance_pq(
-    profile: dict, certifications: list[dict], today: str
+    profile: dict, certifications: list[dict], today: str,
+    required_fys: Sequence[str] | None = None,
 ) -> AssembledSection:
-    """Form 1 — the pre-qualification compliance sheet. Every row names its evidence."""
+    """Form 1 — the pre-qualification compliance sheet. Every row names its evidence.
+
+    `required_fys` is the FY window the TENDER asks about ("Minimum Average Annual Turnover
+    (For 3 Years)"), not a property of the bidder. It is not optional in spirit: without it
+    there is no correct average, only a plausible one.
+
+    This used to average every stored FY and label the result a CA-certified turnover
+    statement, emitting the token `profile_financials:avg.turnover_cr` — which identifies no
+    window and no fact versions. Confirming FY26 then silently changed the number answering a
+    FY23-FY25 requirement, on a hard non-overridable financial gate (B-FR3/B-AC4). Assembling
+    the wrong figure is worse than assembling none, because the transclusion carries the
+    authority of structured data.
+    """
     legal = profile.get("legal_identity") or {}
     fins = profile.get("financials") or []
-    avg = (
-        sum(float(f.get("turnover_cr") or 0) for f in fins) / len(fins) if fins else None
-    )
+    fy_values = {
+        str(f.get("fy_label")): float(f.get("turnover_cr") or 0)
+        for f in fins
+        if f.get("fy_label") is not None and f.get("turnover_cr") is not None
+    }
+    window = list(dict.fromkeys(required_fys)) if required_fys else []
+    # Returns None when ANY required FY is absent — averaging what we happen to hold would
+    # manufacture a figure for a window we cannot answer (eligibility.average_annual_turnover).
+    avg = average_annual_turnover(fy_values, window) if window else None
+    missing = [fy for fy in window if fy not in fy_values]
 
     rows, sents = [], []
 
@@ -169,9 +191,19 @@ def assemble_compliance_pq(
     add("PAN", str(legal.get("pan") or "—"), "PAN card")
     add("GST registration", str(legal.get("gst") or "—"), "GST certificate")
     add("Udyam / MSME", str(legal.get("udyam_registration") or "—"), "Udyam certificate")
-    add("Average annual turnover", _fmt_cr(avg),
-        f"CA-certified turnover statement ({len(fins)} FYs)",
-        "profile_financials:avg.turnover_cr" if avg is not None else None)
+    if avg is not None:
+        add("Average annual turnover", _fmt_cr(avg),
+            f"CA-certified turnover statement ({', '.join(window)})",
+            f"profile_financials:avg.turnover_cr[{'|'.join(window)}]")
+    elif missing:
+        # Name the gap rather than averaging around it: the user can act on "FY26 missing",
+        # not on a number that quietly answered a different question.
+        add("Average annual turnover", "—",
+            f"Turnover not on file for {', '.join(missing)} — required for {', '.join(window)}")
+    else:
+        add("Average annual turnover", "—",
+            "Required FY window not confirmed — "
+            f"{len(fy_values)} FYs on file ({', '.join(sorted(fy_values)) or 'none'})")
     add("Net worth", _fmt_cr(legal.get("net_worth_cr")), "Statutory auditor certificate",
         "vendor_profiles:net_worth_cr" if legal.get("net_worth_cr") is not None else None)
 
