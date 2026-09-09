@@ -17,7 +17,7 @@ you already reached the thing it guards is not a guard.
 
 from __future__ import annotations
 
-from tests.isolation.conftest import is_local_target
+from tests.isolation.target import is_local_target
 
 
 class TestHostedProjectsAreRefused:

@@ -17,6 +17,11 @@ from pathlib import Path
 
 import pytest
 
+# The predicate lives in `target.py` — a module with NO side effects — because this module
+# raises at import time when CI has no creds, and the guard's own unit test must import the
+# predicate without triggering that raise.
+from .target import is_local_target
+
 _ENV_PATH = Path(__file__).resolve().parents[4] / ".env"
 
 
@@ -40,25 +45,6 @@ SUPABASE_URL = ENV.get("NEXT_PUBLIC_SUPABASE_URL", "")
 # admin endpoint. The app still uses the modern keys; these are test-only.
 ANON_KEY = ENV.get("SUPABASE_ANON_JWT") or ENV.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
 SERVICE_KEY = ENV.get("SUPABASE_SERVICE_JWT") or ENV.get("SUPABASE_SERVICE_ROLE_KEY", "")
-
-#: Hosts that are a throwaway stack. `db` and `kong` are the service names a compose-based CI
-#: reaches the stack by; the rest are loopback.
-_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "db", "kong", "supabase_kong"})
-
-
-def is_local_target(url: str) -> bool:
-    """Is `url` an ephemeral stack we may create and destroy workspaces in?
-
-    Compares the PARSED hostname, never a substring: `https://localhost.evil.example.com`
-    contains "localhost" and is not local, and a guard defeated by a substring is decoration.
-    An empty url is not local — absent configuration must never read as permission.
-    """
-    try:
-        host = urllib.parse.urlparse(url).hostname or ""
-    except ValueError:
-        return False
-    return host in _LOCAL_HOSTS
-
 
 _creds_missing = not (SUPABASE_URL and ANON_KEY and SERVICE_KEY)
 _target_is_local = is_local_target(SUPABASE_URL)
