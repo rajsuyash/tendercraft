@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export type Maturity = {
   answers: number;
   past_bids: { uploaded: number; generated: number };
@@ -71,8 +73,10 @@ export function readTrend(trend: { rewrite_ratio: number }[], floor: number): Tr
  * little of it to mean anything.
  *
  * Two things it says out loud, because both are claims the product would otherwise be making
- * silently: the base holds only what a human approved, and a suggestion never enters a draft
- * without an explicit acceptance.
+ * silently: the base holds only sections a human edited or approved (`learning.harvestable`
+ * takes `edited_by OR approved_by` — the copy used to say "approved" alone, which was the
+ * stricter-sounding claim and the false one), and a suggestion never enters a draft without an
+ * explicit acceptance.
  */
 export function LearningMeter({ maturity }: { maturity: Maturity }) {
   const { answers, past_bids: bids, utilisation, coverage, edits } = maturity;
@@ -86,12 +90,41 @@ export function LearningMeter({ maturity }: { maturity: Maturity }) {
         <h1 className="font-heading text-2xl font-semibold tracking-[-0.01em] text-ink">
           What the system has learned
         </h1>
+        {/* "Every proposal you export adds..." was not the implemented contract. The DOCX
+            download (`export_docx`) renders and audits but never harvests; harvesting runs
+            only in the separate POST /export, and `harvest_quietly` swallows its own failures.
+            Say what actually feeds the library instead of describing a path that may not. */}
         <p className="mt-1 max-w-2xl text-sm text-muted">
-          Every proposal you export adds its approved sections to this workspace&rsquo;s answer
-          library. These three numbers say whether that is making the next tender easier — and
-          they are allowed to say it is not.
+          Answers come from past bids you upload and from proposal sections you edited or
+          approved before completing an export. These numbers say whether that is making the
+          next tender easier — and they are allowed to say it is not.
         </p>
       </header>
+
+      {/* An empty library is not a failure, but a bare row of zeros does not say which
+          prerequisite is missing or where to supply it. Uploaded evidence documents do NOT
+          feed this screen — they are a different corpus — and a customer who has uploaded
+          eighteen of them and sees 0 here deserves to be told that rather than left to infer
+          it. Shown only when there is genuinely nothing, so it disappears the moment it is
+          answered. */}
+      {answers === 0 && (
+        <section
+          data-reuse-not-started
+          className="mt-6 rounded-card border border-hairline bg-surface-alt p-card"
+        >
+          <p className="font-heading text-base font-medium text-ink">
+            Prior-answer reuse has not started
+          </p>
+          <p className="mt-1 max-w-2xl text-sm text-muted">
+            Nothing here reads your evidence documents — those are a separate corpus, used when
+            a draft needs a citation. This library fills from bids you have already submitted,
+            or from your own completed exports.
+          </p>
+          <Link href="/library" className="mt-3 inline-block text-sm font-medium text-primary">
+            Upload a past bid →
+          </Link>
+        </section>
+      )}
 
       <section className="mt-6 grid gap-4 sm:grid-cols-3">
         <Stat
@@ -99,12 +132,18 @@ export function LearningMeter({ maturity }: { maturity: Maturity }) {
           value={String(answers)}
           detail={`from ${tenders} bid${tenders === 1 ? "" : "s"} — ${bids.uploaded} uploaded, ${bids.generated} from your own exports`}
         />
+        {/* NOT "coverage of your tender". `reuse_coverage` counts requirements where
+            `rank_answers` returns a prior answer on lexical token overlap — no evidence
+            lookup, no citation validation, no expiry check, no acceptance. A one-token
+            overlap against an unsupported answer scores as a hit. Calling that "coverage"
+            invites the reading that the tender is that far handled, and it is not: the
+            evidence corpus is not consulted by this number at all. */}
         <Stat
-          label="Coverage of your latest tender"
+          label="Requirements with a prior-answer match"
           value={coverage ? pct(coverage.ratio) : "—"}
           detail={
             coverage
-              ? `${coverage.with_suggestion} of ${coverage.criteria} requirements already draw a suggestion${coverage.tender_title ? ` · ${coverage.tender_title}` : ""}`
+              ? `${coverage.with_suggestion} of ${coverage.criteria} requirements match a stored answer${coverage.tender_title ? ` · ${coverage.tender_title}` : ""} — wording only; evidence and compliance are not assessed here`
               : "no tender with extracted criteria yet"
           }
         />
@@ -186,8 +225,11 @@ export function LearningMeter({ maturity }: { maturity: Maturity }) {
         <h2 className="font-heading text-sm font-medium text-ink">How this library is built</h2>
         <ul className="mt-2 space-y-1.5 text-sm text-muted">
           <li>
-            <span className="font-medium text-ink">Only what a human approved.</span> A section
-            nobody signed off is the model&rsquo;s draft, and learning from it would teach the
+            <span className="font-medium text-ink">Only what a human worked on.</span> A section
+            you edited or approved qualifies; one the model wrote and nobody touched does not.
+            Editing counts because your words are the point — and because saving an edit clears
+            the approval, so requiring approval would exclude the sections you rewrote most.
+            Learning from an untouched draft would teach the
             system its own writing.
           </li>
           <li>
