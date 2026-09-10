@@ -374,6 +374,26 @@ Mumbai anyway); until then, count round trips like they cost money.
   If another project holds ports 5432x, shift this project's ports in `supabase/config.toml`
   rather than stopping their stack, and restore the file afterwards.
 
+- **The same defect on the evaluate side, found 2026-09-09 — and there it read as a product
+  bug.** `evaluate/config._load_dotenv` also reads the repo-root `.env`, so
+  `services/evaluate-engine/tests/` passed locally by picking up production config and failed
+  in CI where there is none: four price endpoints returned 500 where `test_sealed_bid_api.py`
+  asserts 409. **A sealed-bid test that cannot tell a refusal from a crash is not proving the
+  gate** — a genuine leak and a missing env var produce the same red. Fixed in
+  `tests/conftest.py` (`https://evaluate-unit-tests.invalid`, RFC 2606, and deliberately not
+  the bidder URL — Settings refuses to start when the two match, F13-AC2). Because
+  `_load_dotenv` uses `setdefault`, a value set by the suite WINS, which is what stops the
+  tests resolving a live project at all; a placeholder in `ci.yml` would have closed the job
+  and left that half open.
+- **The rule both halves share: a suite whose target depends on what happens to be on the
+  developer's disk is not a suite you can read a result from.** Green locally and red in CI is
+  the polite version — you find out. Green in both while pointed at production is the one that
+  costs something. When a test needs config, the test supplies it.
+- **Reproduce the CI condition; do not infer it.** Neither of these needs the real `.env`
+  moved: a pytest plugin loaded with `-p` that makes `_repo_env()` return `None` is exactly
+  what a checkout without a `.env` gives you. Before 214 passed / 2 failed, after 216 passed,
+  against the same command CI runs.
+
 ## Talking to the hosted database from a script (2026-08-25)
 
 - **`SUPABASE_DB_URL` is empty in `.env`, so `psql` silently targets a local socket** and fails
