@@ -80,15 +80,23 @@ def persist_schedule(
 
 # ── extraction (the only model call in Module H) ─────────────────────────────────────
 
-def extract_schedule(workspace_id: str, line_items: Sequence[dict]) -> int:
-    """Read every distinct description once and store the parameters. Returns lines populated.
+def extract_schedule(
+    workspace_id: str, line_items: Sequence[dict], limit: int | None = None
+) -> dict[str, int]:
+    """Read every distinct description once and store the parameters.
+
+    Returns counts rather than a bare number: a partial read must be able to say so. A silent
+    truncation is the failure shape this codebase keeps rediscovering — the total looks
+    plausible and the remainder is invisible.
 
     Import is local so `app.spec_service` stays importable — and the assessment path stays
     runnable — in a deployment where the model client is not configured at all.
     """
     from pipeline.spec_extractor import extract_many
 
-    by_description = extract_many([i.get("description", "") for i in line_items])
+    by_description = extract_many([i.get("description", "") for i in line_items], limit=limit)
+    distinct = len({(i.get("description") or "").strip()
+                    for i in line_items if (i.get("description") or "").strip()})
     populated = 0
     for item in line_items:
         params = by_description.get((item.get("description") or "").strip(), ())
@@ -110,7 +118,12 @@ def extract_schedule(workspace_id: str, line_items: Sequence[dict]) -> int:
             ],
         )
         populated += 1
-    return populated
+    return {
+        "distinct": distinct,
+        "read": len(by_description),
+        "skipped": max(0, distinct - len(by_description)),
+        "populated": populated,
+    }
 
 
 # ── rows -> domain ───────────────────────────────────────────────────────────────────

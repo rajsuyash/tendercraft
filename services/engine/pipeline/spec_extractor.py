@@ -12,6 +12,7 @@ deviation. G-5: never crash, never invent.
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
@@ -28,6 +29,12 @@ _PROMPT = (Path(__file__).resolve().parents[1] / "prompts" / "spec_extractor.md"
 #: A GeM item description is a line, not a document. Anything longer is a pasted annexure and
 #: truncating it costs nothing a parameter would have been in.
 _MAX_DESCRIPTION = 2000
+
+#: Ceiling on model calls for one schedule. Sized against real data: the largest live tender
+#: holds 48 distinct line descriptions, so this clears a genuine schedule with room while
+#: refusing to turn a 400-line BOQ into 400 calls nobody authorised. Raise it deliberately,
+#: with a measurement, not because a schedule was truncated once.
+DEFAULT_EXTRACT_BUDGET = int(os.environ.get("SPEC_EXTRACT_BUDGET", "80"))
 
 
 def _clamp01(value) -> float:
@@ -109,12 +116,18 @@ def extract_parameters(description: str) -> tuple[ParamValue, ...]:
     return parse_parameters(row for row in rows if isinstance(row, dict))
 
 
-def extract_many(descriptions: Sequence[str]) -> dict[str, tuple[ParamValue, ...]]:
+def extract_many(
+    descriptions: Sequence[str], limit: int | None = None
+) -> dict[str, tuple[ParamValue, ...]]:
     """Extract for a batch of DISTINCT descriptions, keyed by description.
 
     BOQs repeat rows heavily — the same rope at four consignee sites is four lines and one
     description. Deduping before the fan-out is the difference between 40 model calls and 6 on
-    a real schedule.
+    a real schedule, and it happens BEFORE the cap so the budget buys distinct work.
+
+    Order is the schedule's own. A truncated read is reported by the caller rather than
+    silently returning fewer keys than it was asked about.
     """
+    budget = DEFAULT_EXTRACT_BUDGET if limit is None else limit
     unique = list(dict.fromkeys(d.strip() for d in descriptions if d and d.strip()))
-    return {d: extract_parameters(d) for d in unique}
+    return {d: extract_parameters(d) for d in unique[:budget]}

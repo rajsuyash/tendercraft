@@ -232,17 +232,17 @@ def test_extraction_stores_a_parameter_per_line_and_skips_the_unreadable(monkeyp
                         lambda w, lid, rows: written.__setitem__(lid, rows))
     monkeypatch.setattr(
         "pipeline.spec_extractor.extract_many",
-        lambda descriptions: {
+        lambda descriptions, limit=None: {
             "Wire rope 20mm": (ParamValue("diameter", ParamKind.NUMERIC, unit="mm",
                                           num_min=20, num_max=20, raw_text="20mm"),),
             "Unreadable": (),
         },
     )
-    populated = spec_service.extract_schedule(WS, [
+    result = spec_service.extract_schedule(WS, [
         line_row("a", description="Wire rope 20mm"),
         line_row("b", description="Unreadable"),
     ])
-    assert populated == 1
+    assert result["populated"] == 1
     assert "b" not in written                       # nothing read -> nothing written
     assert written["a"][0]["param_key"] == "diameter"
     assert written["a"][0]["num_min"] == 20

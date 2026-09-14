@@ -248,8 +248,8 @@ async def extract_schedule(tender_id: str, user: CurrentUser) -> dict:
         if not items:
             raise ApiError(409, "SCHEDULE_EMPTY",
                            "no schedule lines on this tender — upload a BOQ or add items")
-        populated = spec_service.extract_schedule(user.workspace_id, items)
-        return {"lines": len(items), "populated": populated,
+        counts = spec_service.extract_schedule(user.workspace_id, items)
+        return {"lines": len(items), **counts,
                 **spec_service.assess_schedule(user.workspace_id, tender_id)}
 
     return ok(await run_in_threadpool(_run))
