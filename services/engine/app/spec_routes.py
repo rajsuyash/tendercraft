@@ -20,7 +20,7 @@ from .auth import AuthedUser, get_current_user
 from .deterministic.spec_params import PARAM_KEYS, REGISTRY
 from .envelope import ApiError, ok
 
-log = logging.getLogger("tendercraft.specs")
+log = logging.getLogger("tendercraft.spec")
 
 router = APIRouter()
 CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]

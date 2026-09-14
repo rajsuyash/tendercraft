@@ -180,7 +180,7 @@ def _capabilities(spec_rows: Sequence[dict]) -> tuple[list[CapabilitySpec], list
 def assess_schedule(workspace_id: str, tender_id: str) -> dict[str, Any]:
     """Fit every schedule line against what the bidder can make and what they have listed.
 
-    Two queries, then arithmetic in memory. A per-line query would be the N+1 in
+    Three queries, then arithmetic in memory. A per-line query would be the N+1 in
     docs/known-pitfalls.md multiplied by however many lines a schedule has.
     """
     line_rows = db.get_line_items(tender_id, workspace_id)
@@ -217,13 +217,19 @@ def assess_schedule(workspace_id: str, tender_id: str) -> dict[str, Any]:
             }
         )
 
+    tender = db.get_tender(tender_id, workspace_id) or {}
+    extracted = bool(tender.get("specs_extracted_at"))
+
     return {
         "lines": lines,
-        "summary": _summarise(lines),
+        "summary": _summarise(lines, extracted=extracted),
         # Said once, here, so no screen has to invent the wording. We never read GeM to obtain
         # or verify a catalogue (G-1/G-8) — "published" is the bidder's own record.
         "catalogue_source": "recorded_by_you",
         "has_capability": bool(envelopes or catalogues),
+        # NULL until the schedule has been read once. The screen must be able to say "not read
+        # yet" rather than implying a verdict it has not computed.
+        "specs_extracted_at": tender.get("specs_extracted_at"),
     }
 
 
@@ -327,14 +333,29 @@ def _anchor_label(row: dict) -> str:
     return " · ".join(parts) or "no anchor"
 
 
-def _summarise(lines: Sequence[dict]) -> dict[str, int]:
+def _summarise(lines: Sequence[dict], *, extracted: bool) -> dict[str, int]:
     """One function computes the counts, so a screen can never show a number nothing explains
-    (docs/known-pitfalls.md: four counters describing one object will disagree)."""
+    (docs/known-pitfalls.md: four counters describing one object will disagree).
+
+    `extracted` is passed in, never inferred from the rows. Zero parameters on every line means
+    "never read" before extraction and "these lines state no specification" after it — opposite
+    messages, and guessing between them from the data alone is exactly the inference this
+    codebase forbids recording as a measurement.
+    """
     states = [line["catalogue_state"] for line in lines]
+    # A line that was read and yielded nothing is prose, not an unanswered product line.
+    prose = (
+        sum(1 for line in lines
+            if line["parameters_read"] == 0
+            and line["catalogue_state"] == CatalogueState.UNKNOWN.value)
+        if extracted else 0
+    )
     return {
         "total": len(lines),
         "published": states.count(CatalogueState.PUBLISHED.value),
         "creatable": states.count(CatalogueState.CREATABLE.value),
         "not_creatable": states.count(CatalogueState.NOT_CREATABLE.value),
-        "unknown": states.count(CatalogueState.UNKNOWN.value),
+        "unknown": states.count(CatalogueState.UNKNOWN.value) - prose,
+        "not_a_product_line": prose,
+        "awaiting_read": 0 if extracted else len(lines),
     }

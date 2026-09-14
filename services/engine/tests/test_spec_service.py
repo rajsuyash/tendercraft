@@ -51,9 +51,10 @@ def spec_row(id, kind="envelope", label="Rope plant", params=(), gem=None):
 
 @pytest.fixture
 def stub_db(monkeypatch):
-    state = {"lines": [], "specs": []}
+    state = {"lines": [], "specs": [], "tender": {"specs_extracted_at": "2026-09-14T00:00:00Z"}}
     monkeypatch.setattr(spec_service.db, "get_line_items", lambda t, w: state["lines"])
     monkeypatch.setattr(spec_service.db, "get_capability_specs", lambda w: state["specs"])
+    monkeypatch.setattr(spec_service.db, "get_tender", lambda t, w: state["tender"])
     return state
 
 
@@ -209,7 +210,7 @@ def test_the_summary_counts_come_from_the_same_rows_the_screen_shows(stub_db):
     summary = out["summary"]
     assert summary["total"] == len(out["lines"]) == 3
     assert summary["creatable"] + summary["not_creatable"] + summary["unknown"] \
-        + summary["published"] == summary["total"]
+        + summary["published"] + summary["not_a_product_line"] == summary["total"]
 
 
 @pytest.mark.parametrize("row,expected", [

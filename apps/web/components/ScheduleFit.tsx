@@ -56,9 +56,12 @@ export type Schedule = {
     creatable: number;
     not_creatable: number;
     unknown: number;
+    not_a_product_line: number;
+    awaiting_read: number;
   };
   catalogue_source: string;
   has_capability: boolean;
+  specs_extracted_at: string | null;
 };
 
 /**
@@ -202,6 +205,29 @@ export function ScheduleFit({
         </p>
       )}
       {note && !error && <p className="mb-4 max-w-prose text-sm text-muted">{note}</p>}
+
+      {/* Three different sentences, and the screen used to have one. "Not assessed" was shown for
+          a line nobody had read, a line with no specification in it, and a line whose parameters
+          no envelope covers — which made a working feature look broken. */}
+      {schedule.specs_extracted_at === null ? (
+        <div
+          data-specs-unread
+          className="mb-4 rounded-card border border-hairline bg-surface-alt p-card text-sm text-muted"
+        >
+          The specifications in these lines have not been read yet. This happens automatically
+          shortly after upload; use <span className="font-medium">Read specifications</span> to run
+          it now.
+        </div>
+      ) : summary.not_a_product_line > 0 ? (
+        <div
+          data-prose-lines
+          className="mb-4 rounded-card border border-hairline bg-surface-alt p-card text-sm text-muted"
+        >
+          {summary.not_a_product_line} of {summary.total} lines state no product specification —
+          they are requirements like past performance or document submission. They are listed
+          below and are not counted as gaps in your capability.
+        </div>
+      ) : null}
 
       {lines.length === 0 ? (
         <div
