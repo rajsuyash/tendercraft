@@ -35,11 +35,22 @@ def test_ingest_schedules_extraction_as_a_background_task(monkeypatch):
 def test_background_extraction_swallows_its_own_failure(monkeypatch, caplog):
     # An upload that succeeded must not be reported as failed because a later, optional read
     # of the schedule fell over. Same reasoning as harvest_quietly on the export path.
+    #
+    # And it must leave the tender UNSTAMPED: a read that raised did not happen, so NULL is
+    # the true value and a stamp would assert one that did not. A try/finally around the
+    # stamp would break exactly this, which is why the stamp sits inside the try.
+    stamped: list[tuple] = []
+
     def boom(*a, **k):
         raise RuntimeError("model down")
 
     monkeypatch.setattr(tenders.db, "get_line_items", boom)
+    monkeypatch.setattr(tenders.db, "mark_specs_extracted",
+                        lambda ws, t: stamped.append((ws, t)))
+
     tenders._extract_quietly("ws-1", "t-1")  # must not raise
+
+    assert stamped == [], "a read that failed must not be recorded as a read that happened"
 
 
 def test_background_extraction_stamps_the_tender(monkeypatch):
@@ -96,3 +107,38 @@ def test_the_ingest_ROUTE_actually_runs_the_read_after_responding(monkeypatch):
 
     assert r.status_code == 200 and r.json()["ok"] is True
     assert ran == [("ws-9", "t-9")], "ingest must queue the schedule read"
+
+
+def test_a_lost_stamp_never_discards_a_completed_extraction(monkeypatch):
+    """The manual button spends the model calls and persists the parameters BEFORE stamping.
+    If the stamp write fails — which it does on every press until 0040 is applied — a
+    propagating 502 would throw away work that actually succeeded. Losing the stamp costs a
+    re-read; losing the read costs the spend that produced it."""
+    from fastapi.testclient import TestClient
+
+    from app import db, spec_service
+    from app.auth import AuthedUser, get_current_user
+    from app.main import create_app
+
+    monkeypatch.setattr(db, "get_tender", lambda t, w: {"id": t})
+    monkeypatch.setattr(db, "get_line_items",
+                        lambda t, w: [{"id": "i1", "description": "d", "spec_parameters": []}])
+    monkeypatch.setattr(db, "get_capability_specs", lambda w: [])
+    monkeypatch.setattr(spec_service, "extract_schedule",
+                        lambda ws, items, **k: {"distinct": 1, "read": 1, "skipped": 0,
+                                                "populated": 1})
+
+    def unstamped(*a, **k):
+        raise RuntimeError("column specs_extracted_at does not exist")
+
+    monkeypatch.setattr(db, "mark_specs_extracted", unstamped)
+
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: AuthedUser(
+        user_id="u1", workspace_id="ws-1", role="admin",
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/tenders/t-1/schedule/extract")
+
+    assert r.status_code == 200, "a lost stamp must not discard a completed extraction"
+    assert r.json()["data"]["populated"] == 1

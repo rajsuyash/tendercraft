@@ -201,6 +201,12 @@ def _extract_quietly(workspace_id: str, tender_id: str) -> None:
     optional read of the schedule must not turn that into an error the user cannot act on —
     same reasoning as `learning.harvest_quietly` on the export path.
     """
+    # ponytail: no jobs table. Cloud Run throttles CPU once the response is flushed
+    # (--no-cpu-throttling is not set), so a queued read can STALL until the next request
+    # wakes the instance — min-instances is 1 on the engine (measured 2026-09-14; the 0 in
+    # docs/deploy.md is stale), so it is rarely lost outright. State stays honest either
+    # way: specs_extracted_at remains NULL and the manual button covers it. Add a jobs
+    # table if stalled reads start showing up in the logs.
     try:
         items = db.get_line_items(tender_id, workspace_id)
         if items:

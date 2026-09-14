@@ -7,6 +7,7 @@ still renders during a model outage — reporting `unknown`, which is the truth.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
@@ -18,6 +19,8 @@ from . import authz, db, spec_service
 from .auth import AuthedUser, get_current_user
 from .deterministic.spec_params import PARAM_KEYS, REGISTRY
 from .envelope import ApiError, ok
+
+log = logging.getLogger("tendercraft.specs")
 
 router = APIRouter()
 CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
@@ -249,7 +252,14 @@ async def extract_schedule(tender_id: str, user: CurrentUser) -> dict:
             raise ApiError(409, "SCHEDULE_EMPTY",
                            "no schedule lines on this tender — upload a BOQ or add items")
         counts = spec_service.extract_schedule(user.workspace_id, items)
-        db.mark_specs_extracted(user.workspace_id, tender_id)
+        try:
+            db.mark_specs_extracted(user.workspace_id, tender_id)
+        except Exception:  # noqa: BLE001 — the read already succeeded and is already persisted
+            # Losing the stamp costs a re-read later; discarding a completed extraction with
+            # a 502 costs the model spend that produced it. The stamp is the cheaper loss.
+            # Guarded HERE and not inside db.mark_specs_extracted: a db helper that swallows
+            # its own failure cannot tell the next caller a write was lost.
+            log.exception("could not stamp specs_extracted_at for tender %s", tender_id)
         return {"total_lines": len(items), **counts,
                 **spec_service.assess_schedule(user.workspace_id, tender_id)}
 
