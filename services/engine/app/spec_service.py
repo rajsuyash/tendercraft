@@ -92,11 +92,11 @@ def extract_schedule(
     Import is local so `app.spec_service` stays importable — and the assessment path stays
     runnable — in a deployment where the model client is not configured at all.
     """
-    from pipeline.spec_extractor import extract_many
+    from pipeline.spec_extractor import distinct_descriptions, extract_many
 
-    by_description = extract_many([i.get("description", "") for i in line_items], limit=limit)
-    distinct = len({(i.get("description") or "").strip()
-                    for i in line_items if (i.get("description") or "").strip()})
+    raw = [i.get("description", "") for i in line_items]
+    by_description = extract_many(raw, limit=limit)
+    distinct = len(distinct_descriptions(raw))
     populated = 0
     for item in line_items:
         params = by_description.get((item.get("description") or "").strip(), ())

@@ -134,7 +134,7 @@ export function ScheduleFit({
       return;
     }
     setNote(
-      `Read ${body.data.populated} of ${body.data.lines} schedule lines. Lines still showing ` +
+      `Read ${body.data.populated} of ${body.data.total_lines} schedule lines. Lines still showing ` +
         "no parameters state their specification somewhere this pass could not see — enter them by hand.",
     );
     startTransition(() => router.refresh());

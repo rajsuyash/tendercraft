@@ -116,6 +116,16 @@ def extract_parameters(description: str) -> tuple[ParamValue, ...]:
     return parse_parameters(row for row in rows if isinstance(row, dict))
 
 
+def distinct_descriptions(descriptions: Sequence[str]) -> list[str]:
+    """The descriptions worth spending a call on, in schedule order, deduped.
+
+    One definition of "blank", used by both the fan-out and the count that reports it.
+    Two derivations of one rule is how `distinct` and `read` drift into disagreeing
+    while `max(0, ...)` quietly renders it as zero.
+    """
+    return list(dict.fromkeys(d.strip() for d in descriptions if d and d.strip()))
+
+
 def extract_many(
     descriptions: Sequence[str], limit: int | None = None
 ) -> dict[str, tuple[ParamValue, ...]]:
@@ -129,5 +139,7 @@ def extract_many(
     silently returning fewer keys than it was asked about.
     """
     budget = DEFAULT_EXTRACT_BUDGET if limit is None else limit
-    unique = list(dict.fromkeys(d.strip() for d in descriptions if d and d.strip()))
-    return {d: extract_parameters(d) for d in unique[:budget]}
+    # A negative budget (only reachable via a typo'd SPEC_EXTRACT_BUDGET) must mean "no calls",
+    # not "drop the last N off the end" — `unique[:-1]` would silently do the latter.
+    budget = max(0, budget)
+    return {d: extract_parameters(d) for d in distinct_descriptions(descriptions)[:budget]}
