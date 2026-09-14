@@ -1310,25 +1310,34 @@ def delete_discovery_rule(rule_id: str, workspace_id: str) -> None:
 
 
 def upsert_opportunity_matches(workspace_id: str, rows: list[dict]) -> int:
-    """Bulk upsert. Every row is padded to the SAME key set first.
+    """Bulk upsert, one request per distinct key set.
 
-    PostgREST rejects a bulk insert whose objects have differing keys with a bare
-    `400 Bad Request` — no column name, no hint. It bites here because only the in-scope rows
-    carry relevance fields, so the payload is legitimately ragged the moment ranking exists.
-    Filling the gaps with None writes an explicit null, which is what "not banded" means anyway.
+    PostgREST rejects a bulk body whose objects have differing keys with a bare `400`. The
+    payload here is legitimately ragged: `relevance.bands_for` skips rows whose input hash is
+    unchanged, so those rows carry no relevance keys at all. The previous answer — pad every
+    row to the union with None — wrote an explicit NULL over the cached band and hash under
+    `merge-duplicates`, so the run that REUSED a band was the run that erased it. Measured
+    2026-09-14: 3,192 of 6,694 rows in one workspace band-NULL, 14 of them open wire-rope
+    tenders the latest run had just touched.
+
+    Grouping keeps each request uniform without inventing a value for a column the caller
+    never mentioned. A key the caller set to None is still sent as None — the keyword
+    fallback writes `relevance_input_hash: None` on purpose and must keep doing so.
     """
     if not rows:
         return 0
-    keys = {k for r in rows for k in r} | {"workspace_id"}
-    payload = [{**{k: None for k in keys}, **r, "workspace_id": workspace_id} for r in rows]
-    _rest(
-        "POST",
-        "opportunity_matches",
-        params={"on_conflict": "workspace_id,opportunity_id"},
-        json=payload,
-        prefer="resolution=merge-duplicates,return=minimal",
-    )
-    return len(payload)
+    groups: dict[frozenset[str], list[dict]] = {}
+    for r in rows:
+        groups.setdefault(frozenset(r), []).append(r)
+    for group in groups.values():
+        _rest(
+            "POST",
+            "opportunity_matches",
+            params={"on_conflict": "workspace_id,opportunity_id"},
+            json=[{**r, "workspace_id": workspace_id} for r in group],
+            prefer="resolution=merge-duplicates,return=minimal",
+        )
+    return len(rows)
 
 
 def _market_scope(markets: list[str] | None) -> dict[str, str]:

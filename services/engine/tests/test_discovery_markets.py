@@ -376,3 +376,42 @@ def test_a_partial_window_is_not_saturated(monkeypatch):
 
     result = ing.recompute_matches("ws-1")
     assert result["window_saturated"] is False
+
+
+# ---------- a cached band must survive the next run ----------
+
+def test_a_hash_matched_row_leaves_recompute_without_relevance_keys(monkeypatch):
+    """The row `bands_for` skips must reach the upsert with NO relevance keys — not with
+    None in them. The upsert's key-set grouping only helps if the recompute honours that."""
+    from app.discovery import ingest as ing
+    from app.discovery import relevance
+
+    captured: dict = {}
+    statement, keywords = "Manufacturer of steel wire rope", ["wire rope"]
+    opp = {"id": "o-1", "market": "IN", "title": "Steel Wire Rope 16mm", "category_codes": []}
+
+    monkeypatch.setattr(ing, "_capability", lambda ws: (statement, keywords))
+    monkeypatch.setattr(ing, "_rules_for", lambda ws, kw: [])
+    monkeypatch.setattr(ing, "_profile_turnover_inr", lambda ws: None)
+    monkeypatch.setattr(ing.db, "get_workspace_market", lambda ws: "IN")
+    monkeypatch.setattr(ing.db, "get_workspace_markets", lambda ws: ["IN"])
+    monkeypatch.setattr(ing, "_enrich_documents", lambda items, budget: 0)
+    monkeypatch.setattr(ing.db, "get_opportunities",
+                        lambda **kw: [opp] if kw.get("offset", 0) == 0 else [])
+    monkeypatch.setattr(
+        ing.db, "get_relevance_hashes",
+        lambda ws: {"o-1": relevance.input_hash(statement, keywords, opp, "en")},
+    )
+
+    def fake_upsert(ws, rows):
+        captured["rows"] = rows
+        return len(rows)
+
+    monkeypatch.setattr(ing.db, "upsert_opportunity_matches", fake_upsert)
+
+    ing.recompute_matches("ws-1", doc_budget=0)
+
+    row = captured["rows"][0]
+    assert row["state"] == "in_scope"
+    assert "relevance_band" not in row
+    assert "relevance_input_hash" not in row
