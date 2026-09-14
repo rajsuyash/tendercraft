@@ -29,6 +29,14 @@ def rows(monkeypatch):
         captured["calls"].append({"path": path, "params": params})
         captured["path"] = path
         captured["params"] = params
+        if path == "workspace_members":
+            # Default: every workspace in `returns` has a member, so tests about market
+            # resolution keep testing market resolution. A test about the membership FILTER
+            # sets `members` explicitly.
+            if "members" in captured:
+                return captured["members"]
+            return [{"workspace_id": r["id"]}
+                    for r in captured.get("returns", []) if isinstance(r, dict) and r.get("id")]
         return captured.get("returns", [])
 
     monkeypatch.setattr(db, "_rest", fake_rest)
@@ -116,17 +124,18 @@ def test_the_sweep_fanout_has_no_opt_in_filter(rows):
     assert "enabled" not in workspaces[0]["params"]
 
 
-def test_the_fanout_orders_configured_workspaces_first_and_drops_none(monkeypatch):
-    """Ordering, never filtering.
+def test_the_fanout_orders_configured_workspaces_first_and_drops_no_reachable_one(monkeypatch):
+    """Ordering, never filtering — among workspaces a user can actually open.
 
     296 workspaces existed in production and exactly ONE had a discovery rule; the rest were
     isolation-test debris that `audit_events` being append-only makes undeletable. The
     per-workspace recompute is where the wall-clock goes, so a scheduled run reached the real
     workspace hours late or not at all — and 3600s is already the platform's ceiling.
 
-    Dropping the debris would be faster and wrong: a workspace missing from the fan-out is a
-    workspace whose feed silently stops updating, which is the failure the job exists to
-    prevent. So every workspace is still returned, in a different order.
+    Dropping a workspace *by name* would be faster and wrong: a workspace missing from the
+    fan-out is a workspace whose feed silently stops updating, which is the failure the job
+    exists to prevent. So every workspace with a member is still returned, in a different
+    order. Memberless ones are covered by the next test and are a different claim entirely.
     """
     listing = [
         {"id": "debris1", "name": "Dup Test", "market": "IN", "discovery_markets": ["IN"]},
@@ -139,12 +148,64 @@ def test_the_fanout_orders_configured_workspaces_first_and_drops_none(monkeypatc
             return listing
         if path == "discovery_rules":
             return [{"workspace_id": "real"}]
+        if path == "workspace_members":
+            # All three are reachable here — this test is about ORDER, so membership must not
+            # be the thing doing the work.
+            return [{"workspace_id": w["id"]} for w in listing]
         return []  # vendor_profiles
 
     monkeypatch.setattr(db, "_rest", fake_rest)
     got = db.list_workspaces_for_sweep()
     assert [w["id"] for w in got] == ["real", "debris1", "debris2"]
-    assert len(got) == 3, "no workspace may be dropped from the fan-out"
+    assert len(got) == 3, "no workspace a user can open may be dropped from the fan-out"
+
+
+def test_a_workspace_nobody_belongs_to_is_not_swept(monkeypatch):
+    """The egress fix, and the reason it is not the name heuristic the test above refuses.
+
+    Since migration 0011 a profiles row alone grants nothing — `current_workspace_id()`
+    validates against `workspace_members` — so a workspace with no members cannot be opened by
+    any user through any surface. Recomputing its feed keeps nobody's screen current.
+
+    Measured 2026-09-14: 347 workspaces, SIX with members, and `recompute_matches` reads a
+    1000-row corpus window for each one on every sweep. That is ~347k rows of egress per run to
+    build feeds nobody can look at, and it put the project 12.16 GB into a 5.5 GB quota.
+    """
+    listing = [
+        {"id": "orphan", "name": "RBAC Workspace", "market": "IN"},
+        {"id": "real", "name": "A Customer", "market": "IN"},
+    ]
+
+    def fake_rest(method, path, **kwargs):
+        if path == "workspaces":
+            return listing
+        if path == "workspace_members":
+            return [{"workspace_id": "real"}]
+        return []
+
+    monkeypatch.setattr(db, "_rest", fake_rest)
+    assert [w["id"] for w in db.list_workspaces_for_sweep()] == ["real"]
+
+
+def test_an_unreadable_membership_query_sweeps_everything_rather_than_nothing(monkeypatch):
+    """Fail OPEN, because this set filters rather than orders.
+
+    `_configured_workspace_ids` may conflate "read failed" with "none configured" — the cost is
+    a worse order. This one cannot: an empty set from a hiccuped query would drop every
+    workspace at once and stop every feed in the product, which is precisely the ET-7 failure
+    the fan-out exists to prevent. A wasted sweep is cheaper than a silent outage.
+    """
+    listing = [{"id": "a", "name": "A", "market": "IN"}, {"id": "b", "name": "B", "market": "IN"}]
+
+    def fake_rest(method, path, **kwargs):
+        if path == "workspaces":
+            return listing
+        if path == "workspace_members":
+            raise RuntimeError("postgrest is having a moment")
+        return []
+
+    monkeypatch.setattr(db, "_rest", fake_rest)
+    assert [w["id"] for w in db.list_workspaces_for_sweep()] == ["a", "b"]
 
 
 def test_a_vendor_profile_also_counts_as_configured(monkeypatch):
@@ -155,6 +216,8 @@ def test_a_vendor_profile_also_counts_as_configured(monkeypatch):
                     {"id": "real", "name": "A Customer", "market": "IN"}]
         if path == "vendor_profiles":
             return [{"workspace_id": "real"}]
+        if path == "workspace_members":
+            return [{"workspace_id": "debris"}, {"workspace_id": "real"}]
         return []
 
     monkeypatch.setattr(db, "_rest", fake_rest)

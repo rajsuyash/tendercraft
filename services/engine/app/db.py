@@ -1469,9 +1469,57 @@ def list_workspaces_for_sweep() -> list[dict]:
     # key and thereby reordered the whole list even when nothing was configured — a sweep
     # ordering that changes for reasons unrelated to the fix is a second variable in any future
     # "why did this workspace go last?" investigation. Equal keys keep the portal's order.
+    # Then drop what NO USER CAN OPEN. Since migration 0011 a profiles row alone grants
+    # nothing: `current_workspace_id()` validates the active workspace against
+    # `workspace_members`, so a workspace with zero members is unreachable by every user
+    # through every surface. Recomputing its feed cannot keep anybody's screen current because
+    # nobody has a screen — which is why this does not weaken the ET-7 rule the ordering
+    # comment above protects. That rule is "never silently stop updating a feed somebody
+    # reads"; a memberless workspace has no reader, by construction rather than by guess.
+    #
+    # Measured 2026-09-14, which is what forced this: 347 workspaces, SIX with members. The
+    # other 341 are isolation-suite fixtures that append-only `audit_events` makes permanently
+    # undeletable, and `recompute_matches` reads a 1000-row corpus window for each one on every
+    # sweep — ~347k rows (~800 MB) of Supabase egress per run, to compute feeds for workspaces
+    # that cannot be opened. It put the project 12.16 GB into a 5.5 GB egress quota. Ordering
+    # them last (2026-08-31) stopped them delaying real work; it never stopped the work itself.
+    #
+    # Membership, not a name pattern — same standard the "configured" comment sets. "Dup Test"
+    # is a guess about our own fixtures; "no member row" is the product's own access rule.
+    members = _workspaces_with_members()
+    if members is None:
+        # The read FAILED. Filtering on an empty set would sweep nothing at all, which is
+        # exactly the ET-7 failure — every feed stops at once because one helper query
+        # hiccuped. Degrade to the old behaviour: sweep everything, ordered.
+        log.warning("sweep fan-out: membership read failed; sweeping every workspace")
+    else:
+        before = len(out)
+        out = [w for w in out if w["id"] in members]
+        if before != len(out):
+            log.info("sweep fan-out: %d of %d workspaces have members", len(out), before)
+
     configured = _configured_workspace_ids()
     out.sort(key=lambda w: w["id"] not in configured)
     return out
+
+
+def _workspaces_with_members() -> set[str] | None:
+    """Workspaces at least one user belongs to. `None` means the read failed — not 'none exist'.
+
+    The distinction is the whole point. This set FILTERS the sweep, so an empty set returned
+    for the wrong reason stops every feed in the product; `_configured_workspace_ids` can
+    conflate the two because it only orders. Callers must treat `None` as "sweep everything".
+    """
+    try:
+        rows = _rest("GET", "workspace_members",
+                     params={"select": "workspace_id",
+                             "limit": str(_CRON_FANOUT_LIMIT * 20)})
+    except Exception:  # noqa: BLE001 — a failed read must not empty the fan-out
+        log.warning("sweep fan-out: could not read workspace_members")
+        return None
+    if rows is None:
+        return None
+    return {r["workspace_id"] for r in rows if r.get("workspace_id")}
 
 
 def _configured_workspace_ids() -> set[str]:
