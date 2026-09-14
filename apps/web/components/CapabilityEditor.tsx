@@ -212,7 +212,18 @@ export function CapabilityEditor({
           websiteUrl={websiteUrl}
           locale={locale}
         />
-      ) : null}
+      ) : (
+        // A reachable state, not an edge case — the vocabulary read is independent of the
+        // registry/specs reads above it and can fail on its own. A blank region here would
+        // hide the editable keyword box with no explanation (docs/conventions.md).
+        <p
+          data-bid-vocabulary-error
+          className="mb-8 rounded-card border border-danger bg-danger-bg p-card text-sm text-danger"
+        >
+          What you bid on could not be loaded. The envelopes and catalogue items below are
+          unaffected — retry once the engine is reachable.
+        </p>
+      )}
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-[-0.01em] text-ink">

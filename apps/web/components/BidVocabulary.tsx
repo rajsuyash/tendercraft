@@ -29,7 +29,7 @@ import { useState } from "react";
 import { translator, type Locale } from "@/lib/i18n";
 
 import { KeywordSuggestions } from "./KeywordSuggestions";
-import { splitKeywords } from "./ProfileForm";
+import { splitKeywords, unlikelyKeywords } from "./ProfileForm";
 
 export type VocabTerm = {
   term: string;
@@ -56,6 +56,22 @@ export function groupBySource(
 const INPUT =
   "w-full rounded border border-border bg-surface px-2.5 py-1.5 text-sm text-ink " +
   "focus:border-primary focus:outline-none";
+
+/** Turns a `/api/profile` response into the message to show, or `null` on success.
+ *
+ * Extracted so the failure path is testable with no rendering harness (this repo has no
+ * React Testing Library wired up) — a 500 answering with an HTML error page makes `res.json()`
+ * itself reject, which is exactly the case a naive `body.ok` read misses, and is where the
+ * "a failed save says nothing" bug actually lived.
+ */
+export async function saveErrorMessage(
+  res: Pick<Response, "json">,
+  fallback: string,
+): Promise<string | null> {
+  const body = await res.json().catch(() => null);
+  if (body?.ok) return null;
+  return body?.error?.message ?? fallback;
+}
 
 export function BidVocabulary({
   terms,
@@ -107,12 +123,22 @@ export function BidVocabulary({
           capability_keywords: splitKeywords(raw),
         }),
       });
-      const body = await res.json();
-      if (!body.ok) {
-        setError(body.error?.message ?? t("Could not save your vocabulary"));
+      const message = await saveErrorMessage(res, t("Could not save your vocabulary"));
+      if (message) {
+        setError(message);
         return;
       }
+      // The server trims/dedupes/lower-cases; resync the box so it cannot keep showing raw
+      // typing that no longer matches what was actually stored — router.refresh() re-renders
+      // this client component's PARENT with fresh props, but preserves this instance, so the
+      // new props never reach local state on their own.
+      setRaw(splitKeywords(raw).join(", "));
       router.refresh();
+    } catch {
+      // fetch() itself rejecting (offline, network error) must not fail silently — save() is
+      // called as `onClick={() => void save()}`, so a thrown/rejected promise with no catch
+      // here would vanish with the user told nothing.
+      setError(t("Could not save your vocabulary"));
     } finally {
       setBusy(false);
     }
@@ -167,6 +193,24 @@ export function BidVocabulary({
             onAccept={(kw) => append([kw])}
             onAcceptMany={append}
           />
+          {(() => {
+            // Live, as the user types — not just after a save+refresh round trip via `dead`.
+            // This is the guard built after USHA MARTIN INDIA typed prose as keywords,
+            // switched on the opt-in gate, and hid all 335 swept tenders with the screen
+            // telling them to sweep GeM again, the one action that could not help
+            // (ProfileForm.test.ts). It moved here with the rest of the editor; it must not
+            // have stopped being called along the way.
+            const unlikely = unlikelyKeywords(splitKeywords(raw));
+            if (!unlikely.length) return null;
+            return (
+              <p data-keyword-warning className="mt-1 text-xs text-warning">
+                {t(
+                  "These are sentences rather than keywords and will match almost nothing — a term is matched whole against a tender's title:",
+                )}{" "}
+                <span className="font-medium">{unlikely.map((k) => `“${k}”`).join(", ")}</span>
+              </p>
+            );
+          })()}
         </label>
       </div>
 

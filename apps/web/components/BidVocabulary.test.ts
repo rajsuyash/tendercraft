@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { groupBySource, type VocabTerm } from "./BidVocabulary";
+import { groupBySource, saveErrorMessage, type VocabTerm } from "./BidVocabulary";
 
 const terms: VocabTerm[] = [
   { term: "wire rope", source: "typed", origin: "", reach: 61 },
@@ -27,5 +27,30 @@ describe("the bid vocabulary", () => {
     expect(g.typed).toEqual([]);
     expect(g.derived).toEqual([]);
     expect(g.dead).toEqual([]);
+  });
+});
+
+describe("saveErrorMessage", () => {
+  // Regression: a 500 answering with an HTML error page (not JSON) made `res.json()` itself
+  // reject. `save()` had no `catch`, so the rejection escaped the discarded
+  // `onClick={() => void save()}` promise and the user saw nothing at all.
+  test("a non-JSON response still produces a message, not a silent throw", async () => {
+    const res = { json: () => Promise.reject(new Error("Unexpected token <")) };
+    await expect(saveErrorMessage(res, "fallback")).resolves.toBe("fallback");
+  });
+
+  test("a successful response produces no message", async () => {
+    const res = { json: () => Promise.resolve({ ok: true }) };
+    await expect(saveErrorMessage(res, "fallback")).resolves.toBeNull();
+  });
+
+  test("the engine's own message is surfaced verbatim over the fallback", async () => {
+    const res = { json: () => Promise.resolve({ ok: false, error: { message: "nope" } }) };
+    await expect(saveErrorMessage(res, "fallback")).resolves.toBe("nope");
+  });
+
+  test("a failure body with no error message still falls back", async () => {
+    const res = { json: () => Promise.resolve({ ok: false }) };
+    await expect(saveErrorMessage(res, "fallback")).resolves.toBe("fallback");
   });
 });

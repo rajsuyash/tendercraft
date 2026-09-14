@@ -226,8 +226,6 @@ export default async function ProfilePage() {
           initial={{
             legal_name: profile?.legal_name ?? orgName,
             capability_statement: profile?.capability_statement,
-            // The form edits one comma-separated string; the server stores an array.
-            capability_keywords_raw: (profile?.capability_keywords ?? []).join(", "),
             website_url: profile?.website_url,
             annual_report_document_id: profile?.annual_report_document_id,
             annual_report_name: annualReport?.name ?? null,
@@ -292,9 +290,14 @@ export default async function ProfilePage() {
           <section className="rounded-card border border-border bg-surface p-card">
             <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="font-heading text-lg font-semibold text-ink">{t("What you bid on")}</h2>
-              <a href="/opportunities" className="text-sm text-primary hover:underline">
-                {t("See your ranked feed →")}
-              </a>
+              <span className="flex gap-4">
+                <a href="/capability" className="text-sm text-primary hover:underline">
+                  {t("Open Manufacturing capability →")}
+                </a>
+                <a href="/opportunities" className="text-sm text-primary hover:underline">
+                  {t("See your ranked feed →")}
+                </a>
+              </span>
             </div>
 
             <p className="text-xs uppercase tracking-wide text-muted">

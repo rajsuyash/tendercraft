@@ -27,10 +27,8 @@ export type Experience = {
 export type ProfileData = {
   legal_name?: string | null;
   capability_statement?: string | null;
-  /** What the server stores. Read-only here — the input edits the raw string below. */
+  /** What the server stores. Edited on /capability now (BidVocabulary.tsx), not here. */
   capability_keywords?: string[] | null;
-  /** The comma-separated text the input actually holds, seeded from the array by the page. */
-  capability_keywords_raw?: string | null;
   website_url?: string | null;
   annual_report_document_id?: string | null;
   annual_report_name?: string | null;
