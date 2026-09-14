@@ -13,7 +13,7 @@ export default async function ReadinessPage({ params }: { params: Promise<{ id: 
   // All reads are independent, so they go out together. Serially they measured 6.8s of
   // blank screen in prod; the page now waits for the slowest one, not the sum.
   // "prepared" = eligibility analysis has been run at least once.
-  const [{ data: tender }, res, { data: analysis }, sres, { data: proposal }, { data: estimate }] =
+  const [{ data: tender }, res, { data: analysis }, sres, { data: proposal }] =
     await Promise.all([
       supabase
         .from("tenders")
@@ -24,10 +24,10 @@ export default async function ReadinessPage({ params }: { params: Promise<{ id: 
       supabase.from("analyses").select("tender_id").eq("tender_id", id).maybeSingle(),
       // One reconciling readiness figure, rather than four counters that disagreed.
       engineFetch(`/api/tenders/${id}/submission`),
-      // Same existence check /proposals/[id] and /proposals/[id]/score use to decide whether
-      // there is anything to show — feeds the meter's "Proposal"/"Technical score" links.
+      // Same existence check /proposals/[id] uses — feeds the meter's "Proposal"/"Technical
+      // score" links. Both gate on this alone: the score page's RubricCard renders from the
+      // proposal's sections with no separate estimate needed (see readinessDestinations).
       supabase.from("proposals").select("id").eq("tender_id", id).maybeSingle(),
-      supabase.from("score_estimates").select("tender_id").eq("tender_id", id).maybeSingle(),
     ]);
 
   if (!tender) notFound();
@@ -44,12 +44,7 @@ export default async function ReadinessPage({ params }: { params: Promise<{ id: 
     <>
       {submission ? (
         <div className="px-page pt-page">
-          <SubmissionMeter
-            tenderId={id}
-            submission={submission}
-            drafted={!!proposal}
-            scored={!!estimate}
-          />
+          <SubmissionMeter tenderId={id} submission={submission} drafted={!!proposal} />
         </div>
       ) : null}
       <ReadinessHub

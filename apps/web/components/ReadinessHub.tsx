@@ -213,20 +213,24 @@ export function ReadinessHub({
               >
                 {busy === "prepare" ? "Re-matching…" : "Re-match"}
               </button>
-              <Link
-                href={`/proposals/${tenderId}`}
-                data-generate-cta
-                aria-disabled={!summary.ready_to_generate}
-                className={`rounded px-4 py-1.5 text-sm font-medium ${
-                  summary.ready_to_generate
-                    ? "bg-primary text-on-primary hover:bg-primary-hover"
-                    : "pointer-events-none bg-surface-alt text-muted"
-                }`}
-              >
-                {summary.ready_to_generate
-                  ? "Generate proposal"
-                  : "Clear the blocking items first"}
-              </Link>
+              {summary.ready_to_generate ? (
+                <Link
+                  href={`/proposals/${tenderId}`}
+                  data-generate-cta
+                  className="rounded bg-primary px-4 py-1.5 text-sm font-medium text-on-primary hover:bg-primary-hover"
+                >
+                  Generate proposal
+                </Link>
+              ) : (
+                // `pointer-events-none` on a Link only blocks a mouse — the anchor keeps a
+                // real href, stays focusable, and Enter still navigates. A span cannot.
+                <span
+                  data-generate-cta
+                  className="rounded bg-surface-alt px-4 py-1.5 text-sm font-medium text-muted"
+                >
+                  Clear the blocking items first
+                </span>
+              )}
             </div>
           </div>
 

@@ -3,31 +3,35 @@ import Link from "next/link";
 export type Blocker = { stage: string; label: string; detail: string };
 export type NavLink = { label: string; href: string; enabled: boolean; reason?: string };
 
-/** Where this screen can usefully send you, and why it cannot yet.
+/** Exactly the two destinations this screen can send you to, in this fixed order — and why
+ * each cannot be reached yet.
  *
  * 'Requirements' used to be here and pointed at `/tenders/{id}/readiness` — the page the
  * meter is rendered on. A link to the current page is not navigation.
  *
- * The other two are offered disabled rather than hidden: a bidder should be able to see that
- * a proposal and a score exist as steps, without being sent to an empty page to find out they
- * are not ready. Hiding them would answer the wrong question.
+ * The other two are offered disabled rather than hidden: a bidder should be able to see a
+ * proposal and a score as steps, without being sent to an empty page to find out they are
+ * not ready. Hiding them would answer the wrong question.
+ *
+ * Both gate on `drafted`, not on a separate `scored` flag: RubricCard on the score page
+ * (`app/(app)/proposals/[id]/score/page.tsx`) calls `POST /api/tenders/:id/rubric` on every
+ * load and renders real content as soon as the proposal has sections — it needs no estimate
+ * row. Gating the link on `score_estimates` existing made the disabled reason
+ * ("Available once a proposal exists") false in the `drafted && no-estimate-yet` state, where
+ * the destination is not empty at all.
  */
-export function navFor(
+export function readinessDestinations(
   tenderId: string,
-  state: { drafted: boolean; scored: boolean },
+  state: { drafted: boolean },
 ): [proposal: NavLink, score: NavLink] {
+  const reason = state.drafted ? {} : { reason: "Nothing drafted yet" };
   return [
-    {
-      label: "Proposal",
-      href: `/proposals/${tenderId}`,
-      enabled: state.drafted,
-      ...(state.drafted ? {} : { reason: "Nothing drafted yet" }),
-    },
+    { label: "Proposal", href: `/proposals/${tenderId}`, enabled: state.drafted, ...reason },
     {
       label: "Technical score",
       href: `/proposals/${tenderId}/score`,
-      enabled: state.scored,
-      ...(state.scored ? {} : { reason: "Available once a proposal exists" }),
+      enabled: state.drafted,
+      ...reason,
     },
   ];
 }
@@ -51,12 +55,10 @@ export function SubmissionMeter({
   tenderId,
   submission,
   drafted,
-  scored,
 }: {
   tenderId: string;
   submission: Submission;
   drafted: boolean;
-  scored: boolean;
 }) {
   const { percent, can_submit: ready, blockers } = submission;
   const tone = ready ? "text-success" : percent >= 60 ? "text-warning" : "text-danger";
@@ -105,7 +107,7 @@ export function SubmissionMeter({
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {navFor(tenderId, { drafted, scored }).map((link) =>
+        {readinessDestinations(tenderId, { drafted }).map((link) =>
           link.enabled ? (
             <Link
               key={link.href}
