@@ -106,6 +106,21 @@ def get_criterion_in_tender(criterion_id: str, tender_id: str, workspace_id: str
     return rows[0] if rows else None
 
 
+def mark_specs_extracted(workspace_id: str, tender_id: str) -> None:
+    """Stamp when this tender's schedule specifications were last read.
+
+    Written even when the read found nothing: "read, and these lines state no specification"
+    is a real answer, and leaving the stamp NULL would make it permanently indistinguishable
+    from "never read" — which is the whole reason the column exists.
+    """
+    _rest(
+        "PATCH", "tenders",
+        params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
+        json={"specs_extracted_at": datetime.now(UTC).isoformat()},
+        prefer="return=minimal",
+    )
+
+
 def set_tender_locked(tender_id: str, workspace_id: str, locked_at: str) -> None:
     _rest(
         "PATCH", "tenders",

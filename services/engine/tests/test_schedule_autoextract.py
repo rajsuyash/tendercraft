@@ -1,0 +1,98 @@
+"""Extraction must run on its own, and must never be able to break an upload.
+
+Measured 2026-09-14: the extractor works — nine correctly typed parameters out of a real rope
+line, zero out of "Bidder shall submit test certificates" — and had produced nothing in
+production because it sat behind a button on a screen nobody opened. `docs/known-pitfalls.md`
+already records the shape: a feature reachable only by a button is a feature that silently
+stops.
+
+It runs in the BACKGROUND, not inside the request. `POST /api/tenders/ingest` awaits
+`_process_ingest` in a threadpool, so the user is waiting on it; 48 model calls added there
+turns a slow upload into a timeout.
+"""
+
+from __future__ import annotations
+
+from app import tenders
+
+
+def test_ingest_schedules_extraction_as_a_background_task(monkeypatch):
+    scheduled: list[tuple] = []
+
+    class FakeBackground:
+        def add_task(self, fn, *args, **kwargs):
+            scheduled.append((fn, args, kwargs))
+
+    monkeypatch.setattr(tenders, "_process_ingest",
+                        lambda ws, docs, name, pursuit: {"tender_id": "t-1"})
+
+    tenders._schedule_extraction(FakeBackground(), "ws-1", "t-1")
+
+    assert len(scheduled) == 1, "extraction must be queued, not run inline"
+    assert scheduled[0][1] == ("ws-1", "t-1")
+
+
+def test_background_extraction_swallows_its_own_failure(monkeypatch, caplog):
+    # An upload that succeeded must not be reported as failed because a later, optional read
+    # of the schedule fell over. Same reasoning as harvest_quietly on the export path.
+    def boom(*a, **k):
+        raise RuntimeError("model down")
+
+    monkeypatch.setattr(tenders.db, "get_line_items", boom)
+    tenders._extract_quietly("ws-1", "t-1")  # must not raise
+
+
+def test_background_extraction_stamps_the_tender(monkeypatch):
+    stamped: list[tuple] = []
+    monkeypatch.setattr(tenders.db, "get_line_items",
+                        lambda t, w: [{"id": "l1", "description": "Steel Wire Rope 20mm"}])
+    monkeypatch.setattr(tenders.spec_service, "extract_schedule",
+                        lambda ws, items, **k: {"distinct": 1, "read": 1, "skipped": 0,
+                                                "populated": 1})
+    monkeypatch.setattr(tenders.db, "mark_specs_extracted",
+                        lambda ws, t: stamped.append((ws, t)))
+
+    tenders._extract_quietly("ws-1", "t-1")
+
+    assert stamped == [("ws-1", "t-1")]
+
+
+def test_a_tender_with_no_schedule_is_stamped_too(monkeypatch):
+    # "Read it, there was nothing there" is a real answer and the screen needs to be able to
+    # give it. Leaving the stamp NULL would make an empty schedule permanently indistinguishable
+    # from one that was never read.
+    stamped: list[tuple] = []
+    monkeypatch.setattr(tenders.db, "get_line_items", lambda t, w: [])
+    monkeypatch.setattr(tenders.db, "mark_specs_extracted",
+                        lambda ws, t: stamped.append((ws, t)))
+
+    tenders._extract_quietly("ws-1", "t-1")
+
+    assert stamped == [("ws-1", "t-1")]
+
+
+def test_the_ingest_ROUTE_actually_runs_the_read_after_responding(monkeypatch):
+    """The four tests above exercise the helpers directly, so the route could be left unwired
+    and every one of them would still pass — which is precisely the failure this task exists to
+    fix (a code path nothing reaches). This one goes through FastAPI: real request, real
+    BackgroundTasks, and the read happens after the 200 rather than inside it."""
+    from fastapi.testclient import TestClient
+
+    from app.auth import AuthedUser, get_current_user
+    from app.main import create_app
+
+    ran: list[tuple] = []
+    monkeypatch.setattr(tenders, "_process_ingest",
+                        lambda ws, docs, name, pursuit: {"tender_id": "t-9", "pages": 1})
+    monkeypatch.setattr(tenders, "_extract_quietly",
+                        lambda ws, t: ran.append((ws, t)))
+
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: AuthedUser(
+        user_id="u1", workspace_id="ws-9", role="admin",
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/tenders/ingest", files={"file": ("nit.pdf", b"%PDF-1.4")})
+
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert ran == [("ws-9", "t-9")], "ingest must queue the schedule read"

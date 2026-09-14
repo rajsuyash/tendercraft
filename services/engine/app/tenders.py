@@ -9,7 +9,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
@@ -194,9 +194,38 @@ def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title
     }
 
 
+def _extract_quietly(workspace_id: str, tender_id: str) -> None:
+    """Read the schedule's specifications. A failure here never reaches the uploader.
+
+    The upload has already succeeded and been reported by the time this runs. Losing an
+    optional read of the schedule must not turn that into an error the user cannot act on —
+    same reasoning as `learning.harvest_quietly` on the export path.
+    """
+    try:
+        items = db.get_line_items(tender_id, workspace_id)
+        if items:
+            counts = spec_service.extract_schedule(workspace_id, items)
+            log.info("schedule specs read for tender %s: %s", tender_id, counts)
+        db.mark_specs_extracted(workspace_id, tender_id)
+    except Exception:  # noqa: BLE001 — deliberate: never fail an upload that already returned
+        log.exception("background spec extraction failed for tender %s", tender_id)
+
+
+def _schedule_extraction(background: BackgroundTasks, workspace_id: str,
+                         tender_id: str) -> None:
+    """Queue the read for after the response.
+
+    NOT inline: `ingest_tender` awaits `_process_ingest` in a threadpool, so the uploader is
+    waiting on it, and a real schedule is up to 48 model calls. Extraction is the one part of
+    ingest nobody is watching the clock on.
+    """
+    background.add_task(_extract_quietly, workspace_id, tender_id)
+
+
 @router.post("/api/tenders/ingest")
 async def ingest_tender(
-    user: CurrentUser, file: Annotated[list[UploadFile], File()], title: str = "",
+    user: CurrentUser, background: BackgroundTasks,
+    file: Annotated[list[UploadFile], File()], title: str = "",
     pursuit_id: str = "",
 ) -> dict:
     """Ingest a tender PACKAGE — NIT, annexures and BOQ sheets — as one tender.
@@ -219,9 +248,13 @@ async def ingest_tender(
         documents.append((upload.filename or "Untitled document", data))
     name = title or documents[0][0] or "Untitled tender"
     # Parsing + extraction + inserts are blocking; keep the event loop free.
-    return ok(await run_in_threadpool(
+    result = await run_in_threadpool(
         _process_ingest, user.workspace_id, documents, name, pursuit_id,
-    ))
+    )
+    # The schedule's specifications are read AFTER the response. The upload is the product;
+    # this is an optional enrichment that costs model calls and must never delay or fail it.
+    _schedule_extraction(background, user.workspace_id, result["tender_id"])
+    return ok(result)
 
 
 # Sync bodies (only blocking db calls) -> FastAPI runs them in a threadpool, off the loop.

@@ -249,6 +249,7 @@ async def extract_schedule(tender_id: str, user: CurrentUser) -> dict:
             raise ApiError(409, "SCHEDULE_EMPTY",
                            "no schedule lines on this tender — upload a BOQ or add items")
         counts = spec_service.extract_schedule(user.workspace_id, items)
+        db.mark_specs_extracted(user.workspace_id, tender_id)
         return {"total_lines": len(items), **counts,
                 **spec_service.assess_schedule(user.workspace_id, tender_id)}
 

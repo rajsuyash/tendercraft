@@ -98,6 +98,9 @@ def test_extract_route_keeps_total_lines_and_the_line_array_separate(client, mon
     )
     monkeypatch.setattr(db, "get_capability_specs", lambda w: [])
     monkeypatch.setattr(db, "replace_line_item_parameters", lambda *a, **k: None)
+    # The manual path stamps `specs_extracted_at` too, so a read done here is not reported
+    # forever as "never read" (migration 0040).
+    monkeypatch.setattr(db, "mark_specs_extracted", lambda w, t: None)
     monkeypatch.setattr(spec_extractor, "extract_parameters", lambda d: ())
 
     body = client.post("/api/tenders/tender-1/schedule/extract").json()["data"]
