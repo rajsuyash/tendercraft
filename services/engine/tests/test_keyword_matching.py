@@ -118,3 +118,61 @@ class TestADeadKeywordIsInvisible:
     def test_the_corrected_spelling_would_have_matched(self):
         assert keyword_relevance(tender("Supply of Crude Oil Industry Pipeline Fittings"),
                                  ["oil industry"]).band != "low"
+
+
+# The second live workspace's keywords (Usha Martin Limited, 2026-09-14). Product phrases,
+# not capability prose — which is exactly the case where "all but one word, anywhere" is
+# too loose: every rope phrase collapses to "wire" and "rope" somewhere in the title.
+UML = ["wire rope", "steel wire rope", "galvanized wire rope", "ungalvanized wire rope",
+       "wire rope sling", "stranded steel wire", "MIG welding wire"]
+
+
+def band(title: str, categories: list[str] | None = None) -> str:
+    return keyword_relevance(tender(title, categories), UML).band
+
+
+class TestAPhraseMustHoldTogether:
+    """Live HIGH rows from 2026-09-14 that were not wire-rope tenders, and their neighbours
+    that are."""
+
+    def test_wire_in_one_line_item_and_rope_in_another_is_not_a_wire_rope(self):
+        # A BRO plywood/nails BOQ. "binding wire" and "coir rope" are nine tokens apart and
+        # belong to different items; five rope keywords fired and the row ranked HIGH.
+        # "stranded steel wire" may still hit "Mild Steel Binding Wire" (two of three words,
+        # head noun present) — that is one honest partial match, and one keyword in the
+        # title is MEDIUM. What must not happen is any ROPE phrase firing.
+        title = ("Category: Moisture Resistant Or Wbr Grade Plywood , Woodenscantling Size "
+                 "6 Inch X 4 Inch , Nails 2 Inch , Wooden Planks Size 12 Inch X 1.6 Inch , "
+                 "binding Wire Isi 16-20 Mild Steel Binding Wire , Heavy Dutyshuttering "
+                 "Tape , Jute Brown Coir Rope")
+        m = keyword_relevance(tender(title), UML)
+        assert m.band != "high"
+        assert not any("rope" in t for t in m.matched_terms), m.matched_terms
+
+    def test_a_wire_rope_line_inside_a_multi_item_bid_still_matches(self):
+        # Same shape of title, but "Rope Wire, 6mm, Glvnzd Stl" IS a wire-rope item.
+        title = ("Category: Cable, 1.1 Kv, 6c, Copper, Pvc, 2.5mm2 Armoured , Pull Cord "
+                 "Switch , Rope Wire,6mm, Glvnzd Stl 6 X 19 Flexible , Pilot Relay 12 V Dc")
+        assert band(title) != "low"
+
+    def test_a_size_token_between_the_words_is_tolerated(self):
+        assert band("Wire 6mm Rope Galvanised For Crane") != "low"
+
+    def test_steel_and_wire_adjacent_without_rope_do_not_carry_a_rope_phrase(self):
+        # "mild steel binding wire" hits two of "steel wire rope"'s three words, adjacently.
+        # The phrase names a rope; without its head noun it has not matched. ("stranded
+        # steel wire" legitimately may — its head noun IS wire.)
+        m = keyword_relevance(tender("Mild Steel Binding Wire 18 Swg 25 Kg Coil"), UML)
+        assert "steel wire rope" not in m.matched_terms
+        assert "galvanized wire rope" not in m.matched_terms
+        assert "wire rope" not in m.matched_terms
+
+    def test_the_head_noun_may_arrive_run_together(self):
+        # "wirerope" carries "rope" as a suffix behind another word of the same phrase.
+        assert band("Wirerope Steel Galvanised 20mm") != "low"
+
+    def test_a_suffix_alone_is_still_not_the_head_noun(self):
+        assert band("Study Tour To Europe For Steel Officers") == "low"
+
+    def test_an_exact_category_string_still_matches(self):
+        assert band("Supply as per attached list", ["Steel Wire Rope 10 Mm"]) == "high"

@@ -216,6 +216,50 @@ def _tokens(text: str) -> set[str]:
     return set(_WORD.findall(text.lower()))
 
 
+def _sequence(text: str) -> list[str]:
+    """Words in order. `_tokens` is the set; the phrase rule needs positions."""
+    return _WORD.findall(text.lower())
+
+
+#: A phrase's hitting words must sit within (phrase length + this) tokens of each other in
+#: ONE field sequence. Two, so a size or grade token may sit between them ("Wire 6mm Rope").
+#: Without it "galvanized wire rope" matched a plywood-and-nails BOQ whose title carried
+#: "binding wire" in one line item and "coir rope" in another (live HIGH, 2026-09-14).
+_PHRASE_SLACK = 2
+
+
+def _head_hits(words: list[str], window: set[str]) -> bool:
+    """The phrase's last content word — the thing being bought — must be present.
+
+    "steel wire rope" names a rope; "Mild Steel Binding Wire" hits two of its three words
+    and is not one. A run-together token counts ("wirerope"), but only when what precedes
+    the suffix is another word of the same phrase — "Europe" never qualifies.
+    """
+    head = words[-1]
+    if _word_hits(head, window):
+        return True
+    others = words[:-1]
+    return any(
+        len(tok) > len(head) and tok.endswith(head)
+        and any(_word_hits(o, {tok[: -len(head)]}) for o in others)
+        for tok in window
+    )
+
+
+def _phrase_hits(words: list[str], seq: list[str]) -> bool:
+    need = _words_required(len(words))
+    span = len(words) + _PHRASE_SLACK
+    for start in range(len(seq)):
+        window = set(seq[start:start + span])
+        if not _head_hits(words, window):
+            continue
+        # The head counts once, whether it hit directly or as a suffix.
+        rest = sum(1 for w in words[:-1] if _word_hits(w, window))
+        if rest + 1 >= need:
+            return True
+    return False
+
+
 def content_words(term: str) -> list[str]:
     """A vendor's phrase reduced to the words a tender would actually contain."""
     return [w for w in _WORD.findall(term.lower()) if w not in _CAPABILITY_FILLER]
@@ -252,7 +296,9 @@ def _word_hits(term: str, tokens: set[str]) -> bool:
     )
 
 
-def _term_hits(term: str, tokens: set[str], *, code: bool = False) -> bool:
+def _term_hits(
+    term: str, tokens: set[str], *, seq: list[str] | None = None, code: bool = False
+) -> bool:
     """One keyword against one haystack.
 
     A single word is matched against tokens with a shared-prefix rule, because the vendor and
@@ -266,13 +312,18 @@ def _term_hits(term: str, tokens: set[str], *, code: bool = False) -> bool:
     because that string does not contain the word "manufacturing". The gate then excluded 99%
     of the corpus, which looked like a strict rule working and was a rule matching nothing.
     A user-authored rule that silently matches nothing is still ET-7.
+
+    A multi-word keyword is now matched against `seq` — the haystack IN ORDER — so its words
+    must occur near each other and its head noun must be among them. Matching a phrase
+    against a token SET was the second defect, at the opposite extreme: measured on the UML
+    workspace, "steel wire rope" fired on a plywood-and-nails BOQ because "wire" and "rope"
+    both appeared somewhere in forty tokens of unrelated line items.
     """
     if " " in term:
         words = content_words(term)
         if not words:
             return False
-        hits = sum(1 for w in words if _word_hits(w, tokens))
-        return hits >= _words_required(len(words))
+        return _phrase_hits(words, seq if seq is not None else sorted(tokens))
     if code:
         if term in tokens:
             return True
@@ -309,14 +360,19 @@ def keyword_relevance(
     # category string ("Category: Steel Wire Rope 10 Mm"), so a phrase that spans title and
     # category — common on multi-item bids — has to be able to see both at once.
     text_tokens = title_tokens | authority_tokens | category_tokens
+    # One ordered sequence so a phrase may still span the title/category boundary (a
+    # multi-item bid names the product in the category and the size in the title), while
+    # words from two different line items can no longer combine.
+    text_seq = _sequence(title) + _sequence(authority) + _sequence(categories)
+    category_seq = _sequence(categories)
 
     matched = tuple(
         sorted(
             {
                 t
                 for t in terms
-                if _term_hits(t, text_tokens)
-                or _term_hits(t, category_tokens, code=True)
+                if _term_hits(t, text_tokens, seq=text_seq)
+                or _term_hits(t, category_tokens, seq=category_seq, code=True)
             }
         )
     )
@@ -326,8 +382,10 @@ def keyword_relevance(
     # A hit inside a GeM category code outranks one anywhere else: the codes are the portal's
     # own structured taxonomy, so `services_home_cust` matching "services" is a classification,
     # whereas the same word inside a buyer's department name is a coincidence.
-    in_category = any(_term_hits(t, category_tokens, code=True) for t in matched)
-    in_title = any(_term_hits(t, title_tokens) for t in matched)
+    in_category = any(
+        _term_hits(t, category_tokens, seq=category_seq, code=True) for t in matched
+    )
+    in_title = any(_term_hits(t, title_tokens, seq=_sequence(title)) for t in matched)
     if in_category or len(matched) >= 2:
         return KeywordMatch(band="high", matched_terms=matched, language=language)
     if in_title:
