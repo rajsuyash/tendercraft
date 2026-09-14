@@ -121,9 +121,33 @@ gcloud run services update $ENG --project=$P --region=$R \
 
 ## Cost posture
 
-`min-instances` is **0** on both — they scale to zero, so idle cost is nothing. The
-tradeoff is a cold start of a few seconds on the first request after ~15 minutes idle.
-For a scheduled demo, warm both a couple of minutes beforehand:
+> **Corrected 2026-09-14 — this said `min-instances` is 0 on both, and it is 1 on both.**
+> Read off the live services rather than the runbook: engine and web are each `minScale: 1`
+> (engine `maxScale: 5`), so neither scales to zero and neither has the cold start described
+> below. Whoever raised them did not update this file — and the first draft of this very
+> correction said "0 on the web service" without checking, which is the same mistake one
+> paragraph later. Measure both, every time:
+>
+> ```bash
+> for S in tendercraft-engine-eu tendercraft-web-eu; do
+>   echo -n "$S "
+>   gcloud run services describe "$S" --project=resonant-tube-280016 \
+>     --region=europe-north1 --format=json | \
+>     python3 -c "import json,sys; a=json.load(sys.stdin)['spec']['template']['metadata'].get('annotations',{}); print({k.split('/')[-1]:v for k,v in a.items() if 'Scale' in k or 'throttling' in k})"
+> done
+> ```
+>
+> **`run.googleapis.com/cpu-throttling` is unset on the engine, which means CPU is THROTTLED
+> once a response is flushed.** That is load-bearing now: `app/tenders.py::_extract_quietly`
+> runs the schedule spec read as a FastAPI `BackgroundTask` after the response, so it can
+> stall until the next request wakes the instance. It is not lost (minScale is 1) and the
+> state stays honest (`specs_extracted_at` remains NULL, the manual button covers it), but if
+> stalled reads start appearing in the logs the fix is `--no-cpu-throttling` or a jobs table,
+> not a longer timeout.
+
+The text below describes the `min-instances: 0` posture, which is **not** what is deployed
+today (see the correction above). Kept because it is the right posture to return to if idle
+cost matters, and because the warm-up command is still what you want after a deploy:
 
 ```bash
 curl -s -o /dev/null https://tendercraft-web-eu-822379741897.europe-north1.run.app/login
