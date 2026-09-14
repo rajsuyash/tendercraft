@@ -120,8 +120,13 @@ export function LearningMeter({ maturity }: { maturity: Maturity }) {
             a draft needs a citation. This library fills from bids you have already submitted,
             or from your own completed exports.
           </p>
-          <Link href="/library" className="mt-3 inline-block text-sm font-medium text-primary">
-            Upload a past bid →
+          {/* Anchored at the past-bids panel, not the page: /library opens on the
+              knowledge-base uploader, which is the corpus this screen does NOT read. */}
+          <Link
+            href="/library#past-bids"
+            className="mt-3 inline-block text-sm font-medium text-primary"
+          >
+            Upload a submitted bid →
           </Link>
         </section>
       )}

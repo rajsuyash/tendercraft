@@ -58,7 +58,7 @@ export function PastBids({ initial, styleBrief }: { initial: PastBid[]; styleBri
   }
 
   return (
-    <section data-past-bids className="rounded-card border border-border bg-surface p-card">
+    <section id="past-bids" data-past-bids className="rounded-card border border-border bg-surface p-card">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-heading text-sm font-semibold text-ink">
@@ -70,7 +70,9 @@ export function PastBids({ initial, styleBrief }: { initial: PastBid[]; styleBri
             evidence before anything enters a draft.
           </p>
         </div>
-        <PastBidUpload onUploaded={() => router.refresh()} />
+        {/* No onUploaded: PastBidUpload refreshes the route itself, so every placement of
+            it gets the new row without each caller remembering a callback. */}
+        <PastBidUpload />
       </div>
 
       {error && (

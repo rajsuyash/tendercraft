@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { StageProgress } from "./StageProgress";
@@ -53,6 +54,7 @@ export function PastBidUpload({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const router = useRouter();
 
   async function upload(files: FileList) {
     const chosen = Array.from(files);
@@ -84,7 +86,14 @@ export function PastBidUpload({
           ? ` · sections recognised: ${sections.join(", ")}`
           : " · no section headings recognised — answers are still searchable"),
     );
-    onUploaded?.({ answers_mined: mined, sections_recognised: sections });
+    // A server-rendered page shows the new bid only after a refresh, so refreshing is the
+    // DEFAULT — a placement that does nothing else gets it for free, rather than each caller
+    // remembering a callback. A caller that passes `onUploaded` has taken responsibility for
+    // showing the result and gets no refresh: the reuse panel re-fetches its own list on
+    // purpose, because the answer just mined belongs in that panel and a server refresh
+    // would not touch it.
+    if (onUploaded) onUploaded({ answers_mined: mined, sections_recognised: sections });
+    else router.refresh();
   }
 
   return (

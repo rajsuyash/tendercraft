@@ -1,5 +1,6 @@
 import { KnowledgeUpload } from "@/components/KnowledgeUpload";
 import { PastBids, type PastBid } from "@/components/PastBids";
+import { PastBidUpload } from "@/components/PastBidUpload";
 import { formatDate } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
 
@@ -69,8 +70,26 @@ export default async function LibraryPage() {
         </p>
       </header>
 
-      <div className="mb-6">
+      {/* Two corpora, two uploaders, deliberately next to each other. A design partner put
+          18 certificates and undertakings through the left one and nothing through the
+          right one, then opened the Learning tab and found zeros: evidence documents are
+          cited, never mined, and only a submitted bid feeds the answer library. */}
+      <div className="mb-6 grid gap-4 lg:grid-cols-[3fr_2fr]">
         <KnowledgeUpload />
+        <div
+          data-past-bid-entry
+          className="rounded-card border border-border bg-surface p-card"
+        >
+          <h2 className="mb-1 font-heading text-sm font-semibold text-ink">
+            Add a submitted bid
+          </h2>
+          <p className="mb-3 text-xs text-muted">
+            A bid you already submitted is mined into reusable answers — that is what the
+            Learning tab measures. Documents on the left are evidence for citations and are
+            never mined.
+          </p>
+          <PastBidUpload compact label="Upload a submitted bid" />
+        </div>
       </div>
 
       {expiredCount > 0 && (
