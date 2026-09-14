@@ -534,6 +534,36 @@ Mumbai anyway); until then, count round trips like they cost money.
 
 ## A cache hit that erases the cache (found 2026-09-14, on the UML feed)
 
+**Verified in production 2026-09-14, engine revision 00056.** Two sweeps, ten minutes apart,
+because one cannot tell the fix from the bug — run N writes bands either way and only run N+1
+shows whether they survive. Of the 100 rows the second pass wrote, **39 were cache hits (band
+scored in the earlier pass) and all 39 kept both their band and their input hash; zero were
+nulled.** Open in-scope rows carrying no band went 22 to 0. The recompute wrote 1,106 rows in
+one pass against the old 1,000-row cap, so paging is live. The plywood-and-nails BOQ fell from
+high to low and the IS 2266 rope tender is in the feed at medium.
+
+- **A measurement script written to check a fix is untested code in the trust path of that
+  fix, and its FAILURES deserve the same scepticism as its passes.** This one manufactured
+  three, all in the expensive direction: it called a tender "open" until midnight while the
+  engine uses `closing_at >= now()` (so five tenders that closed at 05:30-12:00 read as
+  unbanded defects the engine had correctly stopped touching); it counted NULL bands across
+  EXCLUDED rows, which are never banded by design, making the check unpassable; and it
+  asserted that a count of closed-and-frozen nulls would fall, which no future run can change.
+  Every one would have sent someone to "fix" correct behaviour. **Before acting on a failing
+  score, read a sample of the flagged items and confirm each is genuinely a defect** — here
+  the five flagged rows named their own innocence in their `closing_at`.
+- **A checker that cannot see the broken state proves nothing about the fixed one.** Run it
+  BEFORE deploying and require it to fail: this one reported 3 of 6 failing against
+  undeployed production, which is what made the later all-pass mean something.
+- **`gcloud ... | tail` reports tail's exit code, not gcloud's.** A `scheduler jobs run` that
+  never fired was read as success because `$?` came through a pipe. Same family as the
+  `apply-migration.sh` 201 bug: check the status of the command you care about, and confirm
+  the effect independently — here, Cloud Scheduler's own log and the job's `lastAttemptTime`.
+- **Cloud Run writes a request log on COMPLETION, so a long cron in flight looks identical to
+  one that never arrived.** The sweep's POST was absent from the request log for minutes while
+  it was running normally. Confirm from the work itself (rows whose `computed_at` advances),
+  not from the access log.
+
 - **A bulk upsert that pads every row to the union key set turns "I did not touch this
   column" into "set it to NULL".** `relevance.bands_for` skipped rows whose input hash was
   unchanged (correct — nothing the band depends on had moved), so those rows reached
