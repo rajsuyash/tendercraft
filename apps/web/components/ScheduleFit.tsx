@@ -57,7 +57,6 @@ export type Schedule = {
     not_creatable: number;
     unknown: number;
     not_a_product_line: number;
-    awaiting_read: number;
   };
   catalogue_source: string;
   has_capability: boolean;
@@ -209,7 +208,7 @@ export function ScheduleFit({
       {/* Three different sentences, and the screen used to have one. "Not assessed" was shown for
           a line nobody had read, a line with no specification in it, and a line whose parameters
           no envelope covers — which made a working feature look broken. */}
-      {schedule.specs_extracted_at === null ? (
+      {lines.length > 0 && schedule.specs_extracted_at === null ? (
         <div
           data-specs-unread
           className="mb-4 rounded-card border border-hairline bg-surface-alt p-card text-sm text-muted"
@@ -283,6 +282,12 @@ export function ScheduleFit({
               <tbody className="divide-y divide-hairline">
                 {lines.map((line) => {
                   const byKey = new Map(line.parameters.map((p) => [p.key, p]));
+                  // Distinct from a genuinely unassessed line: this one WAS read, and it named
+                  // no specification — telling the two apart is the point of this whole banner.
+                  const isProseLine =
+                    schedule.specs_extracted_at !== null &&
+                    line.catalogue_state === "unknown" &&
+                    line.parameters_read === 0;
                   return (
                     <tr
                       key={line.id}
@@ -336,7 +341,7 @@ export function ScheduleFit({
                             STATE_CHIP[line.catalogue_state]
                           }`}
                         >
-                          {STATE_LABEL[line.catalogue_state]}
+                          {isProseLine ? "NO PRODUCT SPECIFICATION" : STATE_LABEL[line.catalogue_state]}
                         </span>
                         {line.gem_catalogue_id && (
                           <span className="mt-1 block font-mono text-[11px] text-muted">

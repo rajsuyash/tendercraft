@@ -92,7 +92,11 @@ def extract_schedule(
     Import is local so `app.spec_service` stays importable — and the assessment path stays
     runnable — in a deployment where the model client is not configured at all.
     """
-    from pipeline.spec_extractor import distinct_descriptions, extract_many
+    from pipeline.spec_extractor import (
+        DEFAULT_EXTRACT_BUDGET,
+        distinct_descriptions,
+        extract_many,
+    )
 
     raw = [i.get("description", "") for i in line_items]
     by_description = extract_many(raw, limit=limit)
@@ -123,6 +127,7 @@ def extract_schedule(
         "read": len(by_description),
         "skipped": max(0, distinct - len(by_description)),
         "populated": populated,
+        "budget": DEFAULT_EXTRACT_BUDGET if limit is None else limit,
     }
 
 
@@ -177,11 +182,17 @@ def _capabilities(spec_rows: Sequence[dict]) -> tuple[list[CapabilitySpec], list
 
 # ── assessment (pure once the rows are loaded) ───────────────────────────────────────
 
-def assess_schedule(workspace_id: str, tender_id: str) -> dict[str, Any]:
+def assess_schedule(
+    workspace_id: str, tender_id: str, tender: dict | None = None
+) -> dict[str, Any]:
     """Fit every schedule line against what the bidder can make and what they have listed.
 
-    Three queries, then arithmetic in memory. A per-line query would be the N+1 in
-    docs/known-pitfalls.md multiplied by however many lines a schedule has.
+    Two queries plus arithmetic when the caller already holds the tender row — pass it as
+    `tender` and this skips re-fetching it. Every route reaches here moments after its own 404
+    check already loaded that row (docs/known-pitfalls.md's latency doctrine counts round
+    trips). Three queries when `tender` is omitted, which is correct rather than lazy right
+    after a write that changed the row (the manual extract endpoint): a cached copy there would
+    report the state from before the write.
     """
     line_rows = db.get_line_items(tender_id, workspace_id)
     spec_rows = db.get_capability_specs(workspace_id)
@@ -217,7 +228,8 @@ def assess_schedule(workspace_id: str, tender_id: str) -> dict[str, Any]:
             }
         )
 
-    tender = db.get_tender(tender_id, workspace_id) or {}
+    if tender is None:
+        tender = db.get_tender(tender_id, workspace_id) or {}
     extracted = bool(tender.get("specs_extracted_at"))
 
     return {
@@ -235,14 +247,19 @@ def assess_schedule(workspace_id: str, tender_id: str) -> dict[str, Any]:
 
 # ── pre-bid clarifications (UML ask 2) ───────────────────────────────────────────────
 
-def clarification_pack(workspace_id: str, tender_id: str) -> dict[str, Any]:
+def clarification_pack(
+    workspace_id: str, tender_id: str, tender: dict | None = None
+) -> dict[str, Any]:
     """The questions this tender raises, joined to what has already been asked and answered.
 
     Read-only. The pack is re-derived from the schedule on every call, so it costs one extra
     query over `assess_schedule` and no model call — which is deliberate: a bidder checking what
     they still need to ask, during a model outage, gets the real answer rather than a spinner.
+
+    `tender`, when the caller already holds the row, passes straight through to
+    `assess_schedule` — same round-trip saving, same reason.
     """
-    assessment = assess_schedule(workspace_id, tender_id)
+    assessment = assess_schedule(workspace_id, tender_id, tender=tender)
     pack = build_queries(assessment["lines"])
     stored = db.get_clarifications(tender_id, workspace_id)
     views = merge_with_stored(pack, stored)
@@ -295,14 +312,19 @@ def _clarification_summary(views: Sequence[Any]) -> dict[str, int]:
     }
 
 
-def save_clarification_drafts(workspace_id: str, tender_id: str, created_by: str) -> dict[str, int]:
+def save_clarification_drafts(
+    workspace_id: str, tender_id: str, created_by: str, tender: dict | None = None
+) -> dict[str, int]:
     """Persist the derived pack. Idempotent, and it never touches a question already asked.
 
     Two writes, in this order for a reason: upsert first, then drop the drafts the schedule no
     longer raises. Dropping first would leave a window in which a concurrent read shows an empty
     pack for a tender that has questions.
+
+    `tender` passes through to `assess_schedule` — nothing here writes to `tenders`, so a row
+    the caller already fetched is still fresh.
     """
-    assessment = assess_schedule(workspace_id, tender_id)
+    assessment = assess_schedule(workspace_id, tender_id, tender=tender)
     pack = build_queries(assessment["lines"])
 
     db.upsert_clarification_drafts(workspace_id, tender_id, [
@@ -341,21 +363,19 @@ def _summarise(lines: Sequence[dict], *, extracted: bool) -> dict[str, int]:
     "never read" before extraction and "these lines state no specification" after it — opposite
     messages, and guessing between them from the data alone is exactly the inference this
     codebase forbids recording as a measurement.
+
+    Each line is classified once into exactly one bucket below. Not a count-then-subtract: a
+    subtraction that only balances because two filters happen to agree is true by construction
+    and invisible to the next reader — the classification is the only place a line's bucket is
+    decided, so the buckets summing to `total` is structural rather than coincidental.
     """
-    states = [line["catalogue_state"] for line in lines]
-    # A line that was read and yielded nothing is prose, not an unanswered product line.
-    prose = (
-        sum(1 for line in lines
-            if line["parameters_read"] == 0
-            and line["catalogue_state"] == CatalogueState.UNKNOWN.value)
-        if extracted else 0
-    )
-    return {
-        "total": len(lines),
-        "published": states.count(CatalogueState.PUBLISHED.value),
-        "creatable": states.count(CatalogueState.CREATABLE.value),
-        "not_creatable": states.count(CatalogueState.NOT_CREATABLE.value),
-        "unknown": states.count(CatalogueState.UNKNOWN.value) - prose,
-        "not_a_product_line": prose,
-        "awaiting_read": 0 if extracted else len(lines),
-    }
+    buckets = {state.value: 0 for state in CatalogueState}
+    buckets["not_a_product_line"] = 0
+    for line in lines:
+        # A line that was read and yielded nothing is prose, not an unanswered product line.
+        if (extracted and line["catalogue_state"] == CatalogueState.UNKNOWN.value
+                and line["parameters_read"] == 0):
+            buckets["not_a_product_line"] += 1
+        else:
+            buckets[line["catalogue_state"]] += 1
+    return {"total": len(lines), **buckets}

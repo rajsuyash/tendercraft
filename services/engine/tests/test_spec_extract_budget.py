@@ -109,3 +109,26 @@ def test_extract_route_keeps_total_lines_and_the_line_array_separate(client, mon
     assert body["total_lines"] == 5
     assert isinstance(body["lines"], list)
     assert len(body["lines"]) == 5
+
+
+def test_extract_route_does_not_stamp_when_the_read_is_partial(client, monkeypatch):
+    # Same rule as the background path (test_schedule_autoextract.py): a schedule bigger than
+    # the budget must leave the tender unstamped, or the skipped lines get announced as "state
+    # no specification" when nobody has actually read them.
+    monkeypatch.setattr(db, "get_tender", lambda t, w: {"id": t})
+    monkeypatch.setattr(
+        db, "get_line_items",
+        lambda t, w: [{"id": "i1", "description": "d", "spec_parameters": []}],
+    )
+    monkeypatch.setattr(db, "get_capability_specs", lambda w: [])
+    monkeypatch.setattr(spec_service, "extract_schedule",
+                        lambda ws, items, **k: {"distinct": 100, "read": 80, "skipped": 20,
+                                                "populated": 80, "budget": 80})
+    stamped: list[tuple] = []
+    monkeypatch.setattr(db, "mark_specs_extracted",
+                        lambda w, t: stamped.append((w, t)))
+
+    r = client.post("/api/tenders/tender-1/schedule/extract")
+
+    assert r.status_code == 200
+    assert stamped == [], "a partial read must leave the tender unstamped"

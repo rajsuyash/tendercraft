@@ -128,9 +128,10 @@ def remove_product_spec(spec_id: str, user: CurrentUser) -> dict:
 @router.get("/api/tenders/{tender_id}/schedule")
 def get_schedule(tender_id: str, user: CurrentUser) -> dict:
     """Read-only fit. No model call, so this renders during an outage — as `unknown`."""
-    if not db.get_tender(tender_id, user.workspace_id):
+    tender = db.get_tender(tender_id, user.workspace_id)
+    if not tender:
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found")
-    return ok(spec_service.assess_schedule(user.workspace_id, tender_id))
+    return ok(spec_service.assess_schedule(user.workspace_id, tender_id, tender=tender))
 
 
 @router.get("/api/tenders/{tender_id}/clarifications")
@@ -140,9 +141,10 @@ def get_clarifications(tender_id: str, user: CurrentUser) -> dict:
     Read-only and model-free, like the schedule it derives from: a bidder deciding what to ask
     before the clarification window closes must not be blocked by an outage.
     """
-    if not db.get_tender(tender_id, user.workspace_id):
+    tender = db.get_tender(tender_id, user.workspace_id)
+    if not tender:
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found")
-    return ok(spec_service.clarification_pack(user.workspace_id, tender_id))
+    return ok(spec_service.clarification_pack(user.workspace_id, tender_id, tender=tender))
 
 
 @router.post("/api/tenders/{tender_id}/clarifications")
@@ -153,14 +155,16 @@ async def save_clarifications(tender_id: str, user: CurrentUser) -> dict:
     the point at which a derived list becomes a record someone is accountable for.
     """
     authz.check(user, authz.DRAFT)
-    if not db.get_tender(tender_id, user.workspace_id):
+    tender = db.get_tender(tender_id, user.workspace_id)
+    if not tender:
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found")
 
     def _run() -> dict:
         saved = spec_service.save_clarification_drafts(
-            user.workspace_id, tender_id, user.user_id
+            user.workspace_id, tender_id, user.user_id, tender=tender
         )
-        return {**saved, **spec_service.clarification_pack(user.workspace_id, tender_id)}
+        return {**saved,
+                **spec_service.clarification_pack(user.workspace_id, tender_id, tender=tender)}
 
     return ok(await run_in_threadpool(_run))
 
@@ -252,14 +256,24 @@ async def extract_schedule(tender_id: str, user: CurrentUser) -> dict:
             raise ApiError(409, "SCHEDULE_EMPTY",
                            "no schedule lines on this tender — upload a BOQ or add items")
         counts = spec_service.extract_schedule(user.workspace_id, items)
-        try:
-            db.mark_specs_extracted(user.workspace_id, tender_id)
-        except Exception:  # noqa: BLE001 — the read already succeeded and is already persisted
-            # Losing the stamp costs a re-read later; discarding a completed extraction with
-            # a 502 costs the model spend that produced it. The stamp is the cheaper loss.
-            # Guarded HERE and not inside db.mark_specs_extracted: a db helper that swallows
-            # its own failure cannot tell the next caller a write was lost.
-            log.exception("could not stamp specs_extracted_at for tender %s", tender_id)
+        if counts["skipped"]:
+            # The stamp means a COMPLETE read. Leaving it NULL understates rather than lying —
+            # a partial read stamped as done would tell the fit screen "these lines state no
+            # specification" about lines nobody read (the budget ceiling from Task 2, showing
+            # here rather than staying invisible).
+            log.warning(
+                "schedule read INCOMPLETE for tender %s: %s of %s distinct descriptions, "
+                "budget %s", tender_id, counts["read"], counts["distinct"], counts["budget"],
+            )
+        else:
+            try:
+                db.mark_specs_extracted(user.workspace_id, tender_id)
+            except Exception:  # noqa: BLE001 — the read already succeeded and is already persisted
+                # Losing the stamp costs a re-read later; discarding a completed extraction with
+                # a 502 costs the model spend that produced it. The stamp is the cheaper loss.
+                # Guarded HERE and not inside db.mark_specs_extracted: a db helper that swallows
+                # its own failure cannot tell the next caller a write was lost.
+                log.exception("could not stamp specs_extracted_at for tender %s", tender_id)
         return {"total_lines": len(items), **counts,
                 **spec_service.assess_schedule(user.workspace_id, tender_id)}
 

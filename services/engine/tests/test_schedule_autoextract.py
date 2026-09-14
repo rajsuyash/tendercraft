@@ -68,6 +68,23 @@ def test_background_extraction_stamps_the_tender(monkeypatch):
     assert stamped == [("ws-1", "t-1")]
 
 
+def test_a_partial_read_does_not_stamp_the_tender(monkeypatch):
+    # A schedule bigger than the extraction budget reads only part of it. Stamping anyway would
+    # tell the fit screen "these lines state no specification" about lines nobody read.
+    stamped: list[tuple] = []
+    monkeypatch.setattr(tenders.db, "get_line_items",
+                        lambda t, w: [{"id": "l1", "description": "Steel Wire Rope 20mm"}])
+    monkeypatch.setattr(tenders.spec_service, "extract_schedule",
+                        lambda ws, items, **k: {"distinct": 100, "read": 80, "skipped": 20,
+                                                "populated": 80, "budget": 80})
+    monkeypatch.setattr(tenders.db, "mark_specs_extracted",
+                        lambda ws, t: stamped.append((ws, t)))
+
+    tenders._extract_quietly("ws-1", "t-1")
+
+    assert stamped == [], "a partial read must leave the tender unstamped"
+
+
 def test_a_tender_with_no_schedule_is_stamped_too(monkeypatch):
     # "Read it, there was nothing there" is a real answer and the screen needs to be able to
     # give it. Leaving the stamp NULL would make an empty schedule permanently indistinguishable

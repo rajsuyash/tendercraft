@@ -212,7 +212,19 @@ def _extract_quietly(workspace_id: str, tender_id: str) -> None:
         if items:
             counts = spec_service.extract_schedule(workspace_id, items)
             log.info("schedule specs read for tender %s: %s", tender_id, counts)
-        db.mark_specs_extracted(workspace_id, tender_id)
+            if counts["skipped"]:
+                # The stamp means a COMPLETE read (see spec_routes.extract_schedule for the
+                # same rule on the manual button). Leave it NULL rather than tell the fit
+                # screen "no specification" about lines this pass never reached.
+                log.warning(
+                    "schedule read INCOMPLETE for tender %s: %s of %s distinct descriptions, "
+                    "budget %s", tender_id, counts["read"], counts["distinct"],
+                    counts["budget"],
+                )
+            else:
+                db.mark_specs_extracted(workspace_id, tender_id)
+        else:
+            db.mark_specs_extracted(workspace_id, tender_id)
     except Exception:  # noqa: BLE001 — deliberate: never fail an upload that already returned
         log.exception("background spec extraction failed for tender %s", tender_id)
 

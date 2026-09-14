@@ -23,14 +23,12 @@ def test_before_extraction_nothing_is_called_a_non_product_line():
     s = _summarise(lines, extracted=False)
     assert s["not_a_product_line"] == 0
     assert s["unknown"] == 2
-    assert s["awaiting_read"] == 2
 
 
 def test_after_extraction_a_line_with_no_parameters_is_not_a_product_line():
     lines = [_line("unknown", 0), _line("creatable", 3)]
     s = _summarise(lines, extracted=True)
     assert s["not_a_product_line"] == 1
-    assert s["awaiting_read"] == 0
     # It must leave the unknown bucket, or the two are still conflated on screen.
     assert s["unknown"] == 0
     assert s["creatable"] == 1
