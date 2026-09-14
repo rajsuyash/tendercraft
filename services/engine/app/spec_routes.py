@@ -17,7 +17,9 @@ from pydantic import BaseModel, Field
 
 from . import authz, db, spec_service
 from .auth import AuthedUser, get_current_user
+from .deterministic.discovery import keyword_relevance
 from .deterministic.spec_params import PARAM_KEYS, REGISTRY
+from .discovery.ingest import CAPABILITY_RULE_NAME, capability_terms
 from .envelope import ApiError, ok
 
 log = logging.getLogger("tendercraft.spec")
@@ -278,3 +280,39 @@ async def extract_schedule(tender_id: str, user: CurrentUser) -> dict:
                 **spec_service.assess_schedule(user.workspace_id, tender_id)}
 
     return ok(await run_in_threadpool(_run))
+
+
+@router.get("/api/capability/vocabulary")
+async def capability_vocabulary(user: CurrentUser) -> dict:
+    """The terms gating the feed, with where each came from and how far each reaches.
+
+    Reach is deterministic — `keyword_relevance` over the open corpus, no model — and it is
+    here because a dead term and a quiet market look identical. A typo in this workspace's
+    keywords once matched 0 of 581 tenders with nothing anywhere saying so, and derived terms
+    nobody typed make that worse rather than better.
+    """
+    def work() -> dict:
+        terms = capability_terms(user.workspace_id)
+        markets = db.get_workspace_markets(user.workspace_id)
+        corpus = db.get_opportunities(limit=1000, markets=markets, open_only=True)
+        rules = db.get_discovery_rules(user.workspace_id)
+        gate_on = any(r["name"] == CAPABILITY_RULE_NAME and r.get("enabled") for r in rules)
+        return {
+            "terms": [
+                {
+                    "term": t.term,
+                    "source": t.source,
+                    "origin": t.origin,
+                    # How many open tenders THIS TERM ALONE would keep. A zero here is the
+                    # finding: the term can never contribute to a decision.
+                    "reach": sum(
+                        1 for o in corpus if keyword_relevance(o, [t.term]).band != "low"
+                    ),
+                }
+                for t in terms
+            ],
+            "corpus_open": len(corpus),
+            "gate_enabled": gate_on,
+        }
+
+    return ok(await run_in_threadpool(work))

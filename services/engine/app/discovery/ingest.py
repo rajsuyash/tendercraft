@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -264,45 +265,73 @@ def _rules_for(workspace_id: str, keywords: list[str] | None = None) -> list[Rul
     ]
 
 
-def _dedupe(terms: list[str]) -> list[str]:
-    """First spelling wins; comparison is case-insensitive and whitespace-trimmed."""
+@dataclass(frozen=True)
+class Term:
+    """One keyword the feed gate runs on, and where the user can go to change it."""
+
+    term: str
+    #: 'typed' (the profile's keyword box) | 'category' (a GeM category) | 'standard' (an envelope)
+    source: str
+    #: For a derived term, the row it came from, so a screen can name it. "" when typed.
+    origin: str = ""
+
+
+def capability_terms(workspace_id: str) -> list[Term]:
+    """Every term gating and ranking this workspace's feed, attributed to its source.
+
+    Three screens each hold a vocabulary and only one of them has an input box, so a user
+    looking at their keywords sees a subset of what is actually excluding tenders. This is the
+    one list; `_capability` is built from it so the gate and the explanation cannot drift —
+    two derivations of one rule is a defect shape this codebase has already paid for twice.
+
+    A standard's number is the most precise keyword a manufacturer has: a buyer writes
+    "Conforming To IS 2762", and one live tender was reachable by nothing else because its
+    title never uses the word "rope". Split on "/" and "," — "IS 4521 / API Spec 9A" is two.
+
+    The typed spelling wins a duplicate, because that is the field the user can edit.
+    """
+    identity = db.get_profile_context(workspace_id).get("legal_identity") or {}
+    found: list[Term] = [
+        Term(t, "typed") for t in (identity.get("capability_keywords") or [])
+    ]
+    found += [
+        Term(row["gem_name"], "category")
+        for row in db.list_workspace_categories(workspace_id, active_only=True)
+        if row.get("gem_name")
+    ]
+    for spec in db.get_capability_specs(workspace_id):
+        found += [
+            Term(part.strip(), "standard", spec.get("label") or "")
+            for part in re.split(r"[/,;]", spec.get("standard_ref") or "")
+            if part.strip()
+        ]
+
     seen: set[str] = set()
-    out: list[str] = []
-    for t in terms:
-        key = " ".join(t.split()).lower()
+    out: list[Term] = []
+    for t in found:
+        key = " ".join(t.term.split()).lower()
         if key and key not in seen:
             seen.add(key)
-            out.append(t.strip())
+            out.append(Term(t.term.strip(), t.source, t.origin))
     return out
 
 
 def _capability(workspace_id: str) -> tuple[str, list[str]]:
     """The vendor's own words, and every term they bid on. Both drive the relevance band.
 
-    Three screens each hold a vocabulary, and until 2026-09-14 only /profile's reached the
-    feed: the Capability tab's standards ("IS 2762") and the price screen's GeM category
-    names ("Wire Rope Sling") were read by their own screens and by nothing else. A
-    standard's number is the most precise keyword a manufacturer has — a buyer writes
-    "Conforming To IS 2762", and one live tender was reachable by NOTHING else, because its
-    title says "Safety Wire Cable ... Is : 2266 - 2002" and never uses the word rope. Split
-    on "/" and "," because "IS 4521 / API Spec 9A" is two standards.
-
-    Order matters twice: `_dedupe` keeps the first spelling, and `input_hash` sorts, so the
-    same vocabulary in any order is the same cache key.
+    Delegates its vocabulary to `capability_terms` so the gate and the screen explaining it
+    read the same list. This costs a second `get_profile_context` round trip (one here for the
+    statement, one inside `capability_terms` for the keywords) — accepted rather than
+    restructured: `get_profile_context` is a single per-workspace REST read, not a loop, and
+    keeping the statement lookup here (rather than threading it through `capability_terms`,
+    which has no reason to know about it) keeps each function's contract to exactly what its
+    name says. Revisit if this path ever shows up in a latency audit.
     """
     identity = db.get_profile_context(workspace_id).get("legal_identity") or {}
-    keywords = list(identity.get("capability_keywords") or [])
-    keywords += [
-        row["gem_name"]
-        for row in db.list_workspace_categories(workspace_id, active_only=True)
-        if row.get("gem_name")
-    ]
-    for spec in db.get_capability_specs(workspace_id):
-        keywords += [
-            part for part in re.split(r"[/,;]", spec.get("standard_ref") or "")
-            if part.strip()
-        ]
-    return identity.get("capability_statement") or "", _dedupe(keywords)
+    return (
+        identity.get("capability_statement") or "",
+        [t.term for t in capability_terms(workspace_id)],
+    )
 
 
 def _profile_turnover_inr(workspace_id: str) -> dict[str, Any]:
