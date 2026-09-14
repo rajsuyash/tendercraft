@@ -135,14 +135,18 @@ export function ReadinessHub({
     <main className="p-page">
       <header className="mb-6">
         <h1 className="font-heading text-2xl font-semibold text-ink">{tenderTitle}</h1>
-        {!tenderNumber && !authority && (
-          // Gated on the DATA the sentence claims (no number, no authority), not on the
-          // "Untitled tender" string — a pursuit backfill can rename the heading after
-          // ingest (app/tenders.py::_apply_pursuit_context) without this component knowing,
-          // and a string comparison would then be silently wrong. This is the OCR gap
-          // (docs/ocr-measurement.md) surfacing on a second screen: the heading has no real
-          // name because page one is an image nobody could read, and a user not told that
-          // will assume the upload half-failed.
+        {tenderTitle === "Untitled tender" && !tenderNumber && !authority && (
+          // Both halves are load-bearing — neither alone is safe:
+          //  - tenderTitle check alone: the placeholder can outlive it. A pursuit backfill
+          //    renames the tender once it learns a number/authority
+          //    (app/tenders.py::_apply_pursuit_context), which is exactly what stayed
+          //    trustworthy again once that rename landed — but relying on the string ALONE
+          //    assumes every path that can set it stays in sync forever.
+          //  - !tenderNumber && !authority alone: true for a tender with a real parsed
+          //    title, or a human-chosen filename, whose document simply never stated a
+          //    number or authority. OCR had nothing to do with that case.
+          // Together: no name, no number, no authority — nothing readable in this package.
+          // That cannot be false through either path. Do not simplify to one condition.
           <p data-untitled-reason className="text-xs text-muted">
             No tender number or issuing authority could be read from this package — its first
             pages are scans.{" "}
