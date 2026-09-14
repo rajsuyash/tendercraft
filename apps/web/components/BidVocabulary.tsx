@@ -131,7 +131,9 @@ export function BidVocabulary({
       // The server trims/dedupes/lower-cases; resync the box so it cannot keep showing raw
       // typing that no longer matches what was actually stored — router.refresh() re-renders
       // this client component's PARENT with fresh props, but preserves this instance, so the
-      // new props never reach local state on their own.
+      // new props never reach local state on their own. This closes over `raw` as it was when
+      // `save()` was called, so the input is `disabled` for the same span — otherwise a user
+      // typing during the save would have their in-flight edit silently overwritten here.
       setRaw(splitKeywords(raw).join(", "));
       router.refresh();
     } catch {
@@ -173,6 +175,7 @@ export function BidVocabulary({
             rows={4}
             className={INPUT}
             value={text}
+            disabled={busy}
             onChange={(e) => setText(e.target.value)}
           />
         </label>
@@ -184,6 +187,7 @@ export function BidVocabulary({
             data-field-capability-keywords
             className={INPUT}
             value={raw}
+            disabled={busy}
             onChange={(e) => setRaw(e.target.value)}
           />
           <KeywordSuggestions
