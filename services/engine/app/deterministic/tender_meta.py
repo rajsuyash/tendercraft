@@ -62,6 +62,11 @@ _AUTHORITY = re.compile(
 
 _NOISE = re.compile(r"\s+")
 
+#: A filename that is machine-generated noise rather than something a person chose: a long
+#: hex run, or an embedded export timestamp. Deliberately narrow — "Oil India wire rope
+#: NIT.pdf" is a real answer from a real person and must survive.
+_NOISY_FILENAME = re.compile(r"[0-9a-f]{16,}|_\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}_")
+
 
 @dataclass(frozen=True)
 class TenderMeta:
@@ -104,5 +109,20 @@ def extract_tender_meta(pages: list[str], max_pages: int = 3) -> TenderMeta:
 
 
 def display_title(meta: TenderMeta, fallback: str) -> str:
-    """What a human should see. Falls back to the filename only when nothing was found."""
-    return meta.title or fallback
+    """What a human should see.
+
+    The filename is the LAST resort, not the second. A bid team running twelve pursuits gets
+    twelve identical "all_bid_docs_….pdf" headings, while the tender number they actually use
+    to talk about the bid sits unused in the same object.
+
+    When even that is missing — which is what happens when page one is a scan nobody could
+    read — say so. A hex hash tells the reader nothing and hides the real problem, which is
+    that the package was never readable.
+    """
+    if meta.title:
+        return meta.title
+    named = " · ".join(x for x in (meta.tender_number, meta.authority) if x)
+    if named:
+        return named
+    stem = fallback.rsplit(".", 1)[0]
+    return "Untitled tender" if _NOISY_FILENAME.search(stem) else stem

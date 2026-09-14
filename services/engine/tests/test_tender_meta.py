@@ -65,8 +65,11 @@ def test_a_title_that_merely_repeats_the_number_is_dropped():
     assert m.title is None
 
 
-def test_display_title_falls_back_to_the_filename():
-    assert display_title(TenderMeta(), "rfp.pdf") == "rfp.pdf"
+def test_display_title_falls_back_to_the_filenames_stem():
+    # Was "rfp.pdf" verbatim; changed 2026-09-14 (Task B3) to drop the extension
+    # deliberately — a heading is a name, and ".pdf" is a storage detail the reader
+    # already knows. Still the same pinned behaviour, just without the suffix.
+    assert display_title(TenderMeta(), "rfp.pdf") == "rfp"
     assert display_title(TenderMeta(title="Property Tax System"), "rfp.pdf") == (
         "Property Tax System"
     )
@@ -146,3 +149,43 @@ def test_headline_form_needs_a_recognised_purpose_verb():
     # "...for the Financial Year 2026-27" is not a scope statement; guessing one would be
     # worse than keeping the filename.
     assert extract_tender_meta(["Notice Inviting Tender for the Financial Year 2026-27  "]).title is None
+
+
+class TestAFilenameIsTheLastResort:
+    """A bid team running twelve pursuits should not get twelve identical headings.
+
+    `display_title` returned the filename whenever the parser found no title, while the
+    tender number and authority — the things a bid team actually says out loud — sat unused
+    in the same object. The filename it fell back to is often machine-generated noise, and
+    page one being a scan (docs/ocr-measurement.md) is exactly when that happens.
+    """
+
+    def test_a_tender_number_beats_a_filename(self):
+        meta = TenderMeta(tender_number="GEM/2026/B/7431083", authority="Oil India")
+        assert display_title(
+            meta, "all_bid_docs_2026-09-05-15-10-07_191e018c70c0.pdf"
+        ) == "GEM/2026/B/7431083 · Oil India"
+
+    def test_either_half_alone_still_beats_a_filename(self):
+        assert display_title(
+            TenderMeta(tender_number="GEM/2026/B/7431083"), "all_bid_docs_191e018c70c0.pdf"
+        ) == "GEM/2026/B/7431083"
+        assert display_title(
+            TenderMeta(authority="Oil India"), "all_bid_docs_191e018c70c0.pdf"
+        ) == "Oil India"
+
+    def test_a_parsed_title_still_wins_over_everything(self):
+        meta = TenderMeta(title="Supply of Steel Wire Rope",
+                          tender_number="GEM/2026/B/7431083", authority="Oil India")
+        assert display_title(meta, "whatever.pdf") == "Supply of Steel Wire Rope"
+
+    def test_an_unreadable_package_says_so_rather_than_printing_a_hash(self):
+        assert display_title(
+            TenderMeta(), "all_bid_docs_2026-09-05-15-10-07_191e018c70c0f25b1f5c95ea.pdf"
+        ) == "Untitled tender"
+
+    def test_a_filename_a_human_chose_is_still_better_than_nothing(self):
+        # Only machine-generated noise is worth replacing. A person who named their file
+        # gave us a real answer and we should not throw it away.
+        assert display_title(TenderMeta(), "Oil India wire rope NIT.pdf") == \
+            "Oil India wire rope NIT"

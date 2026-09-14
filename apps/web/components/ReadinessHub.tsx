@@ -135,11 +135,28 @@ export function ReadinessHub({
     <main className="p-page">
       <header className="mb-6">
         <h1 className="font-heading text-2xl font-semibold text-ink">{tenderTitle}</h1>
-        {tenderNumber || authority ? (
-          <p className="text-xs text-muted">
-            {[tenderNumber, authority].filter(Boolean).join(" · ")}
+        {tenderTitle === "Untitled tender" && (
+          // Not decoration: this is the OCR gap surfacing on a second screen. The heading is a
+          // placeholder because page one is an image nobody could read, and a user who is not
+          // told that will assume the upload half-failed.
+          <p data-untitled-reason className="text-xs text-muted">
+            No tender number or issuing authority could be read from this package — its first
+            pages are scans.{" "}
+            <Link href="/tenders/upload" className="underline">
+              Upload a clearer copy
+            </Link>
           </p>
-        ) : null}
+        )}
+        {(() => {
+          // `display_title` falls back to exactly this string when no title was parsed, so
+          // on a scanned package the heading IS the number and authority. Printing it again
+          // beneath itself is noise — the line exists to add context to a real title, not to
+          // repeat one.
+          const meta = [tenderNumber, authority].filter(Boolean).join(" · ");
+          return meta && meta !== tenderTitle ? (
+            <p className="text-xs text-muted">{meta}</p>
+          ) : null;
+        })()}
         <p className="text-sm text-muted">
           Bid readiness — what your company already covers, and what&apos;s still needed.
         </p>
