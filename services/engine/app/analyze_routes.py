@@ -49,11 +49,17 @@ class ProfileIn(BaseModel):
     # what a bidder can say about themselves does not fit a taxonomy; the keywords beside it are
     # the deterministic half, and the only half permitted to gate the feed.
     #
-    # NOTE `update_profile` dumps with exclude_none=True, so a null statement is DROPPED rather
-    # than written — the form sends "" to clear it. The keyword list is never None, so it is
-    # written on every save and clearing it works normally.
+    # NOTE `update_profile` dumps with exclude_none=True, so a null is DROPPED rather than
+    # written for BOTH fields — a form sends "" to clear the statement, and `[]` (never None)
+    # to clear the keywords. Omitting either field entirely leaves it unchanged.
+    #
+    # `capability_keywords` was `Field(default_factory=list)` until 2026-09-14: that makes an
+    # OMITTED field indistinguishable from an EXPLICIT `[]`, so any PUT that did not carry the
+    # keywords (every save from a form that does not edit them, e.g. the legal-identity section)
+    # silently wiped them. `list[str] | None = None` restores the distinction the endpoint's own
+    # docstring already promises: omitted-means-unchanged, present-means-replace.
     capability_statement: str | None = None
-    capability_keywords: list[str] = Field(default_factory=list)
+    capability_keywords: list[str] | None = None
 
     legal_name: str | None = None
     # Read on demand for keyword suggestions and shown on the profile. Not validated as a URL

@@ -25,6 +25,11 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
+import { BidVocabulary, type VocabTerm } from "./BidVocabulary";
+import type { Locale } from "@/lib/i18n";
+
+export type Vocabulary = { terms: VocabTerm[]; corpus_open: number; gate_enabled: boolean };
+
 export type ParamDef = {
   key: string;
   label: string;
@@ -78,9 +83,20 @@ function describe(p: StoredParam): string {
 export function CapabilityEditor({
   specs,
   registry,
+  vocabulary,
+  keywordsRaw,
+  statement,
+  websiteUrl,
+  locale = "en",
 }: {
   specs: ProductSpec[];
   registry: ParamDef[];
+  /** `null` when the vocabulary read failed — the envelope editor below stays usable either way. */
+  vocabulary: Vocabulary | null;
+  keywordsRaw: string;
+  statement: string;
+  websiteUrl: string;
+  locale?: Locale;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -186,6 +202,17 @@ export function CapabilityEditor({
 
   return (
     <main className="p-page">
+      {vocabulary ? (
+        <BidVocabulary
+          terms={vocabulary.terms}
+          keywordsRaw={keywordsRaw}
+          statement={statement}
+          corpusOpen={vocabulary.corpus_open}
+          gateEnabled={vocabulary.gate_enabled}
+          websiteUrl={websiteUrl}
+          locale={locale}
+        />
+      ) : null}
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-[-0.01em] text-ink">

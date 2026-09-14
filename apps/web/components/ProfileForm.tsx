@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AnnualReportUpload } from "@/components/AnnualReportUpload";
-import { KeywordSuggestions } from "@/components/KeywordSuggestions";
 import { translator, type Locale } from "@/lib/i18n";
 
 export type Financial = { fy_label: string; turnover_cr: number | string };
@@ -145,21 +144,6 @@ export function ProfileForm({
   const set = <K extends keyof ProfileData>(k: K, v: ProfileData[K]) =>
     setD((p) => ({ ...p, [k]: v }));
 
-  /** Append terms to the keywords box, never replace it — a suggestion must not discard what
-   *  the vendor typed. De-duplicated against what is already there so accepting the same term
-   *  twice (once by auto-fill, once by clicking it) cannot double it up. */
-  const append = (terms: string[]) =>
-    setD((p) => {
-      const have = splitKeywords(p.capability_keywords_raw ?? "");
-      const fresh = terms.map((t) => t.trim().toLowerCase()).filter((t) => t && !have.includes(t));
-      if (!fresh.length) return p;
-      const raw = (p.capability_keywords_raw ?? "").trim();
-      return {
-        ...p,
-        capability_keywords_raw: raw ? `${raw}, ${fresh.join(", ")}` : fresh.join(", "),
-      };
-    });
-
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -170,10 +154,10 @@ export function ProfileForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           legal_name: d.legal_name || null,
-          // "" rather than null, deliberately. The engine dumps with exclude_none=True, so a
-          // null is DROPPED instead of written and the field could never be cleared once set.
-          capability_statement: d.capability_statement ?? "",
-          capability_keywords: splitKeywords(d.capability_keywords_raw ?? ""),
+          // capability_statement / capability_keywords are edited on /capability now
+          // (BidVocabulary.tsx) and deliberately OMITTED here — since the engine's
+          // `ProfileIn.capability_keywords` fix (2026-09-14), an omitted field is left
+          // unchanged rather than wiped. Sending them from here would just be a stale echo.
           // "" rather than null so the field can be cleared — the engine drops nulls.
           website_url: d.website_url ?? "",
           annual_report_document_id: d.annual_report_document_id || null,
@@ -229,52 +213,14 @@ export function ProfileForm({
 
       <section className="rounded-card border border-border bg-surface p-card">
         <h2 className="mb-1 font-heading text-base font-medium text-ink">{t("What you bid on")}</h2>
-        <p className="mb-3 text-xs text-muted">
+        <p className="text-sm text-ink">
           {t(
-            "Used to rank your opportunity feed. Nothing is hidden because of what you write here unless you switch on the narrow feed yourself.",
-          )}
+            "Your capability statement and keywords now live with product capability — two of the three terms gating your feed were already recorded there.",
+          )}{" "}
+          <a href="/capability" className="text-primary underline">
+            {t("Open Manufacturing capability →")}
+          </a>
         </p>
-        <div className="grid grid-cols-1 gap-3">
-          <Row label={t("Capability and expertise")}>
-            <textarea
-              data-field-capability
-              rows={4}
-              className={INPUT}
-              value={d.capability_statement ?? ""}
-              onChange={(e) => set("capability_statement", e.target.value)}
-              placeholder={example.capability}
-            />
-          </Row>
-          <Row label={t("Keywords you bid on (comma separated)")}>
-            <input
-              data-field-capability-keywords
-              className={INPUT}
-              value={d.capability_keywords_raw ?? ""}
-              onChange={(e) => set("capability_keywords_raw", e.target.value)}
-              placeholder={example.keywords}
-            />
-            <KeywordSuggestions
-              websiteUrl={d.website_url ?? ""}
-              currentKeywords={d.capability_keywords_raw ?? ""}
-              locale={locale}
-              onAccept={(kw) => append([kw])}
-              onAcceptMany={append}
-            />
-            {(() => {
-              const terms = splitKeywords(d.capability_keywords_raw ?? "");
-              const unlikely = unlikelyKeywords(terms);
-              if (!unlikely.length) return null;
-              return (
-                <p data-keyword-warning className="mt-1 text-xs text-warning">
-                  {t(
-                    "These are sentences rather than keywords and will match almost nothing — a term is matched whole against a tender's title:",
-                  )}{" "}
-                  <span className="font-medium">{unlikely.map((k) => `“${k}”`).join(", ")}</span>
-                </p>
-              );
-            })()}
-          </Row>
-        </div>
       </section>
 
       <section className="rounded-card border border-border bg-surface p-card">
