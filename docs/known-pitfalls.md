@@ -417,6 +417,44 @@ Mumbai anyway); until then, count round trips like they cost money.
   `AttributeError: 'NoneType' object has no attribute '__dict__'` while resolving its own
   module.
 
+## Test debris is not inert — it runs up a bill (found 2026-09-14, via a Supabase quota notice)
+
+- **The cost of the isolation-suite-points-at-production bug was not the undeletable rows. It
+  was that a scheduled job kept WORKING on them.** 347 workspaces existed and **six had a
+  member**; `recompute_matches` reads a 1000-row corpus window per workspace, and
+  `tendercraft-sweep` runs three times a day. That is ~347k opportunity rows — about 800 MB —
+  leaving Supabase per run, ~2.4 GB/day, to compute feeds for workspaces **no user can open**.
+  It reached 12.16 GB against a 5.5 GB egress quota with the project due to be restricted and
+  start returning 402s. `opportunity_matches` had grown to 2,146,124 rows / 1042 MB, of which
+  **98.5% belonged to memberless workspaces**, on a plan whose database limit is 500 MB.
+- **"Order it last" is not "stop doing it".** The 2026-08-31 pass found the same debris and
+  fixed only the sweep ORDER, on the correct reasoning that dropping a workspace from the
+  fan-out is the ET-7 failure the job exists to prevent. Ordering stops debris *delaying* real
+  work; it leaves every one of those corpus reads happening forever. When the reason to skip
+  work is sound, skipping it is the fix — find the predicate that makes skipping safe.
+- **That predicate is the product's own access rule, never a name pattern.** Since migration
+  0011 `current_workspace_id()` validates against `workspace_members`, so a workspace with no
+  members is unreachable through every surface — it has no reader, by construction rather than
+  by guess, which is why filtering on it does not weaken ET-7. `"Dup Test"` would have been a
+  heuristic about our own fixtures that a customer could trip over by naming a workspace badly.
+- **A set that FILTERS must fail open; a set that ORDERS may fail closed.**
+  `_configured_workspace_ids` can conflate "read failed" with "none found" — the cost is a
+  worse order. `_workspaces_with_members` cannot: an empty set from one hiccuped query would
+  drop every workspace at once and stop every feed in the product. It returns `None` on
+  failure and the caller sweeps everything.
+- **A DELETE does not shrink a Postgres database.** Removing 2.1M rows left the table at
+  981 MB of dead tuples; `vacuum (full, analyze)` took it to 12 MB and the database from
+  1085 MB to 55 MB. Autovacuum reclaims space for REUSE, not to the filesystem, and the
+  provider bills the file.
+- **Verify a fan-out fix late, not early.** Debris was ordered LAST, so an orphan count taken
+  one minute into a sweep is clean under the broken code too — the check would have passed
+  either way and proved nothing. The measurement that separates them is which workspaces got
+  written ten minutes in: five, all with members, and zero orphans recreated.
+- **The tell was never an error.** Nothing failed, no endpoint 500'd, no log line was missing.
+  The first symptom of a job doing 98% useless work was an email from the vendor. If a job's
+  cost scales with a table nobody prunes, something has to state that cost where a human sees
+  it.
+
 ## A capped window over a corpus that keeps its history (found 2026-08-29)
 
 - **`ORDER BY closing_at ASC` + `LIMIT` is a time bomb on any table that retains closed rows.**
