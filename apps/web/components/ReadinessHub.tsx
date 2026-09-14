@@ -135,10 +135,14 @@ export function ReadinessHub({
     <main className="p-page">
       <header className="mb-6">
         <h1 className="font-heading text-2xl font-semibold text-ink">{tenderTitle}</h1>
-        {tenderTitle === "Untitled tender" && (
-          // Not decoration: this is the OCR gap surfacing on a second screen. The heading is a
-          // placeholder because page one is an image nobody could read, and a user who is not
-          // told that will assume the upload half-failed.
+        {!tenderNumber && !authority && (
+          // Gated on the DATA the sentence claims (no number, no authority), not on the
+          // "Untitled tender" string — a pursuit backfill can rename the heading after
+          // ingest (app/tenders.py::_apply_pursuit_context) without this component knowing,
+          // and a string comparison would then be silently wrong. This is the OCR gap
+          // (docs/ocr-measurement.md) surfacing on a second screen: the heading has no real
+          // name because page one is an image nobody could read, and a user not told that
+          // will assume the upload half-failed.
           <p data-untitled-reason className="text-xs text-muted">
             No tender number or issuing authority could be read from this package — its first
             pages are scans.{" "}

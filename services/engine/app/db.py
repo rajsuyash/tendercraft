@@ -945,6 +945,16 @@ def set_tender_meta(tender_id: str, workspace_id: str, tender_number: str | None
     )
 
 
+def set_tender_title(tender_id: str, workspace_id: str, title: str) -> None:
+    """Rename a tender after a pursuit backfill learns a number/authority the placeholder
+    title predates. Same workspace scoping as set_tender_meta's writer, above."""
+    _rest(
+        "PATCH", "tenders",
+        params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
+        json={"title": title},
+    )
+
+
 # ---------- vendor profile writes (Module C) ----------
 def upsert_vendor_profile(workspace_id: str, patch: dict) -> None:
     _rest(

@@ -310,3 +310,37 @@ def test_nothing_is_written_when_neither_source_states_anything(monkeypatch):
     monkeypatch.setattr(tenders.db, "link_pursuit_tender", lambda ws, pid, tid: None)
 
     tenders._apply_pursuit_context("ws-1", "p-1", "t-1", tender_number="", authority="")
+
+
+def test_a_placeholder_title_is_renamed_once_the_backfill_learns_a_number(monkeypatch):
+    """B3 review defect: display_title() runs BEFORE this backfill, so a scanned package can
+    be stamped "Untitled tender" and then, a moment later, gain a number and authority right
+    here — without the fix, the readiness header keeps stating "no number could be read"
+    while the line beneath it names the tender."""
+    monkeypatch.setattr(tenders.db, "get_pursuit", lambda ws, pid: _pursuit())
+    monkeypatch.setattr(tenders.db, "set_tender_meta", lambda *a, **k: None)
+    monkeypatch.setattr(tenders.db, "link_pursuit_tender", lambda ws, pid, tid: None)
+    renamed: dict = {}
+    monkeypatch.setattr(tenders.db, "set_tender_title",
+                        lambda tid, ws, title: renamed.update({"tid": tid, "title": title}))
+
+    tenders._apply_pursuit_context("ws-1", "p-1", "t-1", tender_number="", authority="",
+                                   current_title="Untitled tender")
+
+    assert renamed == {"tid": "t-1", "title": "GEM/2026/B/7876746 · South Eastern Railway"}
+
+
+def test_a_real_title_is_never_overwritten_by_the_same_backfill(monkeypatch):
+    """The assertion that matters: this is what stops the placeholder fix from becoming a
+    different bug — a parsed title or a human-chosen filename must survive the backfill."""
+    monkeypatch.setattr(tenders.db, "get_pursuit", lambda ws, pid: _pursuit())
+    monkeypatch.setattr(tenders.db, "set_tender_meta", lambda *a, **k: None)
+    monkeypatch.setattr(tenders.db, "link_pursuit_tender", lambda ws, pid, tid: None)
+
+    def _boom(*a, **k):
+        raise AssertionError("set_tender_title called on a tender that already had a real title")
+
+    monkeypatch.setattr(tenders.db, "set_tender_title", _boom)
+
+    tenders._apply_pursuit_context("ws-1", "p-1", "t-1", tender_number="", authority="",
+                                   current_title="Supply of Steel Wire Rope")

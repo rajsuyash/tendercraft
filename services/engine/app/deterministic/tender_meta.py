@@ -118,6 +118,12 @@ def display_title(meta: TenderMeta, fallback: str) -> str:
     When even that is missing — which is what happens when page one is a scan nobody could
     read — say so. A hex hash tells the reader nothing and hides the real problem, which is
     that the package was never readable.
+
+    Mirror: `ReadinessHub.tsx`'s subtitle-dedup block rebuilds this same "number · authority"
+    join in TypeScript to compare against the string this function produced. Change the
+    separator or the field order on either side and update both — `app/tenders.py::
+    _apply_pursuit_context` also calls back into this function to re-stamp a placeholder
+    title once a pursuit backfill learns the number/authority this function didn't have yet.
     """
     if meta.title:
         return meta.title

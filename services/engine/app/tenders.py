@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from . import authz, db, spec_service
 from .auth import AuthedUser, get_current_user
 from .deterministic.lock import evaluate_lock
-from .deterministic.tender_meta import display_title
+from .deterministic.tender_meta import TenderMeta, display_title
 from .deterministic.types import Criterion, RequirementLevel, SourceAnchor
 from .envelope import ApiError, ok
 from .ingest import (
@@ -96,7 +96,7 @@ def _relocate(row: dict, page_index: dict[int, SourcePage]) -> dict:
 
 def _apply_pursuit_context(
     workspace_id: str, pursuit_id: str, tender_id: str,
-    tender_number: str, authority: str,
+    tender_number: str, authority: str, current_title: str = "",
 ) -> None:
     """Link the pursuit to the tender it produced, and fill in what the document did not state.
 
@@ -122,6 +122,20 @@ def _apply_pursuit_context(
         auth = authority or opp.get("authority") or ""
         if number or auth:
             db.set_tender_meta(tender_id, workspace_id, number, auth)
+            # display_title() ran BEFORE this backfill learned the opportunity's number and
+            # authority, so a scanned package can be stamped "Untitled tender" and gain a
+            # number a moment later — otherwise the readiness header keeps the placeholder
+            # forever while the line beneath it names the tender. Rename it, but ONLY the
+            # placeholder itself: a parsed title or a human-chosen filename must never be
+            # replaced by a backfill. Mirror: ReadinessHub.tsx's subtitle-dedup block reads
+            # these same two fields against the heading it renders.
+            if current_title == "Untitled tender":
+                renamed = display_title(
+                    TenderMeta(tender_number=number or None, authority=auth or None),
+                    "Untitled tender",
+                )
+                if renamed != "Untitled tender":
+                    db.set_tender_title(tender_id, workspace_id, renamed)
         db.link_pursuit_tender(workspace_id, pursuit_id, tender_id)
     except Exception:  # noqa: BLE001 — an addition must not be able to break ingest
         log.exception("pursuit linking failed for tender %s — ingest continues", tender_id)
@@ -147,7 +161,8 @@ def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title
     meta = result["meta"]
     # Name the bid after the TENDER, not the file. The filename survives only when the
     # document states no title of its own.
-    tender = db.create_tender(workspace_id, display_title(meta, title))
+    stored_title = display_title(meta, title)
+    tender = db.create_tender(workspace_id, stored_title)
     if meta.tender_number or meta.authority:
         db.set_tender_meta(tender["id"], workspace_id, meta.tender_number, meta.authority)
     # Keep the INSERTED rows: they carry the ids Module H binds a prose-derived line item
@@ -175,10 +190,11 @@ def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title
         # After the tender and its criteria exist: the link should point at a tender that is
         # actually usable, not one that may still fail mid-ingest.
         _apply_pursuit_context(workspace_id, pursuit_id, tender["id"],
-                               meta.tender_number or "", meta.authority or "")
+                               meta.tender_number or "", meta.authority or "",
+                               current_title=stored_title)
     return {
         "tender_id": tender["id"],
-        "title": display_title(meta, title),
+        "title": stored_title,
         "tender_number": meta.tender_number,
         "authority": meta.authority,
         "pages": len(pages),
