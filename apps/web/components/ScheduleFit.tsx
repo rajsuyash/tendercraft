@@ -23,6 +23,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
+import { formatDate } from "@/lib/format";
+
 type ParamMatch = {
   key: string;
   match: "match" | "deviation" | "equivalent" | "unknown";
@@ -124,11 +126,12 @@ export function ScheduleFit({
     return seen;
   }, [lines]);
 
-  async function extract() {
+  async function extract(force: boolean) {
     setBusy(true);
     setError(null);
     setNote(null);
-    const res = await fetch(`/api/tenders/${tenderId}/schedule/extract`, { method: "POST" });
+    const qs = force ? "?force=1" : "";
+    const res = await fetch(`/api/tenders/${tenderId}/schedule/extract${qs}`, { method: "POST" });
     const body = await res.json().catch(() => null);
     setBusy(false);
     if (!res.ok || !body?.ok) {
@@ -166,14 +169,30 @@ export function ScheduleFit({
               <span className="ml-1.5 tabular-nums text-danger">{summary.not_creatable}</span>
             )}
           </Link>
-          <button
-            type="button"
-            onClick={() => void extract()}
-            disabled={working || lines.length === 0}
-            className="rounded-control bg-primary px-3 py-1.5 text-sm font-medium text-on-primary disabled:opacity-50"
-          >
-            {working ? "Reading schedule…" : "Read specifications"}
-          </button>
+          {schedule.specs_extracted_at ? (
+            <span className="flex items-center gap-2">
+              <span data-specs-read-at className="text-xs text-muted">
+                Last read {formatDate(new Date(schedule.specs_extracted_at))}
+              </span>
+              <button
+                type="button"
+                onClick={() => void extract(true)}
+                disabled={working || lines.length === 0}
+                className="rounded-control border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-alt disabled:opacity-50"
+              >
+                {working ? "Reading schedule…" : "Read again"}
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void extract(false)}
+              disabled={working || lines.length === 0}
+              className="rounded-control bg-primary px-3 py-1.5 text-sm font-medium text-on-primary disabled:opacity-50"
+            >
+              {working ? "Reading schedule…" : "Read specifications"}
+            </button>
+          )}
         </div>
       </header>
 

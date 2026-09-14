@@ -155,6 +155,33 @@ def test_vocabulary_route_pages_the_corpus_to_exhaustion(client, monkeypatch):
         "the match living past the first page must still be counted"
 
 
+def test_vocabulary_route_asks_for_the_narrow_projection(client, monkeypatch):
+    """A silent regression to `select=*` would be invisible otherwise — the route would still
+    work, just pull every column of the whole open corpus on every render for two fields."""
+    monkeypatch.setattr(db, "get_profile_context", lambda ws: {"legal_identity": {
+        "capability_keywords": ["wire rope"]}})
+    monkeypatch.setattr(db, "list_workspace_categories", lambda ws, *, active_only: [])
+    monkeypatch.setattr(db, "get_capability_specs", lambda ws: [])
+    monkeypatch.setattr(db, "get_workspace_markets", lambda ws: ["IN"])
+    monkeypatch.setattr(db, "get_discovery_rules", lambda ws: [])
+
+    selects: list[str] = []
+
+    def fake_get_opportunities(*, limit, markets, open_only, offset=0, select="*", **_):
+        selects.append(select)
+        return []
+
+    monkeypatch.setattr(db, "get_opportunities", fake_get_opportunities)
+
+    client.get("/api/capability/vocabulary")
+
+    assert selects == ["title,category_codes"]
+    fields = set(selects[0].split(","))
+    # keyword_reach reads exactly these two — NOT authority, which only keyword_relevance uses
+    # to demote (never promote) a band. Getting this wrong makes reach numbers silently wrong.
+    assert fields == {"title", "category_codes"}
+
+
 def test_vocabulary_route_reflects_a_disabled_gate(client, monkeypatch):
     monkeypatch.setattr(db, "get_profile_context", lambda ws: {"legal_identity": {}})
     monkeypatch.setattr(db, "list_workspace_categories", lambda ws, *, active_only: [])

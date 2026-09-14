@@ -225,7 +225,6 @@ export default async function ProfilePage() {
           market={market}
           initial={{
             legal_name: profile?.legal_name ?? orgName,
-            capability_statement: profile?.capability_statement,
             website_url: profile?.website_url,
             annual_report_document_id: profile?.annual_report_document_id,
             annual_report_name: annualReport?.name ?? null,

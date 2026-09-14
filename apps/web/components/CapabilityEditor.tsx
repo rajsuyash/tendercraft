@@ -87,6 +87,7 @@ export function CapabilityEditor({
   keywordsRaw,
   statement,
   websiteUrl,
+  market = "IN",
   locale = "en",
 }: {
   specs: ProductSpec[];
@@ -96,6 +97,7 @@ export function CapabilityEditor({
   keywordsRaw: string;
   statement: string;
   websiteUrl: string;
+  market?: string;
   locale?: Locale;
 }) {
   const router = useRouter();
@@ -210,6 +212,7 @@ export function CapabilityEditor({
           corpusOpen={vocabulary.corpus_open}
           gateEnabled={vocabulary.gate_enabled}
           websiteUrl={websiteUrl}
+          market={market}
           locale={locale}
         />
       ) : (

@@ -6,5 +6,7 @@ export const maxDuration = 300;
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return passthrough(req, `/api/tenders/${id}/schedule/extract`);
+  // Forward `?force=1` verbatim — the engine's double-spend guard reads it, not this route.
+  const qs = new URL(req.url).search;
+  return passthrough(req, `/api/tenders/${id}/schedule/extract${qs}`);
 }

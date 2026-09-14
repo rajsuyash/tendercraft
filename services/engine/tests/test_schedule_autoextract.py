@@ -159,3 +159,68 @@ def test_a_lost_stamp_never_discards_a_completed_extraction(monkeypatch):
 
     assert r.status_code == 200, "a lost stamp must not discard a completed extraction"
     assert r.json()["data"]["populated"] == 1
+
+
+# ── the manual button must not race the background read (Task 2) ───────────────────────────
+
+def test_extract_route_refuses_a_second_read_without_force(monkeypatch):
+    """The background read from upload can still be in flight — CPU throttles after the
+    response flushes — when a user reaches the screen, sees 'not read yet' and presses the
+    button themselves. Once a tender IS stamped, a second unforced press must be refused
+    rather than spend the model budget again on the same schedule."""
+    from fastapi.testclient import TestClient
+
+    from app import db
+    from app.auth import AuthedUser, get_current_user
+    from app.main import create_app
+
+    monkeypatch.setattr(
+        db, "get_tender",
+        lambda t, w: {"id": t, "specs_extracted_at": "2026-09-01T00:00:00+00:00"},
+    )
+
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: AuthedUser(
+        user_id="u1", workspace_id="ws-1", role="admin",
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/tenders/t-1/schedule/extract")
+
+    assert r.status_code == 409
+    body = r.json()
+    assert body["ok"] is False
+    assert body["error"]["code"] == "SPECS_ALREADY_READ"
+
+
+def test_extract_route_force_reads_again_despite_the_stamp(monkeypatch):
+    """`?force=1` is the deliberate re-read a user asks for once a schedule has genuinely
+    changed, and it must still work on an already-stamped tender."""
+    from fastapi.testclient import TestClient
+
+    from app import db
+    from app.auth import AuthedUser, get_current_user
+    from app.main import create_app
+    from pipeline import spec_extractor
+
+    monkeypatch.setattr(
+        db, "get_tender",
+        lambda t, w: {"id": t, "specs_extracted_at": "2026-09-01T00:00:00+00:00"},
+    )
+    monkeypatch.setattr(
+        db, "get_line_items",
+        lambda t, w: [{"id": "i1", "description": "d", "spec_parameters": []}],
+    )
+    monkeypatch.setattr(db, "get_capability_specs", lambda w: [])
+    monkeypatch.setattr(db, "replace_line_item_parameters", lambda *a, **k: None)
+    monkeypatch.setattr(db, "mark_specs_extracted", lambda w, t: None)
+    monkeypatch.setattr(spec_extractor, "extract_parameters", lambda d: ())
+
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: AuthedUser(
+        user_id="u1", workspace_id="ws-1", role="admin",
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/tenders/t-1/schedule/extract?force=1")
+
+    assert r.status_code == 200
+    assert r.json()["ok"] is True

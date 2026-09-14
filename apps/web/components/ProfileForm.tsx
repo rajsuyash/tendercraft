@@ -26,9 +26,6 @@ export type Experience = {
 
 export type ProfileData = {
   legal_name?: string | null;
-  capability_statement?: string | null;
-  /** What the server stores. Edited on /capability now (BidVocabulary.tsx), not here. */
-  capability_keywords?: string[] | null;
   website_url?: string | null;
   annual_report_document_id?: string | null;
   annual_report_name?: string | null;
@@ -113,23 +110,10 @@ export function ProfileForm({
   // unit (see lib/format.ts). Labelling a French figure "₹ Cr" would be asking for the wrong
   // number, which is worse than an untranslated word.
   const unit = market === "FR" ? "M€" : "₹ Cr";
-  // Placeholders are example copy, and an example is only useful if it looks like the reader's
-  // own work. An Indian IT-infrastructure example under a French consultancy's capability box
-  // teaches the wrong thing about what to write here, in a field that decides their whole feed.
-  const example =
-    market === "FR"
-      ? {
-          capability:
-            "ex. Cabinet de conseil spécialisé dans l'accompagnement des acheteurs publics — assistance à maîtrise d'ouvrage, audit interne, transformation numérique et formation des agents.",
-          keywords: "conseil, assistance à maîtrise d'ouvrage, amo, audit, formation",
-          year: "2025",
-        }
-      : {
-          capability:
-            "e.g. We design, supply and maintain IT infrastructure for state government departments — CCTV and surveillance networks, structured cabling, data-centre hardware, and annual maintenance contracts.",
-          keywords: "cctv, surveillance, networking, structured cabling, amc",
-          year: "FY25",
-        };
+  // Capability/keyword placeholders moved to BidVocabulary.tsx with the fields they example
+  // (2026-09-14) — this form no longer edits either. The year placeholder is still this form's
+  // own concern, since it labels the financial-year input right below.
+  const yearPlaceholder = market === "FR" ? "2025" : "FY25";
   const [d, setD] = useState<ProfileData>({
     ...initial,
     financials: [...initial.financials],
@@ -325,7 +309,7 @@ export function ProfileForm({
             <div key={i} className="flex gap-2">
               <input
                 aria-label={t("Financial year")}
-                placeholder={example.year}
+                placeholder={yearPlaceholder}
                 className={`${INPUT} w-28`}
                 value={f.fy_label}
                 onChange={(e) => {

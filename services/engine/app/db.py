@@ -1187,7 +1187,7 @@ def upsert_opportunities(records: list[dict]) -> list[dict]:
 
 def get_opportunities(
     limit: int = 500, markets: list[str] | None = None, open_only: bool = False,
-    offset: int = 0,
+    offset: int = 0, select: str = "*",
 ) -> list[dict]:
     """The shared corpus, scoped to the countries the caller watches.
 
@@ -1218,12 +1218,19 @@ def get_opportunities(
 
     `closing_at is null` is kept deliberately: a tender with NO stated deadline is unknown, not
     closed, and dropping it would be the same silent-miss failure arriving through the fix.
+
+    `select` defaults to `"*"` so every existing caller is unaffected — pass a narrower
+    projection when a caller reads only a couple of columns from every row of a paged sweep.
+    `/api/capability/vocabulary` pages the WHOLE open corpus on every `/capability` render to
+    compute `keyword_reach`, which reads only `title` and `category_codes`; at this project's
+    measured row size (~2.4 KB, the egress incident in known-pitfalls) a 2,000-row corpus is
+    ~5 MB of columns nothing downstream touches.
     """
     # `id` as a tiebreak: many rows share a closing timestamp, and a page boundary that falls
     # inside a tie would hand the same row to two pages and skip another (known-pitfalls,
     # "a keyset cursor on a non-unique column").
     params = {
-        "select": "*", "order": "closing_at.asc,id.asc",
+        "select": select, "order": "closing_at.asc,id.asc",
         "limit": str(limit), "offset": str(offset),
     }
     if markets:

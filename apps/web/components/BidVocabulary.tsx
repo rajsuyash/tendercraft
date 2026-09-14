@@ -73,6 +73,23 @@ export async function saveErrorMessage(
   return body?.error?.message ?? fallback;
 }
 
+/** Placeholders are example copy, and an example is only useful if it looks like the reader's
+ *  own work. An Indian IT-infrastructure example under a French consultancy's capability box
+ *  teaches the wrong thing about what to write here, in a field that decides their whole feed.
+ *  Moved here from ProfileForm.tsx when the editor did (2026-09-14) — this is the only consumer. */
+const EXAMPLE: Record<string, { capability: string; keywords: string }> = {
+  FR: {
+    capability:
+      "ex. Cabinet de conseil spécialisé dans l'accompagnement des acheteurs publics — assistance à maîtrise d'ouvrage, audit interne, transformation numérique et formation des agents.",
+    keywords: "conseil, assistance à maîtrise d'ouvrage, amo, audit, formation",
+  },
+};
+const DEFAULT_EXAMPLE = {
+  capability:
+    "e.g. We design, supply and maintain IT infrastructure for state government departments — CCTV and surveillance networks, structured cabling, data-centre hardware, and annual maintenance contracts.",
+  keywords: "cctv, surveillance, networking, structured cabling, amc",
+};
+
 export function BidVocabulary({
   terms,
   keywordsRaw,
@@ -80,6 +97,7 @@ export function BidVocabulary({
   corpusOpen,
   gateEnabled,
   websiteUrl,
+  market = "IN",
   locale = "en",
 }: {
   terms: VocabTerm[];
@@ -88,11 +106,13 @@ export function BidVocabulary({
   corpusOpen: number;
   gateEnabled: boolean;
   websiteUrl: string;
+  market?: string;
   locale?: Locale;
 }) {
   const router = useRouter();
   const t = translator(locale);
   const { derived, dead } = groupBySource(terms);
+  const example = EXAMPLE[market] ?? DEFAULT_EXAMPLE;
 
   const [raw, setRaw] = useState(keywordsRaw);
   const [text, setText] = useState(statement);
@@ -176,6 +196,7 @@ export function BidVocabulary({
             className={INPUT}
             value={text}
             disabled={busy}
+            placeholder={example.capability}
             onChange={(e) => setText(e.target.value)}
           />
         </label>
@@ -188,6 +209,7 @@ export function BidVocabulary({
             className={INPUT}
             value={raw}
             disabled={busy}
+            placeholder={example.keywords}
             onChange={(e) => setRaw(e.target.value)}
           />
           <KeywordSuggestions

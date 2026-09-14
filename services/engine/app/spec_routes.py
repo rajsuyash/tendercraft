@@ -242,15 +242,27 @@ def update_clarification(
 
 
 @router.post("/api/tenders/{tender_id}/schedule/extract")
-async def extract_schedule(tender_id: str, user: CurrentUser) -> dict:
+async def extract_schedule(tender_id: str, user: CurrentUser, force: bool = False) -> dict:
     """Read the specifications out of the schedule's descriptions. The only model call here.
 
     Separate from the GET on purpose: extraction costs money and the fit screen is looked at
     far more often than a schedule changes.
+
+    Guarded against a double spend: extraction now also runs automatically in the background
+    right after upload (`app/tenders.py::_extract_quietly`), and that background read can still
+    be in flight — CPU throttles after the response flushes — when a user reaches this screen,
+    sees "not read yet" and presses the button themselves. Without a guard that is two full
+    extractions racing on the same tender, each up to `SPEC_EXTRACT_BUDGET` model calls, plus
+    two interleaved delete-then-insert passes over `tender_line_items` parameters. `force=1` is
+    the deliberate re-read a user asks for after the schedule genuinely changed.
     """
     authz.check(user, authz.DRAFT)
-    if not db.get_tender(tender_id, user.workspace_id):
+    tender = db.get_tender(tender_id, user.workspace_id)
+    if not tender:
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found")
+    if tender.get("specs_extracted_at") and not force:
+        raise ApiError(409, "SPECS_ALREADY_READ",
+                       "this schedule was already read — pass force to read it again")
 
     def _run() -> dict:
         items = db.get_line_items(tender_id, user.workspace_id)
@@ -305,6 +317,12 @@ async def capability_vocabulary(user: CurrentUser) -> dict:
       a hundredth, because per-term matching (`_term_hits`) still runs once per term either
       way and is the larger share of the cost; only the tokenisation it was needlessly
       repeating is what this removes.
+    - Pull every column. `keyword_reach` reads exactly `title` and `category_codes` — it
+      deliberately does NOT read `authority` (a term matching only the buying authority's name
+      is real evidence for `keyword_relevance`'s band but must not count as reach here; see its
+      docstring). This page is `force-dynamic` with no cache, so every render of `/capability`
+      re-pulls the corpus; at this project's measured row size a `select=*` over a few thousand
+      rows is megabytes of columns nothing here touches.
     """
     def work() -> dict:
         terms = capability_terms(user.workspace_id)
@@ -316,6 +334,7 @@ async def capability_vocabulary(user: CurrentUser) -> dict:
         while True:
             page = db.get_opportunities(
                 limit=RECOMPUTE_WINDOW, markets=markets, open_only=True, offset=offset,
+                select="title,category_codes",
             )
             corpus.extend(page)
             if len(page) < RECOMPUTE_WINDOW:
