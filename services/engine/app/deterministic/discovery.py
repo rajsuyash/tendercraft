@@ -394,6 +394,38 @@ def keyword_relevance(
     return KeywordMatch(band="low", matched_terms=matched, language=language)
 
 
+def keyword_reach(record: dict[str, Any], terms: list[str]) -> dict[str, bool]:
+    """Per term: would THIS TERM ALONE keep this record out of the excluded bucket?
+
+    One tokenisation of the record, reused across every term. `keyword_relevance(record,
+    [term])` in a loop recomputes title/category/authority tokenisation on every call — 31
+    terms over a 1,000-row corpus measured at ~2s of CPU for one request. Re-measured here on a
+    synthetic corpus of the same shape: ~3.5s for the loop vs ~1.6s tokenizing once per row —
+    roughly half, not the whole cost, because the per-term match itself (`_term_hits`) still
+    runs once per term either way; only the tokenisation it was redundantly repeating goes away.
+
+    A term matching only the buying authority's name bands `low` in `keyword_relevance` (real,
+    but weak evidence) and must NOT count as reach here either — only a title or category hit
+    does. This mirrors that single-keyword band decision exactly rather than reusing
+    `matched_terms` from one whole-list call, which would be a looser, overcounting measure:
+    two terms can each individually reach nothing yet jointly band `high` (the `len(matched) >=
+    2` rule), so `matched_terms` from a joint call is not the per-term answer.
+    """
+    title = (record.get("title") or "").lower()
+    categories = " ".join(_category_codes(record)).lower()
+    title_tokens, category_tokens = _tokens(title), _tokens(categories)
+    title_seq, category_seq = _sequence(title), _sequence(categories)
+
+    out: dict[str, bool] = {}
+    for raw in terms:
+        term = raw.strip().lower()
+        out[raw] = bool(term) and (
+            _term_hits(term, category_tokens, seq=category_seq, code=True)
+            or _term_hits(term, title_tokens, seq=title_seq)
+        )
+    return out
+
+
 def _matches(rule: Rule, record: dict[str, Any], now: datetime) -> bool:
     """True when this rule's condition FIRES on the record (i.e. the rule wants it excluded).
 

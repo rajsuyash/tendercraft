@@ -120,6 +120,41 @@ def test_vocabulary_route_reports_reach_and_gate_state(client, monkeypatch):
         "a term that matches nothing must report a zero, not silently disappear"
 
 
+def test_vocabulary_route_pages_the_corpus_to_exhaustion(client, monkeypatch):
+    """A single `limit=RECOMPUTE_WINDOW` read silently truncated the India corpus to its
+    closed-first slice until 2026-09-14 (known-pitfalls). This endpoint's whole purpose is
+    catching a term that reaches nothing — it must not itself be reading a truncated corpus."""
+    from app.discovery.ingest import RECOMPUTE_WINDOW
+
+    monkeypatch.setattr(db, "get_profile_context", lambda ws: {"legal_identity": {
+        "capability_keywords": ["wire rope"]}})
+    monkeypatch.setattr(db, "list_workspace_categories", lambda ws, *, active_only: [])
+    monkeypatch.setattr(db, "get_capability_specs", lambda ws: [])
+    monkeypatch.setattr(db, "get_workspace_markets", lambda ws: ["IN"])
+    monkeypatch.setattr(db, "get_discovery_rules", lambda ws: [])
+
+    pages: list[int] = []
+
+    def fake_get_opportunities(*, limit, markets, open_only, offset=0, **_):
+        pages.append(offset)
+        if offset == 0:
+            return [{"id": f"o{i}", "title": "irrelevant BOQ item", "category_codes": [],
+                     "authority": ""} for i in range(RECOMPUTE_WINDOW)]
+        if offset == RECOMPUTE_WINDOW:
+            return [{"id": "o-last", "title": "Supply of wire rope", "category_codes": [],
+                     "authority": ""}]
+        return []
+
+    monkeypatch.setattr(db, "get_opportunities", fake_get_opportunities)
+
+    body = client.get("/api/capability/vocabulary").json()["data"]
+
+    assert pages == [0, RECOMPUTE_WINDOW], "must read a second page rather than stop at one"
+    assert body["corpus_open"] == RECOMPUTE_WINDOW + 1
+    assert next(t for t in body["terms"] if t["term"] == "wire rope")["reach"] == 1, \
+        "the match living past the first page must still be counted"
+
+
 def test_vocabulary_route_reflects_a_disabled_gate(client, monkeypatch):
     monkeypatch.setattr(db, "get_profile_context", lambda ws: {"legal_identity": {}})
     monkeypatch.setattr(db, "list_workspace_categories", lambda ws, *, active_only: [])

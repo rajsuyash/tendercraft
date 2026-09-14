@@ -18,7 +18,7 @@ kept 97, precision 0.91, recall 0.98.
 
 from __future__ import annotations
 
-from app.deterministic.discovery import Rule, evaluate_gate, keyword_relevance
+from app.deterministic.discovery import Rule, evaluate_gate, keyword_reach, keyword_relevance
 
 # The vendor's real keywords, verbatim — including the typo, which is load-bearing evidence
 # for the dead-keyword test at the bottom.
@@ -207,3 +207,34 @@ class TestAStandardNumberIsTheOnlyReachableTerm:
         # The bolt BOQ that cites IS 208-1996 must not answer to IS 2266.
         bolts = "ALDROP BOLT ALUM 300MM ROD DIA 16MM IS 208-1996, GI WIREMESH 0.40MM DIA WIRE"
         assert keyword_relevance(tender(bolts), [*UML, "IS 2266"]).band == "low"
+
+
+class TestKeywordReach:
+    """`keyword_reach` computes, per term, what a solo `keyword_relevance(record, [term])`
+    call would have banded — without re-tokenizing the record once per term. Pinned against
+    the matcher directly rather than trusted by inspection, because a faster reimplementation
+    that quietly loosens (or tightens) the rule is worse than the slow original."""
+
+    def test_matches_keyword_relevance_term_by_term(self):
+        # `oil indutry` (sic) is the dead keyword from the module docstring; it must stay dead.
+        t = tender("Steel Wire Rope Sling for Crane, 16mm, Indian Railways")
+        reach = keyword_reach(t, KEYWORDS)
+        for term in KEYWORDS:
+            assert reach[term] == (keyword_relevance(t, [term]).band != "low"), term
+
+    def test_an_authority_only_match_reports_zero_reach(self):
+        # "Indian Railways" appears only in the buying authority's name, never in the title or
+        # category — keyword_relevance bands that "low" (real, but weak evidence) and reach
+        # must agree, not count it.
+        t = tender("Wooden Furniture Supply", authority="Indian Railways")
+        assert keyword_relevance(t, ["Indian Railways"]).band == "low"
+        assert keyword_reach(t, ["Indian Railways"])["Indian Railways"] is False
+
+    def test_a_title_match_reports_reach(self):
+        t = tender("Supply of Steel Wire Rope for Cranes", authority="Indian Railways")
+        assert keyword_relevance(t, ["wire rope"]).band != "low"
+        assert keyword_reach(t, ["wire rope"])["wire rope"] is True
+
+    def test_an_empty_or_blank_term_never_reaches(self):
+        t = tender("Steel Wire Rope Sling")
+        assert keyword_reach(t, ["", "   "]) == {"": False, "   ": False}

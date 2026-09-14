@@ -29,7 +29,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -265,18 +265,21 @@ def _rules_for(workspace_id: str, keywords: list[str] | None = None) -> list[Rul
     ]
 
 
+#: 'typed' (the profile's keyword box) | 'category' (a GeM category) | 'standard' (an envelope)
+TermSource = Literal["typed", "category", "standard"]
+
+
 @dataclass(frozen=True)
 class Term:
     """One keyword the feed gate runs on, and where the user can go to change it."""
 
     term: str
-    #: 'typed' (the profile's keyword box) | 'category' (a GeM category) | 'standard' (an envelope)
-    source: str
+    source: TermSource
     #: For a derived term, the row it came from, so a screen can name it. "" when typed.
     origin: str = ""
 
 
-def capability_terms(workspace_id: str) -> list[Term]:
+def capability_terms(workspace_id: str, identity: dict | None = None) -> list[Term]:
     """Every term gating and ranking this workspace's feed, attributed to its source.
 
     Three screens each hold a vocabulary and only one of them has an input box, so a user
@@ -289,8 +292,14 @@ def capability_terms(workspace_id: str) -> list[Term]:
     title never uses the word "rope". Split on "/" and "," — "IS 4521 / API Spec 9A" is two.
 
     The typed spelling wins a duplicate, because that is the field the user can edit.
+
+    `identity` lets a caller that already holds `get_profile_context(...)["legal_identity"]`
+    (`_capability`, on the sweep's hot path) pass it in rather than trigger a second one —
+    `get_profile_context` is four REST reads, not one, so a second call there is real cost, not
+    a style nit. Callers with no profile in hand (the route) omit it and one is fetched here.
     """
-    identity = db.get_profile_context(workspace_id).get("legal_identity") or {}
+    if identity is None:
+        identity = db.get_profile_context(workspace_id).get("legal_identity") or {}
     found: list[Term] = [
         Term(t, "typed") for t in (identity.get("capability_keywords") or [])
     ]
@@ -319,18 +328,24 @@ def capability_terms(workspace_id: str) -> list[Term]:
 def _capability(workspace_id: str) -> tuple[str, list[str]]:
     """The vendor's own words, and every term they bid on. Both drive the relevance band.
 
-    Delegates its vocabulary to `capability_terms` so the gate and the screen explaining it
-    read the same list. This costs a second `get_profile_context` round trip (one here for the
-    statement, one inside `capability_terms` for the keywords) — accepted rather than
-    restructured: `get_profile_context` is a single per-workspace REST read, not a loop, and
-    keeping the statement lookup here (rather than threading it through `capability_terms`,
-    which has no reason to know about it) keeps each function's contract to exactly what its
-    name says. Revisit if this path ever shows up in a latency audit.
+    One `get_profile_context` fetch — four REST reads (vendor_profiles, profile_financials,
+    experience_records, certifications), not one, so a duplicate here is real cost — with the
+    `legal_identity` it returns passed straight into `capability_terms` so THAT function does
+    not fetch a second time. Before this, `capability_terms` re-fetched internally, doubling
+    this call's cost the moment it was introduced.
+
+    Deliberately NOT threaded any further into `_profile_turnover_inr`, which reads the same
+    `get_profile_context` result a second time on `recompute_matches`'s hot path. Doing so
+    would mean `recompute_matches` fetching the profile itself and passing it to both — and
+    `tests/test_discovery_markets.py` monkeypatches `_capability` and `_profile_turnover_inr`
+    as full replacements (one positional arg, no `get_profile_context` mock), so an eager
+    fetch in `recompute_matches` would call the real, unmocked network in every one of those
+    tests. Left as two calls; noted rather than forced.
     """
     identity = db.get_profile_context(workspace_id).get("legal_identity") or {}
     return (
         identity.get("capability_statement") or "",
-        [t.term for t in capability_terms(workspace_id)],
+        [t.term for t in capability_terms(workspace_id, identity=identity)],
     )
 
 

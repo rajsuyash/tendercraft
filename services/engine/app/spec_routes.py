@@ -17,9 +17,9 @@ from pydantic import BaseModel, Field
 
 from . import authz, db, spec_service
 from .auth import AuthedUser, get_current_user
-from .deterministic.discovery import keyword_relevance
+from .deterministic.discovery import keyword_reach
 from .deterministic.spec_params import PARAM_KEYS, REGISTRY
-from .discovery.ingest import CAPABILITY_RULE_NAME, capability_terms
+from .discovery.ingest import CAPABILITY_RULE_NAME, RECOMPUTE_WINDOW, capability_terms
 from .envelope import ApiError, ok
 
 log = logging.getLogger("tendercraft.spec")
@@ -286,29 +286,54 @@ async def extract_schedule(tender_id: str, user: CurrentUser) -> dict:
 async def capability_vocabulary(user: CurrentUser) -> dict:
     """The terms gating the feed, with where each came from and how far each reaches.
 
-    Reach is deterministic — `keyword_relevance` over the open corpus, no model — and it is
-    here because a dead term and a quiet market look identical. A typo in this workspace's
-    keywords once matched 0 of 581 tenders with nothing anywhere saying so, and derived terms
-    nobody typed make that worse rather than better.
+    Reach is deterministic — `keyword_reach` over the open corpus, no model — and it is here
+    because a dead term and a quiet market look identical. A typo in this workspace's keywords
+    once matched 0 of 581 tenders with nothing anywhere saying so, and derived terms nobody
+    typed make that worse rather than better.
+
+    Two things this endpoint deliberately does NOT do, both found live on this same branch:
+
+    - Cap the read at one page. `db.get_opportunities` pages to exhaustion here exactly as
+      `recompute_matches` does, reusing its `RECOMPUTE_WINDOW` page size — an uncapped-looking
+      `limit=1000` silently truncated the India corpus to its closed-first slice until
+      2026-09-14 (known-pitfalls), and an instrument built to catch a term matching nothing
+      must not itself be reading a truncated corpus.
+    - Re-tokenize per term. `keyword_relevance(o, [term])` in a loop over N terms re-parses the
+      same title/category text N times; `keyword_reach` tokenizes each row once and checks
+      every term against it. Measured on a synthetic 31-term × 1,000-row corpus with realistic
+      title lengths: ~3.5s for the loop, ~1.6s for `keyword_reach` — roughly half the CPU, not
+      a hundredth, because per-term matching (`_term_hits`) still runs once per term either
+      way and is the larger share of the cost; only the tokenisation it was needlessly
+      repeating is what this removes.
     """
     def work() -> dict:
         terms = capability_terms(user.workspace_id)
+        term_strings = [t.term for t in terms]
         markets = db.get_workspace_markets(user.workspace_id)
-        corpus = db.get_opportunities(limit=1000, markets=markets, open_only=True)
+
+        corpus: list[dict] = []
+        offset = 0
+        while True:
+            page = db.get_opportunities(
+                limit=RECOMPUTE_WINDOW, markets=markets, open_only=True, offset=offset,
+            )
+            corpus.extend(page)
+            if len(page) < RECOMPUTE_WINDOW:
+                break
+            offset += RECOMPUTE_WINDOW
+
+        reach = dict.fromkeys(term_strings, 0)
+        for opportunity in corpus:
+            for term, hit in keyword_reach(opportunity, term_strings).items():
+                if hit:
+                    reach[term] += 1
+
         rules = db.get_discovery_rules(user.workspace_id)
         gate_on = any(r["name"] == CAPABILITY_RULE_NAME and r.get("enabled") for r in rules)
         return {
             "terms": [
-                {
-                    "term": t.term,
-                    "source": t.source,
-                    "origin": t.origin,
-                    # How many open tenders THIS TERM ALONE would keep. A zero here is the
-                    # finding: the term can never contribute to a decision.
-                    "reach": sum(
-                        1 for o in corpus if keyword_relevance(o, [t.term]).band != "low"
-                    ),
-                }
+                {"term": t.term, "source": t.source, "origin": t.origin,
+                 "reach": reach[t.term]}
                 for t in terms
             ],
             "corpus_open": len(corpus),
