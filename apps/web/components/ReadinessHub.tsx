@@ -202,19 +202,9 @@ export function ReadinessHub({
             </p>
           )}
 
-          {/* progress + generate */}
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface p-card">
-            <div className="flex flex-wrap gap-4 text-sm">
-              <span data-p0-progress className={summary.p0_blocking > 0 ? "text-danger" : "text-success"}>
-                {summary.p0_blocking} blocking submission
-              </span>
-              {summary.p0_overridden > 0 && (
-                <span className="text-muted">{summary.p0_overridden} overridden</span>
-              )}
-              <span className="text-warning">{summary.p1_open} P1</span>
-              <span className="text-info">{summary.p2_open} P2</span>
-              <span className="text-success">{summary.covered} covered</span>
-            </div>
+          {/* generate — the counts this strip used to show duplicated SubmissionMeter above
+           * it (same underlying readiness summary, different granularity). Kept the actions. */}
+          <div className="mb-6 flex flex-wrap items-center justify-end gap-3 rounded-card border border-border bg-surface p-card">
             <div className="flex gap-2">
               <button
                 onClick={() => post(`/api/tenders/${tenderId}/prepare`, "prepare")}

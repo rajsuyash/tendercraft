@@ -1,6 +1,36 @@
 import Link from "next/link";
 
 export type Blocker = { stage: string; label: string; detail: string };
+export type NavLink = { label: string; href: string; enabled: boolean; reason?: string };
+
+/** Where this screen can usefully send you, and why it cannot yet.
+ *
+ * 'Requirements' used to be here and pointed at `/tenders/{id}/readiness` — the page the
+ * meter is rendered on. A link to the current page is not navigation.
+ *
+ * The other two are offered disabled rather than hidden: a bidder should be able to see that
+ * a proposal and a score exist as steps, without being sent to an empty page to find out they
+ * are not ready. Hiding them would answer the wrong question.
+ */
+export function navFor(
+  tenderId: string,
+  state: { drafted: boolean; scored: boolean },
+): [proposal: NavLink, score: NavLink] {
+  return [
+    {
+      label: "Proposal",
+      href: `/proposals/${tenderId}`,
+      enabled: state.drafted,
+      ...(state.drafted ? {} : { reason: "Nothing drafted yet" }),
+    },
+    {
+      label: "Technical score",
+      href: `/proposals/${tenderId}/score`,
+      enabled: state.scored,
+      ...(state.scored ? {} : { reason: "Available once a proposal exists" }),
+    },
+  ];
+}
 export type Submission = {
   stage_label: string;
   completed_stages: number;
@@ -20,11 +50,15 @@ export type Submission = {
 export function SubmissionMeter({
   tenderId,
   submission,
+  drafted,
+  scored,
 }: {
   tenderId: string;
   submission: Submission;
+  drafted: boolean;
+  scored: boolean;
 }) {
-  const { percent, can_submit: ready, blockers, stage_label: stage } = submission;
+  const { percent, can_submit: ready, blockers } = submission;
   const tone = ready ? "text-success" : percent >= 60 ? "text-warning" : "text-danger";
   const bar = ready ? "bg-success" : percent >= 60 ? "bg-warning" : "bg-danger";
 
@@ -37,7 +71,7 @@ export function SubmissionMeter({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="font-heading text-base font-medium text-ink">Submission readiness</h2>
         <span className={`text-sm font-medium ${tone}`}>
-          {ready ? "Ready to submit" : `Next: ${stage}`}
+          {ready ? "Ready to submit" : "Not ready"}
         </span>
       </div>
 
@@ -45,11 +79,9 @@ export function SubmissionMeter({
         <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-alt">
           <span className={`block h-full rounded-full ${bar}`} style={{ width: `${percent}%` }} />
         </span>
-        <span className="shrink-0 text-sm tabular-nums text-muted">
-          <span className={`font-medium ${tone}`}>{percent}%</span>
-          {" · "}
-          {submission.completed_stages}/{submission.total_stages} stages
-        </span>
+        {/* Percent alone, not also "N/5 stages" — both describe the same completed_stages
+         * count and showing both asks the reader to check the arithmetic. */}
+        <span className={`shrink-0 text-sm font-medium tabular-nums ${tone}`}>{percent}%</span>
       </div>
 
       {blockers.length > 0 ? (
@@ -73,25 +105,29 @@ export function SubmissionMeter({
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link
-          href={`/tenders/${tenderId}/readiness`}
-          className="rounded border border-border px-3 py-1.5 text-xs text-ink hover:border-primary"
-        >
-          Requirements
-        </Link>
-        <Link
-          href={`/proposals/${tenderId}`}
-          className="rounded border border-border px-3 py-1.5 text-xs text-ink hover:border-primary"
-        >
-          Proposal
-        </Link>
-        <Link
-          href={`/proposals/${tenderId}/score`}
-          data-open-score-meter
-          className="rounded border border-border px-3 py-1.5 text-xs text-ink hover:border-primary"
-        >
-          Technical score
-        </Link>
+        {navFor(tenderId, { drafted, scored }).map((link) =>
+          link.enabled ? (
+            <Link
+              key={link.href}
+              href={link.href}
+              data-open-score-meter={link.label === "Technical score" ? true : undefined}
+              className="rounded border border-border px-3 py-1.5 text-xs text-ink hover:border-primary"
+            >
+              {link.label}
+            </Link>
+          ) : (
+            // A span, not an `aria-disabled` anchor — an anchor with `aria-disabled` still
+            // navigates. The reason surfaces on hover so "why can't I click this" is answered.
+            <span
+              key={link.href}
+              title={link.reason}
+              data-open-score-meter={link.label === "Technical score" ? true : undefined}
+              className="cursor-not-allowed rounded border border-border px-3 py-1.5 text-xs text-muted"
+            >
+              {link.label}
+            </span>
+          ),
+        )}
       </div>
     </section>
   );
