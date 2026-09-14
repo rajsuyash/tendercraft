@@ -280,8 +280,8 @@ class TestClosedTendersCannotStarveTheWindow:
 
         seen: dict = {}
 
-        def fake_get(limit, markets=None, open_only=False):
-            seen.update({"limit": limit, "open_only": open_only})
+        def fake_get(limit, markets=None, open_only=False, offset=0):
+            seen.update({"limit": limit, "open_only": open_only, "offset": offset})
             return []
 
         monkeypatch.setattr(ingest.db, "get_opportunities", fake_get)
@@ -318,47 +318,15 @@ class TestAPageBudgetBelongsToItsSource:
         assert "ted" not in SOURCE_SWEEP_PAGES
 
 
-# ---------- the recompute window must not fill silently ----------
+# ---------- the recompute must evaluate every open row, not the first page ----------
 #
-# `recompute_matches` evaluates a capped window of open opportunities. When the corpus outgrows
-# that cap the remainder is never matched, and nothing errors — the feed simply stops growing.
-# That already happened once (2026-08-29: 1282 closed rows held every slot and no open tender
-# was evaluated at all; docs/known-pitfalls.md). `open_only` fixed that cause; it did not make
-# the NEXT saturation visible. Measured 2026-09-08: France holds 3097 open against a 1000
-# window, so this is live, not hypothetical.
+# `recompute_matches` used to read ONE window of open opportunities and report
+# `window_saturated` when it filled. Nothing read that flag. Measured 2026-09-14: India held
+# 1,251 open against a 1,000 window, so ~250 open tenders were never gated or ranked, and
+# 22 open wire-rope tenders sat in the feed unbanded. Paging the gate is free — the model
+# budget lives in `bands_for` and the document budget in `_enrich_documents`.
 
-def test_a_full_window_is_reported_as_saturated(monkeypatch):
-    from app.discovery import ingest as ing
-
-    monkeypatch.setattr(ing, "_capability", lambda ws: ("", []))
-    monkeypatch.setattr(ing, "_rules_for", lambda ws, kw: [])
-    monkeypatch.setattr(ing, "_profile_turnover_inr", lambda ws: None)
-    monkeypatch.setattr(ing.db, "get_workspace_market", lambda ws: "FR")
-    monkeypatch.setattr(ing.db, "get_workspace_markets", lambda ws: ["FR"])
-    monkeypatch.setattr(ing.db, "upsert_opportunity_matches", lambda ws, rows: len(rows))
-    monkeypatch.setattr(ing, "_enrich_documents", lambda items, budget: 0)
-    # Exactly a full window: every row excluded, so no model call is reached.
-    monkeypatch.setattr(
-        ing.db, "get_opportunities",
-        lambda limit, markets, open_only: [
-            {"id": f"o-{i}", "market": "FR"} for i in range(limit)
-        ],
-    )
-    monkeypatch.setattr(ing, "evaluate_gate",
-                        lambda o, r: type("G", (), {"in_scope": False,
-                                                    "excluded_by_rule": "test"})())
-
-    result = ing.recompute_matches("ws-1")
-
-    assert result["window_saturated"] is True, (
-        "a full window means rows went unevaluated and nobody was told"
-    )
-    assert result["window_limit"] == result["evaluated"]
-
-
-def test_a_partial_window_is_not_saturated(monkeypatch):
-    from app.discovery import ingest as ing
-
+def _stub_recompute(monkeypatch, ing, corpus: list[dict]):
     monkeypatch.setattr(ing, "_capability", lambda ws: ("", []))
     monkeypatch.setattr(ing, "_rules_for", lambda ws, kw: [])
     monkeypatch.setattr(ing, "_profile_turnover_inr", lambda ws: None)
@@ -366,16 +334,52 @@ def test_a_partial_window_is_not_saturated(monkeypatch):
     monkeypatch.setattr(ing.db, "get_workspace_markets", lambda ws: ["IN"])
     monkeypatch.setattr(ing.db, "upsert_opportunity_matches", lambda ws, rows: len(rows))
     monkeypatch.setattr(ing, "_enrich_documents", lambda items, budget: 0)
-    monkeypatch.setattr(
-        ing.db, "get_opportunities",
-        lambda limit, markets, open_only: [{"id": "o-1", "market": "IN"}],
-    )
     monkeypatch.setattr(ing, "evaluate_gate",
                         lambda o, r: type("G", (), {"in_scope": False,
                                                     "excluded_by_rule": "test"})())
+    calls: list[dict] = []
+
+    def fake_get(*, limit, markets, open_only, offset=0):
+        calls.append({"limit": limit, "offset": offset, "open_only": open_only})
+        return corpus[offset:offset + limit]
+
+    monkeypatch.setattr(ing.db, "get_opportunities", fake_get)
+    return calls
+
+
+def test_a_corpus_larger_than_one_page_is_evaluated_in_full(monkeypatch):
+    from app.discovery import ingest as ing
+
+    corpus = [{"id": f"o-{i}", "market": "IN"} for i in range(ing.RECOMPUTE_WINDOW + 251)]
+    calls = _stub_recompute(monkeypatch, ing, corpus)
 
     result = ing.recompute_matches("ws-1")
-    assert result["window_saturated"] is False
+
+    assert result["evaluated"] == len(corpus)
+    assert result["pages"] == 2
+    assert [c["offset"] for c in calls] == [0, ing.RECOMPUTE_WINDOW]
+    assert all(c["open_only"] for c in calls)
+
+
+def test_a_corpus_that_exactly_fills_a_page_reads_one_more_empty_page(monkeypatch):
+    # The loop stops on a SHORT page. An exactly-full page is not proof of the end.
+    from app.discovery import ingest as ing
+
+    corpus = [{"id": f"o-{i}", "market": "IN"} for i in range(ing.RECOMPUTE_WINDOW)]
+    calls = _stub_recompute(monkeypatch, ing, corpus)
+
+    result = ing.recompute_matches("ws-1")
+
+    assert result["evaluated"] == ing.RECOMPUTE_WINDOW
+    assert len(calls) == 2 and calls[1]["offset"] == ing.RECOMPUTE_WINDOW
+
+
+def test_a_small_corpus_is_one_page(monkeypatch):
+    from app.discovery import ingest as ing
+
+    calls = _stub_recompute(monkeypatch, ing, [{"id": "o-1", "market": "IN"}])
+    result = ing.recompute_matches("ws-1")
+    assert result["evaluated"] == 1 and result["pages"] == 1 and len(calls) == 1
 
 
 # ---------- a cached band must survive the next run ----------

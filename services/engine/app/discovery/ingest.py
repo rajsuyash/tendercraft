@@ -49,11 +49,11 @@ DEFAULT_PAGES = int(os.environ.get("GEM_SWEEP_PAGES", "12"))
 # Fetching all 48k would be pointless and rude; this is §4.1's escalation ladder, capped.
 DEFAULT_DOC_BUDGET = int(os.environ.get("GEM_DOC_BUDGET", "25"))
 
-#: How many OPEN opportunities one recompute evaluates. Named rather than inline because the
-#: number is a live constraint, not a round figure: France held 3097 open against it on
-#: 2026-09-08. `recompute_matches` reports `window_saturated` when the window fills, so
-#: outgrowing it is visible instead of silent. Raising it alone re-arms the same trap one
-#: corpus-size later — the real fix is paging to exhaustion, which costs model calls.
+#: Page size for the recompute's read of the open corpus. NOT a cap: the loop pages to
+#: exhaustion, so outgrowing this number costs one more read rather than losing tenders.
+#: It was a cap until 2026-09-14, and India had 1,251 open rows against it — ~250 open
+#: tenders were never gated or ranked while a "SATURATED" warning nobody read said so.
+#: Paging the gate is free; the model spend is still bounded, by relevance.DEFAULT_BUDGET.
 RECOMPUTE_WINDOW = int(os.environ.get("RECOMPUTE_WINDOW", "1000"))
 
 #: Per-source page budgets, because a page is not the same size at every source.
@@ -319,25 +319,23 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
     # — whose deadlines are furthest in the past — take every slot. On 2026-08-29 India held
     # 1282 closed against a 1000 window: nothing bidable was being evaluated at all, and the
     # feed had frozen without erroring. See db.get_opportunities.
-    opportunities = db.get_opportunities(
-        limit=RECOMPUTE_WINDOW, markets=watched, open_only=True,
-    )
-    # A FULL window means the corpus outgrew it and the remainder was never evaluated. Nothing
-    # errors when that happens — the feed just stops growing, which is the same silent shape as
-    # the closed-tender freeze above and took a second data source landing to notice.
-    #
-    # Reported rather than fixed here on purpose: the fix is to page to exhaustion, and
-    # `relevance.bands_for` below is a MODEL call. It is hash-cached, so the cost is one-time
-    # per new row, but on 2026-09-08 France held 3097 open against this 1000 — paging would
-    # bill ~2100 rows the first time it ran. That is a spend decision with an owner, and
-    # silently making it inside a recompute is how a cost surprise happens.
-    window_saturated = len(opportunities) >= RECOMPUTE_WINDOW
-    if window_saturated:
-        log.warning(
-            "recompute window SATURATED for workspace %s (markets=%s): evaluated %d open "
-            "opportunities and there are more. Rows beyond the window are not being matched.",
-            workspace_id, watched, len(opportunities),
+    # Every open row, one page at a time. The gate is pure Python and the model budget lives
+    # in `relevance.bands_for` (DEFAULT_BUDGET per run), so paging the gate costs nothing;
+    # NOT paging it left ~250 open Indian tenders unevaluated on 2026-09-14 while a warning
+    # nobody read said so. Offset paging on a live table can hand one row to two pages if a
+    # sweep inserts mid-run; the upsert is idempotent, so the cost is a duplicate evaluation.
+    # ponytail: offset paging, keyset on (closing_at, id) if the corpus reaches ~20k open rows
+    opportunities: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        page = db.get_opportunities(
+            limit=RECOMPUTE_WINDOW, markets=watched, open_only=True, offset=offset,
         )
+        opportunities.extend(page)
+        if len(page) < RECOMPUTE_WINDOW:
+            break
+        offset += RECOMPUTE_WINDOW
+    pages = offset // RECOMPUTE_WINDOW + 1
 
     matches: list[dict[str, Any]] = []
     in_scope: list[dict[str, Any]] = []
@@ -397,10 +395,10 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
         "in_scope": sum(1 for m in matches if m["state"] == "in_scope"),
         "excluded": sum(1 for m in matches if m["state"] == "excluded"),
         "documents_fetched": 0,
-        # True means rows exist that were NOT evaluated. Carried in the result so a caller can
-        # say so rather than reporting a partial recompute as a complete one.
-        "window_saturated": window_saturated,
-        "window_limit": RECOMPUTE_WINDOW,
+        # How many reads it took to reach the end of the open corpus. There is no longer a
+        # "saturated" state to report: the loop stops on a short page, never on a cap.
+        "pages": pages,
+        "page_size": RECOMPUTE_WINDOW,
     }
 
 
