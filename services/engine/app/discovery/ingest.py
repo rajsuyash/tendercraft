@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -263,13 +264,45 @@ def _rules_for(workspace_id: str, keywords: list[str] | None = None) -> list[Rul
     ]
 
 
+def _dedupe(terms: list[str]) -> list[str]:
+    """First spelling wins; comparison is case-insensitive and whitespace-trimmed."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in terms:
+        key = " ".join(t.split()).lower()
+        if key and key not in seen:
+            seen.add(key)
+            out.append(t.strip())
+    return out
+
+
 def _capability(workspace_id: str) -> tuple[str, list[str]]:
-    """The vendor's own words, and the terms they bid on. Both drive the relevance band."""
+    """The vendor's own words, and every term they bid on. Both drive the relevance band.
+
+    Three screens each hold a vocabulary, and until 2026-09-14 only /profile's reached the
+    feed: the Capability tab's standards ("IS 2762") and the price screen's GeM category
+    names ("Wire Rope Sling") were read by their own screens and by nothing else. A
+    standard's number is the most precise keyword a manufacturer has — a buyer writes
+    "Conforming To IS 2762", and one live tender was reachable by NOTHING else, because its
+    title says "Safety Wire Cable ... Is : 2266 - 2002" and never uses the word rope. Split
+    on "/" and "," because "IS 4521 / API Spec 9A" is two standards.
+
+    Order matters twice: `_dedupe` keeps the first spelling, and `input_hash` sorts, so the
+    same vocabulary in any order is the same cache key.
+    """
     identity = db.get_profile_context(workspace_id).get("legal_identity") or {}
-    return (
-        identity.get("capability_statement") or "",
-        list(identity.get("capability_keywords") or []),
-    )
+    keywords = list(identity.get("capability_keywords") or [])
+    keywords += [
+        row["gem_name"]
+        for row in db.list_workspace_categories(workspace_id, active_only=True)
+        if row.get("gem_name")
+    ]
+    for spec in db.get_capability_specs(workspace_id):
+        keywords += [
+            part for part in re.split(r"[/,;]", spec.get("standard_ref") or "")
+            if part.strip()
+        ]
+    return identity.get("capability_statement") or "", _dedupe(keywords)
 
 
 def _profile_turnover_inr(workspace_id: str) -> dict[str, Any]:

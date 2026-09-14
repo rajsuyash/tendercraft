@@ -419,3 +419,46 @@ def test_a_hash_matched_row_leaves_recompute_without_relevance_keys(monkeypatch)
     assert row["state"] == "in_scope"
     assert "relevance_band" not in row
     assert "relevance_input_hash" not in row
+
+
+# ---------- the ranking vocabulary is everything the workspace recorded ----------
+
+def test_capability_merges_profile_keywords_categories_and_standards(monkeypatch):
+    """Three screens each hold a vocabulary; until now only /profile's reached the feed."""
+    from app.discovery import ingest as ing
+
+    monkeypatch.setattr(ing.db, "get_profile_context", lambda ws: {"legal_identity": {
+        "capability_statement": "We make rope.",
+        "capability_keywords": ["wire rope", "Steel Wire Rope"],
+    }})
+    monkeypatch.setattr(ing.db, "list_workspace_categories", lambda ws, *, active_only: [
+        {"gem_name": "Steel Wire Rope", "active": True},   # duplicate of a profile term
+        {"gem_name": "Wire Rope Sling", "active": True},
+    ])
+    monkeypatch.setattr(ing.db, "get_capability_specs", lambda ws: [
+        {"standard_ref": "IS 4521 / API Spec 9A"},
+        {"standard_ref": "IS 2762"},
+        {"standard_ref": None},
+    ])
+
+    statement, keywords = ing._capability("ws-1")
+
+    assert statement == "We make rope."
+    assert keywords == ["wire rope", "Steel Wire Rope", "Wire Rope Sling",
+                        "IS 4521", "API Spec 9A", "IS 2762"]
+
+
+def test_capability_only_reads_active_categories(monkeypatch):
+    from app.discovery import ingest as ing
+
+    seen = {}
+    monkeypatch.setattr(ing.db, "get_profile_context", lambda ws: {"legal_identity": {}})
+    monkeypatch.setattr(ing.db, "get_capability_specs", lambda ws: [])
+
+    def cats(ws, *, active_only):
+        seen["active_only"] = active_only
+        return []
+
+    monkeypatch.setattr(ing.db, "list_workspace_categories", cats)
+    assert ing._capability("ws-1") == ("", [])
+    assert seen["active_only"] is True

@@ -176,3 +176,34 @@ class TestAPhraseMustHoldTogether:
 
     def test_an_exact_category_string_still_matches(self):
         assert band("Supply as per attached list", ["Steel Wire Rope 10 Mm"]) == "high"
+
+
+class TestAStandardNumberIsTheOnlyReachableTerm:
+    """A live tender that no product phrase can reach, and the reason the Capability tab's
+    standards belong in the ranking vocabulary.
+
+    "Safety Wire Cable For Mounting Retention Tank ... 7x7 ... Is : 2266 - 2002, Grade 1770"
+    is a wire rope: 7x7 is a rope construction, 1770 a rope tensile grade, and IS 2266 one of
+    UML's own registered GeM categories. The word "rope" does not occur in the title at all,
+    so every rope phrase misses it by construction — measured against _PHRASE_SLACK of 2, 3,
+    4, 6 and 10, it bands low every time. Loosening the phrase rule cannot reach it; only the
+    standard number can, and that arrives from `product_specs.standard_ref` via
+    `ingest._capability`.
+    """
+
+    TITLE = ("Safety Wire Cable For Mounting Retention Tank Size Dia8mm - 7x7 Length 3000mm "
+             "As Per Din3055 Stainless Steel Or Is : 2266 - 2002, Grade 1770, Material "
+             "Aisi304 As Per Specn. Is : 2266 - 2002, Grade 1770, Material Aisi304")
+
+    def test_the_profile_phrases_alone_cannot_reach_it(self):
+        assert keyword_relevance(tender(self.TITLE), UML).band == "low"
+
+    def test_the_standard_number_reaches_it(self):
+        m = keyword_relevance(tender(self.TITLE), [*UML, "IS 2266"])
+        assert m.band != "low"
+        assert "is 2266" in m.matched_terms
+
+    def test_a_different_standard_number_does_not(self):
+        # The bolt BOQ that cites IS 208-1996 must not answer to IS 2266.
+        bolts = "ALDROP BOLT ALUM 300MM ROD DIA 16MM IS 208-1996, GI WIREMESH 0.40MM DIA WIRE"
+        assert keyword_relevance(tender(bolts), [*UML, "IS 2266"]).band == "low"
