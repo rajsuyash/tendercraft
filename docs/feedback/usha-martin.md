@@ -126,6 +126,35 @@ Measured by reading the code on 2026-08-07, not estimated.
 > *"as soon as they are generated"* are answered as far as a public portal page can answer
 > them. **The seller-login limit is unchanged and is not an engineering problem.**
 
+> **Updated 2026-09-14, after reviewing what the feed was actually surfacing for UML and why
+> the Learning tab was empty.** Four defects, all found by reading live rows rather than code,
+> and all fixed on `fix/uml-feed-and-learning`:
+>
+> 1. **The feed was un-ranking itself.** `upsert_opportunity_matches` padded every row to one
+>    key set with `None`, so the run that reused a cached relevance band was the run that wrote
+>    NULL over it — 3,192 of 6,694 match rows unbanded, including 22 open wire-rope tenders
+>    showing no rank at all.
+> 2. **~250 open Indian tenders were never evaluated.** The recompute read a 1,000-row window
+>    against a 1,251-row open corpus and logged a warning nobody read. It now pages to
+>    exhaustion; the model budget is unchanged.
+> 3. **Multi-item BOQs ranked HIGH on scattered words.** "galvanized wire rope" fired on a
+>    plywood-and-nails tender carrying "binding wire" and "coir rope" nine tokens apart. Phrase
+>    words must now sit together and name their head noun.
+> 4. **The Capability tab never reached the feed.** UML's nine product envelopes and eleven GeM
+>    category names were read by their own screens and by nothing else, while ranking used only
+>    `/profile`'s keywords. All three vocabularies now merge (16 terms → 31), which also
+>    recovered a real rope tender — `Safety Wire Cable ... IS : 2266 - 2002` — that no rope
+>    phrase could ever match, because its title never uses the word "rope".
+>
+> **And the Learning tab was empty for a reason no code change fixes.** UML's 18 uploads on
+> 9 Sep were certificates and undertakings, added through *Add to knowledge base* — the
+> citation corpus. Answers are mined only from `POST /api/past-bids`, whose uploader sat below
+> the documents table and was never used: `past_bids` = 0, `answers` = 0, so every tile read
+> zero honestly. The uploader now sits beside the knowledge-base one and says which corpus
+> feeds which feature. **What is still needed from UML is data, not engineering: two or three
+> actually submitted bids.** The rewrite-trend line additionally needs ten human-edited
+> sections and will say "unknown" until then, which is the screen being honest.
+
 | # | Ask | Status | Evidence |
 |---|---|---|---|
 | 1 | Lead identification → CRM, circulated to Zonal Heads | **Routing built; acquisition half still blocked** | Feed, connector, relevance banding and the rules gate were already live. **Added 2026-08-14:** `PATCH /api/opportunities/{id}` now enforces workspace membership on an assignee and can clear one, and the feed renders an Owner column and a watch star (`components/OpportunityFeed.tsx::Routing`). *Circulated to the respective Zonal Heads* is answered with no CRM. **Still missing:** inbound email (M11), which needs three forwarded GeM alerts from UML. **Added 2026-08-16:** outbound alerting — `deterministic/notify.py` (band threshold governs the inbox, never the feed), `mailer.py` with Resend primary and SMTP fallback, `GET/POST /api/notifications/{settings,dispatch}`. So a relevant tender does now email a human; it reaches them from our crawl, not from GeM's alert email, and **only when something calls `dispatch`.** |

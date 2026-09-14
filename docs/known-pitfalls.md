@@ -531,3 +531,47 @@ Mumbai anyway); until then, count round trips like they cost money.
   variable was the whole distance between an unreviewed source and a crawling one. Found when
   the first genuinely unreviewed row was added. If a comment states an invariant, either the
   code enforces it or the comment is decoration.
+
+## A cache hit that erases the cache (found 2026-09-14, on the UML feed)
+
+- **A bulk upsert that pads every row to the union key set turns "I did not touch this
+  column" into "set it to NULL".** `relevance.bands_for` skipped rows whose input hash was
+  unchanged (correct — nothing the band depends on had moved), so those rows reached
+  `db.upsert_opportunity_matches` carrying no relevance keys at all. The upsert padded them
+  with `None` so PostgREST would accept one bulk body (necessary — a ragged body gets a bare
+  400 with no column name), and `resolution=merge-duplicates` then wrote that NULL over the
+  stored band and hash. **The run that REUSED the cache was the run that destroyed it**, so
+  the more often the recompute ran the worse the feed got: 3,192 of 6,694 rows band-NULL, 22
+  open wire-rope tenders sitting in the feed with no rank at all. Group by key set and send
+  one request per set; never invent a value for a column the caller did not mention. An
+  explicit `None` from the caller still has to survive — the keyword fallback writes
+  `relevance_input_hash: None` on purpose, meaning "this answer is not final".
+- **A saturation warning nobody reads is a silent miss with extra steps.** The 1,000-row
+  recompute window logged `SATURATED` on every run and returned `window_saturated: True` in a
+  result no caller inspected; India had 1,251 open rows, so ~250 open tenders were never
+  gated or ranked. The earlier decision to report rather than fix was sound *at the time* and
+  rested on one premise — that paging costs model calls. It does not: the gate is pure Python
+  and the model budget lives in `bands_for`, which is hash-cached and capped per run. **When
+  a known-defective state is left live behind a cost argument, re-check the cost before
+  renewing the deferral** — here the paged work was free and had been free all along.
+- **"All but one word, anywhere in the field" is a substring match on a long enough title.**
+  The phrase rule was widened (correctly) because requiring every word took recall to 0.37;
+  the widening had no locality, so on a 40-token multi-item BOQ "galvanized wire rope" fired
+  on "binding wire" in one line item and "coir rope" in another, and two such keywords is
+  HIGH. Require the hitting words to sit within a short window of ONE field sequence, and
+  require the phrase's head noun — the thing being bought — to be among them: "Mild Steel
+  Binding Wire" hits two thirds of "steel wire rope" and is not a rope.
+- **Three screens can each hold a vocabulary and only one of them feed the ranking.** The
+  Capability tab's standards (`product_specs.standard_ref`) and the price screen's GeM
+  category names (`workspace_categories.gem_name`) were both recorded by a customer, read by
+  their own screen, and by nothing else — while the feed ranked on `/profile`'s keywords
+  alone. When a screen asks a user for terms, grep for every consumer before calling the
+  result "aligned", because the customer cannot tell which box feeds which feature.
+- **A standard number is the most precise keyword a manufacturer has, and sometimes the only
+  reachable one.** `Safety Wire Cable ... 7x7 ... Is : 2266 - 2002, Grade 1770` is a wire
+  rope — 7x7 is a rope construction, 1770 a rope grade, IS 2266 the vendor's own registered
+  standard — and the word "rope" never appears in the title. No rope phrase can reach it at
+  any proximity setting (measured at slack 2, 3, 4, 6 and 10: low every time). **When a
+  tightened filter drops a real row, measure whether the prescribed loosening actually
+  recovers it before applying it** — here widening the window was inert, and the honest fix
+  was a better term, not a weaker rule.
