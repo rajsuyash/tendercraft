@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { AnalysisRunner } from "@/components/AnalysisRunner";
+import { ChecklistItem, type ChecklistItemData } from "@/components/ChecklistItem";
 import { VerdictChip, type Verdict } from "@/components/design/VerdictChip";
 import { createClient } from "@/lib/supabase/server";
 
@@ -25,21 +26,6 @@ interface CriterionVerdict {
   missing_facts: string[];
   exemption_clause: string;
 }
-/** A requirement that is not a pre-bid condition on the bidder — a duty that binds after
- *  award, an instruction about how to bid, a form to attach. It has no verdict because there
- *  is no question to answer, and it is listed rather than dropped: an unplanned obligation
- *  still costs money, it is just not a reason to skip the bid. */
-interface ChecklistItem {
-  criterion_id: string;
-  verbatim_text: string;
-  kind: string;
-  requirement_level: string;
-  source_anchor: string;
-  /** Why this is not being scored, when that needs explaining — set only where the
-   *  classifier called something a gate and the reading found no condition in it. Empty on
-   *  an ordinary obligation, which was never claimed to be a gate. */
-  note?: string;
-}
 interface AnalysisResult {
   recommendation: "bid" | "no_bid" | "needs_review" | "no_gates";
   conservative: boolean;
@@ -48,7 +34,7 @@ interface AnalysisResult {
   weighted_score: number | null;
   counts: { pass: number; fail: number; needs_review: number };
   verdicts: CriterionVerdict[];
-  checklist?: ChecklistItem[];
+  checklist?: ChecklistItemData[];
   gaps: { criterion_id: string; gap: string; source: string }[];
 }
 
@@ -123,9 +109,13 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="font-heading text-2xl font-semibold text-ink">{tender.title}</h1>
-          <p className="text-sm text-muted">
-            {tender.tender_number} · {tender.authority}
-          </p>
+          {/* Joined rather than interpolated: this tender has neither field, and the
+              template painted a lone "·" under the title. */}
+          {[tender.tender_number, tender.authority].filter(Boolean).length > 0 && (
+            <p className="text-sm text-muted">
+              {[tender.tender_number, tender.authority].filter(Boolean).join(" · ")}
+            </p>
+          )}
         </div>
         <Link
           href={`/proposals/${id}`}
@@ -273,22 +263,7 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
                     </h3>
                     <ul className="space-y-2">
                       {group.items.map((c) => (
-                        <li
-                          key={c.criterion_id}
-                          data-checklist-item
-                          data-kind={c.kind}
-                          className="rounded-card border border-border bg-surface p-card"
-                        >
-                          <p className="text-sm text-ink">{c.verbatim_text}</p>
-                          <p className="mt-1 text-xs text-muted">
-                            {c.requirement_level} · {c.source_anchor}
-                          </p>
-                          {c.note && (
-                            <p data-demotion-note className="mt-1 text-xs text-warning">
-                              {c.note}
-                            </p>
-                          )}
-                        </li>
+                        <ChecklistItem key={c.criterion_id} item={c} tenderId={id} />
                       ))}
                     </ul>
                   </div>

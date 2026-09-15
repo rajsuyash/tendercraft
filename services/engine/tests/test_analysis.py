@@ -301,8 +301,9 @@ def test_a_gate_the_extractor_confidently_finds_nothing_to_check_in_stops_voting
     assert out["verdicts"] == []
     assert out["recommendation"] == Recommendation.NO_GATES.value
     assert out["checklist"][0]["criterion_id"] == "r"
-    # And it says WHY it is not being scored, with the override named.
-    assert "no pre-bid condition" in out["checklist"][0]["note"]
+    # And it says WHY it is not being scored. The screen pairs the note with the control
+    # that reverses it — a sentence naming an action with no affordance is a dead end.
+    assert "nothing that can be checked" in out["checklist"][0]["note"]
 
 
 def test_a_model_failure_is_not_a_reading_and_keeps_its_vote(monkeypatch):

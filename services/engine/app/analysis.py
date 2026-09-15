@@ -240,9 +240,9 @@ def analyze(
                   and req.confidence >= FUZZY_REVIEW_THRESHOLD else scored)
         target.append((row, req))
     checklist.extend(
-        _checklist_item(row, note="Classified as an eligibility gate, but the clause states "
-                                 "no pre-bid condition that can be checked. Override its kind "
-                                 "if you disagree.")
+        _checklist_item(row, note="This reads like an eligibility condition, but the clause "
+                                 "states nothing that can be checked against your profile, "
+                                 "so it is not scored.")
         for row, _ in demoted
     )
 
