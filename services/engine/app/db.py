@@ -988,10 +988,18 @@ def set_tender_meta(tender_id: str, workspace_id: str, tender_number: str | None
 def set_tender_title(tender_id: str, workspace_id: str, title: str) -> None:
     """Rename a tender after a pursuit backfill learns a number/authority the placeholder
     title predates. Same workspace scoping as set_tender_meta's writer, above."""
+    update_tender(tender_id, workspace_id, {"title": title})
+
+
+def update_tender(tender_id: str, workspace_id: str, patch: dict) -> None:
+    """Write exactly the fields the caller named — including an explicit NULL, which is how
+    a deadline gets cleared. The caller decides what is in `patch`; this does not filter it."""
+    if not patch:
+        return
     _rest(
         "PATCH", "tenders",
         params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
-        json={"title": title},
+        json=patch,
     )
 
 

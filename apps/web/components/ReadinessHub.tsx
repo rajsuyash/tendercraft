@@ -102,8 +102,23 @@ const PRIORITY: Record<Item["priority"], { label: string; cls: string }> = {
 
 // Bid Readiness hub — confirm requirements → analyze & match → prioritized P0/P1/P2 checklist
 // → add missing docs → generate. `prepared` = analysis has run at least once.
+/** An ISO instant as the IST wall-clock string `datetime-local` expects, or "".
+ *
+ *  Not `toISOString().slice(0,16)`, which would show UTC, and not the browser's local time,
+ *  which would show a different hour to a reviewer in another country than the one the
+ *  portal enforces. Indian tenders close at an IST wall-clock time; that is the number the
+ *  bid manager types and reads back. */
+export function istInputValue(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return "";
+  const ist = new Date(t.getTime() + 5.5 * 3600_000);
+  return ist.toISOString().slice(0, 16);
+}
+
 export function ReadinessHub({
   tenderId,
+  deadline: initialDeadline = null,
   tenderTitle,
   readiness,
   prepared,
@@ -111,6 +126,8 @@ export function ReadinessHub({
   authority = null,
 }: {
   tenderId: string;
+  /** ISO timestamp, or null when no document stated one and nobody has typed one. */
+  deadline?: string | null;
   tenderTitle: string;
   readiness: Readiness;
   prepared: boolean;
@@ -131,6 +148,11 @@ export function ReadinessHub({
   const [titleDraft, setTitleDraft] = useState(tenderTitle);
   const [titleError, setTitleError] = useState<string | null>(null);
   const [savingTitle, setSavingTitle] = useState(false);
+  // `datetime-local` wants "YYYY-MM-DDTHH:mm" in IST; the column is a timestamptz.
+  const [deadline, setDeadline] = useState(istInputValue(initialDeadline));
+  const [editingDeadline, setEditingDeadline] = useState(false);
+  const [savingDeadline, setSavingDeadline] = useState(false);
+  const [deadlineError, setDeadlineError] = useState<string | null>(null);
 
   function startTitleEdit() {
     setTitleDraft(title);
@@ -166,6 +188,34 @@ export function ReadinessHub({
       setTitleError(message); // previous name is untouched — `title` state never changed
     }
     setSavingTitle(false);
+  }
+
+  async function saveDeadline(value: string) {
+    setSavingDeadline(true);
+    setDeadlineError(null);
+    // `datetime-local` yields a naive "2026-10-02T15:00" with no zone. Indian tender
+    // deadlines are stated and enforced in IST, and 15:00 IST is not 15:00 UTC — a missed
+    // deadline is a lost bid, so the offset is attached here rather than left to whatever
+    // zone the server happens to run in. The input is labelled IST for the same reason.
+    const body = value ? { deadline: `${value}:00+05:30` } : { deadline: null };
+    const res = await fetch(`/api/tenders/${tenderId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const raw = await res.json().catch(() => null);
+    const message = await saveErrorMessage(
+      { json: () => Promise.resolve(raw) },
+      "Could not save the deadline",
+    );
+    if (message === null) {
+      setDeadline(value);
+      setEditingDeadline(false);
+      router.refresh();
+    } else {
+      setDeadlineError(message);
+    }
+    setSavingDeadline(false);
   }
 
   async function post(url: string, tag: string) {
@@ -312,6 +362,63 @@ export function ReadinessHub({
         {/* Every other screen of this tender — analysis, matrix, schedule fit, clarifications,
          * the locked requirements — hung off /tenders/[id], which nothing linked to for a live
          * tender. Built and unreachable except by typing the URL. */}
+        {/* The deadline, and the only way to set one. Nothing persists page text after
+         * ingest, so a tender uploaded before the document parser could read its date has
+         * no backfill available — every tender in the product today reads "not recorded",
+         * and the dashboard's whole deadline column is empty because of it. */}
+        <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted">Submission deadline</span>
+          {editingDeadline ? (
+            <>
+              <input
+                type="datetime-local"
+                autoFocus
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                disabled={savingDeadline}
+                aria-label="Submission deadline (IST)"
+                className="rounded border border-border bg-surface px-2 py-1 text-sm text-ink focus:border-primary focus:outline-none disabled:opacity-50"
+              />
+              <span className="text-xs text-muted">IST</span>
+              <button
+                type="button"
+                data-save-deadline
+                onClick={() => void saveDeadline(deadline)}
+                disabled={savingDeadline}
+                className="rounded border border-primary px-2 py-1 text-xs font-medium text-primary hover:bg-primary-tint disabled:opacity-50"
+              >
+                {savingDeadline ? "…" : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingDeadline(false);
+                  setDeadlineError(null);
+                  setDeadline(istInputValue(initialDeadline));
+                }}
+                disabled={savingDeadline}
+                className="rounded border border-border px-2 py-1 text-xs font-medium text-muted hover:bg-surface-alt disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <span data-deadline className={deadline ? "text-ink" : "text-muted"}>
+                {deadline ? `${deadline.replace("T", " ")} IST` : "not recorded"}
+              </span>
+              <button
+                type="button"
+                data-edit-deadline
+                onClick={() => setEditingDeadline(true)}
+                className="rounded border border-border px-2 py-0.5 text-xs font-medium text-muted hover:bg-surface-alt"
+              >
+                {deadline ? "Change" : "Set"}
+              </button>
+            </>
+          )}
+          {deadlineError && <span className="text-xs text-danger">{deadlineError}</span>}
+        </p>
         <nav aria-label="Tender screens" data-tender-nav className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
           <Link href={`/tenders/${tenderId}`} className="text-primary underline">Requirements</Link>
           <Link href={`/tenders/${tenderId}/analysis`} className="text-primary underline">Eligibility analysis</Link>

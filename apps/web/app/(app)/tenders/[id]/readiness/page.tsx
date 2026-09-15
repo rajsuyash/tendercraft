@@ -52,6 +52,7 @@ export default async function ReadinessPage({ params }: { params: Promise<{ id: 
       tenderTitle={tender.title}
       readiness={readiness}
       prepared={!!analysis}
+      deadline={tender.deadline}
       tenderNumber={tender.tender_number}
       authority={tender.authority}
     />

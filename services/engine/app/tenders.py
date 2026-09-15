@@ -62,7 +62,13 @@ class CreateTender(BaseModel):
 
 class TenderPatch(BaseModel):
     # 300 chars: the column is `text`, the cap is a UI decision (a heading, not a body).
-    title: str = Field(min_length=1, max_length=300)
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    #: Submission deadline, when the document did not state one this parser could read.
+    #: `exclude_unset` in the handler is what makes CLEARING reachable: pydantic v2 already
+    #: distinguishes an omitted field from an explicit null, and a `if v is not None` filter
+    #: throws that distinction away — the pitfall this repo already paid for once on
+    #: `PATCH /api/opportunities/{id}`.
+    deadline: datetime | None = None
 
 
 class CriterionIn(BaseModel):
@@ -568,18 +574,33 @@ def create_tender_route(body: CreateTender, user: CurrentUser) -> dict:
 
 
 @router.patch("/api/tenders/{tender_id}")
-def rename_tender(tender_id: str, body: TenderPatch, user: CurrentUser) -> dict:
-    """User-given name for a tender the extractor could not title (fallback 'Untitled
-    tender'). Mirrors update_project's shape: authz, 404-before-write, no audit — this
-    file's neighbouring PATCH doesn't audit renames either."""
+def update_tender(tender_id: str, body: TenderPatch, user: CurrentUser) -> dict:
+    """What a human may correct about a tender: its name, and its submission deadline.
+
+    The name covers a tender the extractor could not title. The deadline covers one whose
+    document states a date in a form the parser does not read — and a tender package that
+    was uploaded before the parser existed at all, which is every tender in the product
+    today. Nothing persists page text after ingest, so there is no backfill that could
+    recover those; a person typing the date is the only route, and until now there was
+    none, which left the dashboard's whole deadline column permanently empty.
+
+    Mirrors update_project's shape: authz, 404-before-write, no audit.
+    """
     authz.check(user, authz.DRAFT)
-    title = body.title.strip()
-    if not title:
-        raise ApiError(400, "TITLE_REQUIRED", "tender name cannot be empty")
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        raise ApiError(400, "NOTHING_TO_UPDATE", "send a title or a deadline")
+    if "title" in patch:
+        title = (patch["title"] or "").strip()
+        if not title:
+            raise ApiError(400, "TITLE_REQUIRED", "tender name cannot be empty")
+        patch["title"] = title
+    if "deadline" in patch and patch["deadline"] is not None:
+        patch["deadline"] = patch["deadline"].isoformat()
     if not db.get_tender(tender_id, user.workspace_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
-    db.set_tender_title(tender_id, user.workspace_id, title)
-    return ok({"id": tender_id, "title": title})
+    db.update_tender(tender_id, user.workspace_id, patch)
+    return ok({"id": tender_id, **patch})
 
 
 @router.post("/api/tenders/{tender_id}/criteria")
