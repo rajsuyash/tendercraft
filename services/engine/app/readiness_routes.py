@@ -81,9 +81,20 @@ def _readiness_payload(workspace_id: str, tender_id: str) -> dict:
 
 @router.get("/api/tenders/{tender_id}/readiness")
 def get_readiness(tender_id: str, user: CurrentUser) -> dict:
-    if not db.get_tender(tender_id, user.workspace_id):
+    tender = db.get_tender(tender_id, user.workspace_id)
+    if not tender:
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
-    return ok(_readiness_payload(user.workspace_id, tender_id))
+    return ok({
+        **_readiness_payload(user.workspace_id, tender_id),
+        # What the scanned half of the package turned out to hold. The ingest response could
+        # not say — it was sent before the OCR pass started — and page text is never
+        # persisted, so the tender row is the only record. NULL means the pass has not
+        # finished; 0 means it ran and recovered nothing, which is a different sentence.
+        # Free here: this handler already loads the row for the 404 guard. Same shape as
+        # `spec_service.assess_schedule` echoing specs_extracted_at.
+        "ocr_completed_at": tender.get("ocr_completed_at"),
+        "ocr_pages_recovered": tender.get("ocr_pages_recovered"),
+    })
 
 
 @router.put("/api/tenders/{tender_id}/criteria/{criterion_id}/decision")

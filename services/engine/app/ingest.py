@@ -1,8 +1,9 @@
 """Ingestion — tender document -> per-page text -> extracted criteria (Module A).
 
-Text-based PDFs are parsed with pypdf. Scanned PDFs (image-only pages) yield little text
-and route to manual review (EC-1); OCR of scans is a later step. Extraction runs per page
-so every criterion keeps its page anchor (A-AC3).
+Text-based PDFs are parsed with pypdf. Scanned PDFs (image-only pages) yield little text and
+are reported as illegible here (EC-1); they are read afterwards by `app/tenders._ocr_quietly`,
+a background pass that cannot run inside this request (3.5s/page measured). Extraction runs
+per page so every criterion keeps its page anchor (A-AC3).
 
 A tender arrives as a PACKAGE, not a file: an NIT, a handful of annexures, and a BOQ
 spreadsheet, each of which can carry eligibility clauses. They ingest as ONE tender, because
@@ -32,8 +33,10 @@ from .envelope import ApiError
 
 log = logging.getLogger("tendercraft.ingest")
 
-# A page with almost no extractable text is probably a scan — flag for manual OCR (EC-1).
-_MIN_CHARS_PER_PAGE = 20
+#: A page with almost no extractable text is probably a scan. One definition of "illegible",
+#: shared: `app/tenders._ocr_package` picks exactly the pages this floor rejected, so a second
+#: copy of the number would silently OCR a different set than ingest dropped.
+MIN_CHARS_PER_PAGE = 20
 # Per-page extraction is one Gemini call each; sequential is minutes on a real RFP.
 # Fan out across pages, bounded so we don't hammer the API. Order restored after.
 _EXTRACT_WORKERS = int(os.environ.get("INGEST_EXTRACT_WORKERS", "8"))
@@ -214,8 +217,8 @@ def ingest_pages(pages: list[tuple[int, str]]) -> dict:
     """
     from pipeline.extractor import extract_from_page
 
-    illegible_pages = [p for p, t in pages if len(t) < _MIN_CHARS_PER_PAGE]
-    legible = [(p, t) for p, t in pages if len(t) >= _MIN_CHARS_PER_PAGE]
+    illegible_pages = [p for p, t in pages if len(t) < MIN_CHARS_PER_PAGE]
+    legible = [(p, t) for p, t in pages if len(t) >= MIN_CHARS_PER_PAGE]
 
     # One Gemini call per page, fanned out. pool.map preserves input order and `legible` is
     # page-ascending, so rows stay page-ascending without a re-sort (anchors ordered, A-AC3).

@@ -121,6 +121,30 @@ def mark_specs_extracted(workspace_id: str, tender_id: str) -> None:
     )
 
 
+def mark_ocr_complete(workspace_id: str, tender_id: str, pages_recovered: int) -> None:
+    """Stamp the OCR pass over this tender's scanned pages, and what it recovered.
+
+    Written even when it recovered nothing, for exactly the reason above: "we read the scans
+    and none of them were legible" is a real answer, and a NULL stamp would make it
+    permanently indistinguishable from "no OCR ran here".
+
+    NOT written when the pass raised, and not written when the deployment has no OCR
+    toolchain — neither is a read that happened.
+
+    The count cannot be recomputed later: page text is never persisted, so this write is the
+    only record that the scanned half of the package was ever looked at.
+    """
+    _rest(
+        "PATCH", "tenders",
+        params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
+        json={
+            "ocr_completed_at": datetime.now(UTC).isoformat(),
+            "ocr_pages_recovered": pages_recovered,
+        },
+        prefer="return=minimal",
+    )
+
+
 def set_tender_locked(tender_id: str, workspace_id: str, locked_at: str) -> None:
     _rest(
         "PATCH", "tenders",

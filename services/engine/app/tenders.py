@@ -13,13 +13,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from . import authz, db, spec_service
+from . import authz, db, ocr, spec_service
 from .auth import AuthedUser, get_current_user
 from .deterministic.lock import evaluate_lock
-from .deterministic.tender_meta import TenderMeta, display_title
+from .deterministic.tender_meta import TenderMeta, display_title, extract_tender_meta
 from .deterministic.types import Criterion, RequirementLevel, SourceAnchor
 from .envelope import ApiError, ok
 from .ingest import (
+    MIN_CHARS_PER_PAGE,
     SourcePage,
     ingest_pages,
     number_package,
@@ -30,6 +31,11 @@ from .ingest import (
 log = logging.getLogger("tendercraft.tenders")
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB guard
+
+#: What a tender is called when nothing — not the document, not the filename — said what it is.
+#: `display_title` produces this string and two backfills test for it; a literal in three places
+#: is a rename waiting to go unnoticed.
+PLACEHOLDER_TITLE = "Untitled tender"
 
 
 class ProjectIn(BaseModel):
@@ -99,6 +105,31 @@ def _relocate(row: dict, page_index: dict[int, SourcePage]) -> dict:
             "anchor_document": src.document if src else None}
 
 
+def _rename_if_placeholder(
+    workspace_id: str, tender_id: str, meta: TenderMeta, current_title: str,
+) -> str | None:
+    """Replace the placeholder title once something learns what the tender is actually called.
+
+    ONLY the placeholder. A parsed title, or a filename a human chose, must never be replaced
+    by a backfill — that rule is the whole content of this function, and it now has two
+    callers that learn the same facts from different places: the pursuit backfill (number and
+    authority from the portal listing) and the OCR pass (a cover page that was a scan at
+    ingest time). Two copies of "rename only when…" is how the two drift apart.
+
+    Returns the new title, or None when nothing was renamed.
+
+    Mirror: `ReadinessHub.tsx`'s subtitle-dedup block rebuilds `display_title`'s
+    "number · authority" join in TypeScript to compare against the string this produced.
+    """
+    if current_title != PLACEHOLDER_TITLE:
+        return None
+    renamed = display_title(meta, PLACEHOLDER_TITLE)
+    if renamed == PLACEHOLDER_TITLE:
+        return None
+    db.set_tender_title(tender_id, workspace_id, renamed)
+    return renamed
+
+
 def _apply_pursuit_context(
     workspace_id: str, pursuit_id: str, tender_id: str,
     tender_number: str, authority: str, current_title: str = "",
@@ -130,17 +161,12 @@ def _apply_pursuit_context(
             # display_title() ran BEFORE this backfill learned the opportunity's number and
             # authority, so a scanned package can be stamped "Untitled tender" and gain a
             # number a moment later — otherwise the readiness header keeps the placeholder
-            # forever while the line beneath it names the tender. Rename it, but ONLY the
-            # placeholder itself: a parsed title or a human-chosen filename must never be
-            # replaced by a backfill. Mirror: ReadinessHub.tsx's subtitle-dedup block reads
-            # these same two fields against the heading it renders.
-            if current_title == "Untitled tender":
-                renamed = display_title(
-                    TenderMeta(tender_number=number or None, authority=auth or None),
-                    "Untitled tender",
-                )
-                if renamed != "Untitled tender":
-                    db.set_tender_title(tender_id, workspace_id, renamed)
+            # forever while the line beneath it names the tender.
+            _rename_if_placeholder(
+                workspace_id, tender_id,
+                TenderMeta(tender_number=number or None, authority=auth or None),
+                current_title,
+            )
         db.link_pursuit_tender(workspace_id, pursuit_id, tender_id)
     except Exception:  # noqa: BLE001 — an addition must not be able to break ingest
         log.exception("pursuit linking failed for tender %s — ingest continues", tender_id)
@@ -250,6 +276,162 @@ def _extract_quietly(workspace_id: str, tender_id: str) -> None:
         log.exception("background spec extraction failed for tender %s", tender_id)
 
 
+def _ocr_package(
+    documents: list[tuple[str, bytes]],
+) -> tuple[list[SourcePage], set[int]]:
+    """Re-read the package, OCR'ing every page that fell under the legibility floor.
+
+    Returns the package's pages with recovered text folded in, and the GLOBAL page numbers OCR
+    actually recovered.
+
+    The numbering is rebuilt exactly the way ingest built it — `parse_document_pages` is
+    deterministic over the same bytes, in the same order — so a criterion anchored here names
+    the same page a human already saw on the recent-uploads list. Re-parsing is cheap (pypdf,
+    no model, no network); carrying a page index across a request boundary would not be.
+
+    The budget is `ocr.MAX_PAGES` for the WHOLE PACKAGE, not per document. `ocr_pdf_pages`
+    caps each call at that number, so a package of ten scanned annexures would otherwise fan
+    out to ten times the cap — and every recovered page costs one model call downstream. A
+    truncation is logged rather than silently taken: a partial OCR that looks complete is the
+    capped-sweep failure this codebase keeps rediscovering.
+    """
+    pages: list[SourcePage] = []
+    recovered_globals: set[int] = set()
+    budget = ocr.MAX_PAGES
+    scanned_total = 0
+
+    for filename, data in documents:
+        parsed = parse_document_pages(filename, data)
+        offset = len(pages)          # global page number of parsed[0] is offset + 1
+        pages.extend(parsed)
+        if filename.lower().rsplit(".", 1)[-1] != "pdf":
+            continue                 # a spreadsheet page with no text has no image to read
+        # Exactly the pages ingest dropped — same constant, imported rather than restated.
+        scanned = [p.page for p in parsed if len(p.text) < MIN_CHARS_PER_PAGE]
+        scanned_total += len(scanned)
+        if not scanned or budget <= 0:
+            continue
+        text_by_page = ocr.ocr_pdf_pages(data, scanned[:budget])
+        budget -= len(scanned[:budget])
+        local_to_index = {p.page: offset + i for i, p in enumerate(parsed)}
+        for local_page, text in text_by_page.items():
+            if len(text) < MIN_CHARS_PER_PAGE:
+                continue             # read, and still not legible — leave it as it was
+            index = local_to_index[local_page]
+            pages[index] = SourcePage(pages[index].document, local_page, text)
+            recovered_globals.add(index + 1)
+
+    if scanned_total > ocr.MAX_PAGES:
+        log.warning(
+            "OCR budget exhausted: %d scanned pages in the package, %d read. Raise "
+            "OCR_MAX_PAGES if this package matters; every recovered page is a model call.",
+            scanned_total, ocr.MAX_PAGES,
+        )
+    return pages, recovered_globals
+
+
+def _ocr_quietly(workspace_id: str, tender_id: str,
+                 documents: list[tuple[str, bytes]]) -> None:
+    """Read the scanned half of the package. A failure here never reaches the uploader.
+
+    WHY IT IS A BACKGROUND PASS. Measured on a real customer corpus
+    (docs/ocr-measurement.md): 52% of 478 pages carried no text layer, and the unreadable half
+    was almost entirely the bidder's own certificates and licences — the only material an
+    answer library can be built from. OCR runs at 3.5s/page on hardware faster than Cloud Run,
+    and one real package holds 77 scanned pages: ~157s at best, inside a request the uploader
+    is already waiting on. Inline is not an option.
+
+    WHY IT CARRIES THE BYTES. Nothing in this engine persists an uploaded file — there is no
+    Storage write anywhere, so there is no later moment at which these pages could be fetched
+    again. `BackgroundTasks` runs in-process after the response, so the closure holds them.
+    The package is already capped at 50 MB by the request, so this holds no more than the
+    request itself did, for as long as the pass runs.
+
+    THE STAMP. Written when the pass finishes, INCLUDING when it recovered nothing — "we read
+    the scans and none were legible" is a real answer. Not written when this raised, and not
+    written when the deployment has no OCR toolchain: neither is a read that happened.
+    """
+    # ponytail: no jobs table, same ceiling as _extract_quietly — Cloud Run throttles CPU once
+    # the response is flushed, so a queued pass can stall until the next request wakes the
+    # instance. min-instances is 1 on the engine, so it is rarely lost outright, and state
+    # stays honest either way: ocr_completed_at remains NULL. Add a jobs table if stalled
+    # passes start showing up in the logs.
+    try:
+        if not ocr.available():
+            # An ordinary deployment fact, not an error. Every scanned page stays exactly as
+            # illegible as the response already said it was.
+            log.info("no OCR toolchain here — tender %s keeps its scanned pages unread",
+                     tender_id)
+            return
+
+        pages, recovered = _ocr_package(documents)
+        if recovered:
+            _persist_recovered(workspace_id, tender_id, pages, recovered)
+        log.info("OCR pass for tender %s recovered %d page(s)", tender_id, len(recovered))
+        db.mark_ocr_complete(workspace_id, tender_id, len(recovered))
+    except Exception:  # noqa: BLE001 — deliberate: never fail an upload that already returned
+        log.exception("background OCR failed for tender %s", tender_id)
+
+
+def _persist_recovered(workspace_id: str, tender_id: str, pages: list[SourcePage],
+                       recovered: set[int]) -> None:
+    """Extract from the recovered pages ONLY, and fold the result into the existing tender.
+
+    Extraction is one model call per page, so the pages that already had a text layer are not
+    re-read: they were extracted during ingest and re-running them would double both the spend
+    and the criteria.
+    """
+    numbered, page_index = number_package(pages)
+    subset = [(p, t) for p, t in numbered if p in recovered]
+    result = ingest_pages(subset)
+
+    rows = [_relocate(r, page_index) for r in result["criteria_rows"]]
+    if rows:
+        db.insert_criteria(workspace_id, tender_id, rows)
+    # The G-FR2 denominator. These sentences exist on pages that were invisible at ingest, so
+    # without this the backlog would claim the scanned half of the tender says nothing.
+    # `insert_unmapped` upserts on (document, page, sentence), so a re-read cannot double them.
+    unmapped = [
+        {"sentence": r["sentence"],
+         "page": page_index[r["page"]].page if r["page"] in page_index else None,
+         "document": page_index[r["page"]].document if r["page"] in page_index else None}
+        for r in result["unmapped_rows"]
+    ]
+    if unmapped:
+        db.insert_unmapped(workspace_id, tender_id, unmapped)
+
+    # The tender's identity, if page one was the scan. Gated on the placeholder for a reason
+    # beyond the rename rule: "Untitled tender" is only produced when the document stated no
+    # title, no number AND no authority (display_title), so there is nothing here that this
+    # backfill could overwrite with noisier OCR text. A tender that already has a number keeps
+    # it. Meta is re-derived from the WHOLE package, not the recovered subset — the document
+    # states its identity on page one, wherever that page landed.
+    tender = db.get_tender(tender_id, workspace_id) or {}
+    if tender.get("title") != PLACEHOLDER_TITLE:
+        return
+    meta = extract_tender_meta([p.text for p in pages])
+    db.set_tender_meta(tender_id, workspace_id, meta.tender_number, meta.authority)
+    if renamed := _rename_if_placeholder(workspace_id, tender_id, meta, PLACEHOLDER_TITLE):
+        log.info("tender %s named from OCR'd pages: %s", tender_id, renamed)
+
+
+def _schedule_ocr(background: BackgroundTasks, workspace_id: str, tender_id: str,
+                  documents: list[tuple[str, bytes]]) -> None:
+    """Queue the scanned-page read for after the response.
+
+    Queued AFTER `_schedule_extraction`, and the order is load-bearing. BackgroundTasks run
+    sequentially, and this pass can take minutes; putting it first would park the schedule
+    read behind it for no gain. No gain, because OCR-recovered criteria do NOT become schedule
+    line items either way: `spec_service.persist_schedule` ran inside the request, and
+    `db.replace_line_items` DELETES the tender's schedule before writing, so re-running it
+    here would destroy the parameters `_extract_quietly` just paid a model to read. A bidder
+    who needs the schedule rebuilt has the deliberate re-read button
+    (`POST /api/tenders/{id}/schedule/extract?force=1`); this pass never takes that decision
+    for them.
+    """
+    background.add_task(_ocr_quietly, workspace_id, tender_id, documents)
+
+
 def _schedule_extraction(background: BackgroundTasks, workspace_id: str,
                          tender_id: str) -> None:
     """Queue the read for after the response.
@@ -285,14 +467,18 @@ async def ingest_tender(
         if total > _MAX_UPLOAD_BYTES:
             raise ApiError(413, "FILE_TOO_LARGE", "tender package exceeds 50 MB")
         documents.append((upload.filename or "Untitled document", data))
-    name = title or documents[0][0] or "Untitled tender"
+    name = title or documents[0][0] or PLACEHOLDER_TITLE
     # Parsing + extraction + inserts are blocking; keep the event loop free.
     result = await run_in_threadpool(
         _process_ingest, user.workspace_id, documents, name, pursuit_id,
     )
-    # The schedule's specifications are read AFTER the response. The upload is the product;
-    # this is an optional enrichment that costs model calls and must never delay or fail it.
+    # Both enrichments run AFTER the response. The upload is the product; these cost model
+    # calls and must never delay or fail it. Order is deliberate — see `_schedule_ocr`.
     _schedule_extraction(background, user.workspace_id, result["tender_id"])
+    # `illegible_pages` in the response above is the set as it stood BEFORE this ran. It can
+    # only shrink afterwards, and the response is already gone — the tender row carries the
+    # outcome instead (ocr_completed_at / ocr_pages_recovered, echoed by GET .../readiness).
+    _schedule_ocr(background, user.workspace_id, result["tender_id"], documents)
     return ok(result)
 
 

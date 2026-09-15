@@ -27,7 +27,7 @@ import time
 
 from pypdf import PdfReader
 
-MIN_CHARS = 20  # ingest.py:_MIN_CHARS_PER_PAGE — one definition of "legible", not two
+MIN_CHARS = 20  # ingest.MIN_CHARS_PER_PAGE — one definition of "legible", not two
 DPI = 200       # ocr.py:DPI
 
 
