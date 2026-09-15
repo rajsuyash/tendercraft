@@ -16,6 +16,7 @@ from pipeline.section_drafter import draft_section
 
 from . import authz, db, docx_export, learning, sections, spec_service
 from .auth import AuthedUser, get_current_user
+from .deterministic import export_gate
 from .deterministic.drafting import mandatory_coverage
 from .envelope import ApiError, ok
 
@@ -326,9 +327,15 @@ def approve(
     if any(a.get("approver") == user.user_id and a.get("stage") != stage for a in prior):
         raise ApiError(409, "SEGREGATION_OF_DUTIES",
                        "you have already signed another stage of this proposal")
-    db.add_approval(user.workspace_id, proposal_id, stage, user.user_id)
+    # WHAT is being signed, recorded with the signature. Without this a document could be
+    # signed through every stage, rewritten afterwards, and still export as approved: editing
+    # a section clears that section's own approval, but the proposal-level chain survived
+    # untouched. `export_service.evaluate` ignores an approval whose hash no longer matches,
+    # so the stage becomes incomplete again and asks for a fresh one.
+    signed = export_gate.content_hash(db.get_sections(proposal_id, user.workspace_id))
+    db.add_approval(user.workspace_id, proposal_id, stage, user.user_id, content_hash=signed)
     db.write_audit(user.workspace_id, user.user_id, "approval", "proposal", proposal_id,
-                   after={"stage": stage})
+                   after={"stage": stage, "content_hash": signed})
     return ok({"proposal_id": proposal_id, "stage": stage})
 
 

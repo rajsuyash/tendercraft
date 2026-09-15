@@ -306,3 +306,56 @@ def test_placeholder_scan_stops_at_the_limit():
     found = template_placeholders(text, limit=3)
     assert len(found) == 3
     assert found == ["[Insert Field0]", "[Insert Field1]", "[Insert Field2]"]
+
+
+# --- a re-save must not launder a flagged financial claim -----------------------------------
+
+
+def test_a_flagged_money_sentence_that_survives_an_edit_keeps_its_flag():
+    """B-AC4 is the one non-overridable blocker in the product, and re-saving the model's own
+    flagged text through the edit endpoint used to clear it in a single click."""
+    from app.deterministic.drafting import surviving_financial_flags
+
+    body = "We are an OEM. Our average annual turnover is Rs 8.2 Cr. We comply."
+    prior = [{"text": "Our average annual turnover is Rs 8.2 Cr.", "reason": "uncited_financial"}]
+
+    kept = surviving_financial_flags(body, prior)
+
+    assert kept == [{"text": "Our average annual turnover is Rs 8.2 Cr.",
+                     "reason": "uncited_financial"}]
+
+
+def test_deleting_the_offending_sentence_clears_the_flag():
+    """The escape hatch is removing the claim, which is what the bidder should do."""
+    from app.deterministic.drafting import surviving_financial_flags
+
+    prior = [{"text": "Our average annual turnover is Rs 8.2 Cr.", "reason": "uncited_financial"}]
+    assert surviving_financial_flags("We are an OEM. We comply.", prior) == []
+
+
+def test_an_unverified_flag_does_not_survive_an_edit():
+    """Cite-or-flag judged MODEL output. Once a person rewrites a sentence they own it, and
+    keeping the flag would be meaningless — this is the reasoning `edit_section` already had,
+    and it is right for everything except the financial gate."""
+    from app.deterministic.drafting import surviving_financial_flags
+
+    prior = [{"text": "We hold ISO 9001.", "reason": "unverified"}]
+    assert surviving_financial_flags("We hold ISO 9001.", prior) == []
+
+
+def test_rewrapping_whitespace_does_not_launder_the_claim():
+    """A PDF-derived sentence re-wraps the moment a human edits around it. Case and
+    punctuation are left alone on purpose — a comma changes what a compliance sentence
+    commits to (the same rule `answer_reuse.appears_verbatim` follows)."""
+    from app.deterministic.drafting import surviving_financial_flags
+
+    prior = [{"text": "Our  average annual\nturnover is Rs 8.2 Cr.", "reason": "uncited_financial"}]
+    assert len(surviving_financial_flags("Our average annual turnover is Rs 8.2 Cr.", prior)) == 1
+
+
+def test_no_prior_flags_is_not_an_error():
+    from app.deterministic.drafting import surviving_financial_flags
+
+    assert surviving_financial_flags("anything", []) == []
+    assert surviving_financial_flags("", None) == []
+    assert surviving_financial_flags("x", [{"reason": "uncited_financial", "text": ""}]) == []

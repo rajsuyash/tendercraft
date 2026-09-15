@@ -228,6 +228,17 @@ def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title
     except Exception:  # noqa: BLE001 — an addition must not be able to break ingest
         log.exception("schedule persistence failed for tender %s — ingest continues",
                       tender["id"])
+    # Named where the user can find them: "Annexure-II.pdf p.4", not a package-wide count
+    # that matches no page number printed on any document they hold.
+    illegible = [
+        f"{page_index[p].document} p.{page_index[p].page}"
+        for p in result["illegible_pages"] if p in page_index
+    ]
+    # Computed here and nowhere else — page text is never persisted, so after this function
+    # returns there is no way to recompute which pages were unreadable. Written even when
+    # empty: [] means "looked, all readable", NULL means "never recorded".
+    db.set_illegible_pages(tender["id"], workspace_id, illegible)
+
     if pursuit_id:
         # After the tender and its criteria exist: the link should point at a tender that is
         # actually usable, not one that may still fail mid-ingest.
@@ -243,12 +254,7 @@ def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title
         "documents": [d for d, _ in documents],
         "extracted": result["extracted"],
         "low_confidence": result["low_confidence"],
-        # Named where the user can find them: "Annexure-II.pdf p.4", not a package-wide count
-        # that matches no page number printed on any document they hold.
-        "illegible_pages": [
-            f"{page_index[p].document} p.{page_index[p].page}"
-            for p in result["illegible_pages"] if p in page_index
-        ],
+        "illegible_pages": illegible,
     }
 
 

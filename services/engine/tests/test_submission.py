@@ -107,3 +107,42 @@ def test_a_clean_proposal_with_no_gate_blockers_can_submit():
     )
     assert state.can_submit is True
     assert state.percent == 100
+
+
+# --- was the document actually read? ---------------------------------------------------------
+
+
+def _clean(**over):
+    base = dict(confirm_open=0, p0_blocking=0, sections_total=17, sections_placeholder=0,
+                narrative_unapproved=0, approvals_done=2, approvals_required=2)
+    base.update(over)
+    return compute(**base)
+
+
+def test_pages_nobody_could_read_block_submission():
+    """The illegible list lived only in the upload response and was never persisted, so once
+    that screen closed nothing anywhere recorded that part of the tender had never been read.
+    "Ready to submit" could be true with a third of the package unreadable."""
+    state = _clean(pages_unread=17)
+    assert state.can_submit is False
+    assert any("17 page(s) of the package could not be read" == b.detail for b in state.blockers)
+
+
+def test_requirement_sentences_that_became_no_criterion_block_submission():
+    """G-FR2's denominator had exactly one consumer — the matrix screen's own badge — so a
+    proposal could pass every gate with a backlog of obligations nothing had answered."""
+    state = _clean(open_unmapped=4)
+    assert state.can_submit is False
+    assert any("4 requirement sentence(s)" in b.detail for b in state.blockers)
+
+
+def test_both_belong_to_the_reading_stage_not_the_review_stage():
+    """Whether the document was read precedes whether its requirements were confirmed, so a
+    meter that puts these under "Sections approved" sends the user to the wrong screen."""
+    state = _clean(pages_unread=2, open_unmapped=1)
+    assert {b.stage for b in state.blockers} == {"requirements"}
+
+
+def test_a_fully_read_package_adds_no_blocker():
+    """The control: these must not become a permanent floor."""
+    assert _clean(pages_unread=0, open_unmapped=0).can_submit is True

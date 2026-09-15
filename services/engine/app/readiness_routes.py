@@ -189,6 +189,17 @@ def submission_state(tender_id: str, user: CurrentUser) -> dict:
             and r.status is not CoverageStatus.COVERED
         )
 
+    # Was the document READ? Two signals, neither of which could reach this function before.
+    # An OCR pass that has not finished (`ocr_completed_at` NULL) is not an unread page — it
+    # is an unknown, and saying "3 unread" while the pass is still running would be a
+    # measurement of our own timing rather than of the package.
+    tender_row = db.get_tender(tender_id, user.workspace_id) or {}
+    illegible = tender_row.get("illegible_pages")
+    pages_unread = 0
+    if illegible is not None and tender_row.get("ocr_completed_at"):
+        pages_unread = max(0, len(illegible) - int(tender_row.get("ocr_pages_recovered") or 0))
+    open_unmapped = len(db.get_unmapped(tender_id, user.workspace_id, only_open=True))
+
     state = submission.compute(
         confirm_open=readiness["confirm_open"],
         p0_blocking=readiness["p0_blocking"],
@@ -202,6 +213,8 @@ def submission_state(tender_id: str, user: CurrentUser) -> dict:
         approvals_required=required,
         hard_blockers=hard_blockers,
         mandatory_unanswered=mandatory_unanswered,
+        pages_unread=pages_unread,
+        open_unmapped=open_unmapped,
     )
     return ok({
         "stage": state.stage,

@@ -58,10 +58,26 @@ def compute(
     approvals_required: int,
     hard_blockers: Sequence[str] = (),
     mandatory_unanswered: int = 0,
+    pages_unread: int = 0,
+    open_unmapped: int = 0,
 ) -> SubmissionState:
     """The single source of "how close am I", with every blocker named."""
     blockers: list[Blocker] = []
 
+    # Whether the document was READ, which precedes whether its requirements were confirmed.
+    # Neither of these could reach this function before: the illegible-page list lived only in
+    # the upload response and was never persisted (migration 0044), and the unmapped-sentence
+    # denominator had exactly one consumer — the matrix screen's own badge. So "ready to
+    # submit" could be true with a third of the package unread and a backlog of requirement
+    # sentences that never became criteria.
+    if pages_unread:
+        blockers.append(Blocker(
+            "requirements", "Requirements confirmed",
+            f"{pages_unread} page(s) of the package could not be read"))
+    if open_unmapped:
+        blockers.append(Blocker(
+            "requirements", "Requirements confirmed",
+            f"{open_unmapped} requirement sentence(s) in the document match no criterion"))
     if confirm_open:
         blockers.append(Blocker(
             "requirements", "Requirements confirmed",

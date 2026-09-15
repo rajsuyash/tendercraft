@@ -7,7 +7,13 @@ here; the decision is the deterministic gate's.
 
 from __future__ import annotations
 
-from .deterministic.export_gate import ApprovalChain, ExportDecision, SectionRow, evaluate_export
+from .deterministic.export_gate import (
+    ApprovalChain,
+    ExportDecision,
+    SectionRow,
+    content_hash,
+    evaluate_export,
+)
 from .deterministic.types import ComplianceRow, CoverageStatus, RequirementLevel, SectionKind
 
 _STATUS_MAP = {
@@ -67,6 +73,17 @@ def evaluate(
     approvals: list[dict] | None = None,
 ) -> tuple[ExportDecision, list[ComplianceRow]]:
     rows = build_matrix(criteria, responses)
+    # An approval signed against text that has since changed is not an approval of THIS
+    # document. A NULL hash predates content binding (migration 0043) and is counted rather
+    # than invalidated — inventing one now would assert that those signatures covered today's
+    # words, which is the claim the column exists to prevent anyone making.
+    # Only when the caller actually supplied the rows. `approvals_done` is a count a caller
+    # may pass on its own, and recomputing it from an absent list would silently zero it —
+    # the same shape as the upsert that padded missing keys with None.
+    if approvals is not None:
+        current = content_hash(sections or [])
+        approvals = [a for a in approvals if a.get("content_hash") in (None, "", current)]
+        approvals_done = len(approvals)
     # Distinct approvers drive segregation of duties (E-FR1). Falls back to the raw count
     # when the caller passes no approval rows, which keeps the check inert rather than
     # wrongly blocking an older caller.

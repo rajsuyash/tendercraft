@@ -17,7 +17,7 @@ the model cannot buy its way out of a citation. Pure functions, no I/O.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 
 from .types import SectionKind, SentenceClass
@@ -210,6 +210,42 @@ _TEMPLATE_MARKER = re.compile(
     r"|_{4,}",
     re.I,
 )
+
+
+#: Whitespace normaliser — a PDF-derived sentence re-wraps when a human edits around it.
+_NOISE = re.compile(r"\s+")
+
+
+def surviving_financial_flags(
+    body_md: str, prior_flags: Sequence[Mapping[str, str]]
+) -> list[dict[str, str]]:
+    """Which `uncited_financial` flags are still true of the text a human just saved.
+
+    Editing clears flags, and that is right for `unverified`: cite-or-flag judged MODEL
+    output, so once a person rewrites a sentence they own it. It is WRONG for the financial
+    gate. B-AC4 is the one non-overridable blocker in the product, and re-saving the model's
+    own flagged text through the edit endpoint cleared it in a single click — laundering an
+    unsourced money figure into an exportable document.
+
+    Deliberately narrow: a flag survives only if the exact sentence it was raised against is
+    still present. Nothing is asserted about text the human newly typed, because raw markdown
+    cannot tell a transcluded figure from an authored one — `is_transcluded` and `source_ref`
+    live on the sentence objects, never in `body_md`, so a blanket re-scan would flag a
+    bidder's own correctly-sourced number.
+
+    Whitespace is normalised because a PDF-derived sentence re-wraps when a human edits
+    around it; case and punctuation are not, for the same reason `answer_reuse.appears_verbatim`
+    leaves them alone — a comma changes what a compliance sentence commits to.
+    """
+    haystack = _NOISE.sub(" ", body_md or "")
+    out: list[dict[str, str]] = []
+    for flag in prior_flags or ():
+        if flag.get("reason") != "uncited_financial":
+            continue
+        needle = _NOISE.sub(" ", str(flag.get("text") or "")).strip()
+        if needle and needle in haystack:
+            out.append({"text": str(flag["text"]), "reason": "uncited_financial"})
+    return out
 
 
 def template_placeholders(text: str, limit: int = 5) -> list[str]:

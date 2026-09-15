@@ -209,3 +209,58 @@ def test_incomplete_approvals_reported_before_sod():
     d = _chain(required=2, completed=1, distinct=1)
     assert any("approvals incomplete" in b for b in d.override_blockers)
     assert not any("segregation" in b for b in d.override_blockers)
+
+
+def test_an_unverified_section_blocks_export():
+    """cite-or-flag applies to the long-form document too. `_BLOCKING_STATUSES` was applied to
+    the per-criterion rows only, so an identical status on a section passed the gate in
+    silence — the one place in the product where an unresolvable claim could reach a buyer."""
+    d = _decide([_sect(key="solution", status="unverified")])
+    assert not d.exportable
+    assert any("unverified claim" in b for b in d.override_blockers)
+
+
+def test_an_unverified_section_clears_under_a_logged_override():
+    """B-FR1 is overridable — unlike the financial gate — because a human may attest a claim
+    they can stand behind. The override is logged, which is the control."""
+    from app.deterministic.export_gate import ApprovalChain, evaluate_export
+    d = evaluate_export([_crow()], ApprovalChain(2, 2), True,
+                        [_sect(key="solution", status="unverified")])
+    assert d.exportable
+    assert d.override_used
+
+
+# --- an approval names the text it signed ----------------------------------------------------
+
+
+def test_the_same_sections_hash_the_same_whatever_order_they_arrive_in():
+    """Reordering sections does not change what anybody agreed to; changing their words
+    does."""
+    from app.deterministic.export_gate import content_hash
+
+    a = [{"key": "solution", "body_md": "one"}, {"key": "risk", "body_md": "two"}]
+    assert content_hash(a) == content_hash(list(reversed(a)))
+
+
+def test_changing_a_word_changes_the_hash():
+    from app.deterministic.export_gate import content_hash
+
+    before = [{"key": "solution", "body_md": "We will deliver in 12 weeks."}]
+    after = [{"key": "solution", "body_md": "We will deliver in 20 weeks."}]
+    assert content_hash(before) != content_hash(after)
+
+
+def test_a_body_ending_where_the_next_key_begins_does_not_collide():
+    """The reason for the \\x1f separator rather than a plain join."""
+    from app.deterministic.export_gate import content_hash
+
+    assert content_hash([{"key": "a", "body_md": "bc"}]) != content_hash(
+        [{"key": "ab", "body_md": "c"}]
+    )
+
+
+def test_missing_fields_hash_rather_than_raise():
+    from app.deterministic.export_gate import content_hash
+
+    assert content_hash([{}]) == content_hash([{"key": None, "body_md": None}])
+    assert content_hash([])

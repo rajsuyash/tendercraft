@@ -13,13 +13,34 @@ Two distinct classes of blocker, because they have different override semantics:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import hashlib
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from .matrix import coverage
 from .types import ComplianceRow, CoverageStatus, RequirementLevel, SectionKind
 
 _BLOCKING_STATUSES = {CoverageStatus.PLACEHOLDER, CoverageStatus.UNVERIFIED, CoverageStatus.MISSING}
+
+
+def content_hash(sections: Iterable[Mapping]) -> str:
+    """What a stage approval is signing, as one stable string.
+
+    An approval row recorded who signed and when, and nothing about WHAT. Editing a section
+    clears that section's own approval, but the proposal-level chain survived — so a document
+    could be signed through every stage, rewritten afterwards, and still export as approved.
+
+    Ordered by `key` rather than by `order_index`, because reordering sections does not
+    change what anybody agreed to; changing their words does. Same idiom as
+    `discovery/relevance.py::input_hash` and `inbound_routes._digest`: sha256 over
+    "\x1f"-joined fields, so a body ending where the next key begins cannot collide with a
+    different split.
+    """
+    parts: list[str] = []
+    for s in sorted(sections, key=lambda x: str(x.get("key") or "")):
+        parts.append(str(s.get("key") or ""))
+        parts.append(str(s.get("body_md") or ""))
+    return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -94,6 +115,12 @@ def evaluate_export(
             )
         if s.status == "placeholder":
             override.append(f"section {s.key}: placeholder not resolved (B-FR2)")
+        # The same status set the per-criterion rows are judged by. It was applied to
+        # ComplianceRow only, so a long-form section carrying an unverified claim — a
+        # sentence cite-or-flag could not resolve to any retrieved chunk — passed the gate
+        # silently while the identical status on a criterion blocked it.
+        if s.status == "unverified":
+            override.append(f"section {s.key}: unverified claim with no resolving source (B-FR1)")
         # AI-authored narrative can't be policed by cite-or-flag — nothing exists to cite —
         # so human sign-off is the control that replaces it (B-FR4).
         if s.kind is SectionKind.NARRATIVE and s.narrative_sentences > 0 and not s.approved:

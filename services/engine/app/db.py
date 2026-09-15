@@ -15,6 +15,7 @@ import httpx
 
 from . import http
 from .config import get_settings
+from .deterministic.drafting import surviving_financial_flags
 from .deterministic.price_history import postgrest_filter
 from .envelope import ApiError
 
@@ -132,6 +133,20 @@ def mark_specs_extracted(workspace_id: str, tender_id: str) -> None:
         params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"specs_extracted_at": datetime.now(UTC).isoformat()},
         prefer="return=minimal",
+    )
+
+
+def set_illegible_pages(tender_id: str, workspace_id: str, labels: list[str]) -> None:
+    """Record which pages had no readable text at ingest.
+
+    Written even when the list is EMPTY: `[]` means "we looked and every page was readable",
+    which is a different sentence from NULL's "never recorded", and the readiness gate needs
+    to tell them apart.
+    """
+    _rest(
+        "PATCH", "tenders",
+        params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
+        json={"illegible_pages": labels},
     )
 
 
@@ -388,7 +403,8 @@ def get_approvals(proposal_id: str, workspace_id: str) -> list[dict]:
     ) or []
 
 
-def add_approval(workspace_id: str, proposal_id: str, stage: str, approver: str) -> None:
+def add_approval(workspace_id: str, proposal_id: str, stage: str, approver: str,
+                 content_hash: str | None = None) -> None:
     _rest(
         "POST", "proposal_approvals",
         # workspace_id MUST lead the conflict target and match the unique key in 0009. This is
@@ -398,7 +414,7 @@ def add_approval(workspace_id: str, proposal_id: str, stage: str, approver: str)
         params={"on_conflict": "workspace_id,proposal_id,stage"},
         json={
             "workspace_id": workspace_id, "proposal_id": proposal_id,
-            "stage": stage, "approver": approver,
+            "stage": stage, "approver": approver, "content_hash": content_hash,
         },
         prefer="resolution=merge-duplicates",
     )
@@ -1048,6 +1064,12 @@ def edit_section(workspace_id: str, proposal_id: str, key: str, body_md: str,
     the model no longer wrote would be meaningless. Approval is deliberately NOT granted
     here; editing is authorship, sign-off is a separate act (and may be a separate person).
 
+    ONE FLAG SURVIVES THAT REASONING. B-AC4 — an unsourced money figure — is the single
+    non-overridable blocker in the product, and re-saving the model's own flagged text
+    through this endpoint cleared it in one click. `surviving_financial_flags` carries
+    forward exactly those flags whose sentence is still present in the saved body, so the
+    laundering path closes without asserting anything about text a human newly typed.
+
     Seals `original_md` on the FIRST edit (migration 0031). The read is what makes that
     possible — PostgREST cannot write a column from another column's current value — and it
     costs one round trip on a path a human is typing into, which is the right place to spend
@@ -1057,11 +1079,12 @@ def edit_section(workspace_id: str, proposal_id: str, key: str, body_md: str,
     prior = _rest(
         "GET", "proposal_sections",
         params={"proposal_id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
-                "key": f"eq.{key}", "select": "body_md,original_md", "limit": "1"},
+                "key": f"eq.{key}", "select": "body_md,original_md,flags", "limit": "1"},
     )
     seal = {}
     if prior and prior[0].get("original_md") is None and (prior[0].get("body_md") or "").strip():
         seal = {"original_md": prior[0]["body_md"]}
+    kept = surviving_financial_flags(body_md, (prior[0].get("flags") or []) if prior else [])
 
     _rest(
         "PATCH", "proposal_sections",
@@ -1074,8 +1097,9 @@ def edit_section(workspace_id: str, proposal_id: str, key: str, body_md: str,
             **seal,
             "body_md": body_md,
             "word_count": len(body_md.split()),
-            "status": "drafted",
-            "flags": [],
+            # An uncited money figure the human did not remove keeps the document unverified.
+            "status": "unverified" if kept else "drafted",
+            "flags": kept,
             "edited_by": editor,
             "edited_at": when_iso,
             "approved_by": None,
