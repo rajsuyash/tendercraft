@@ -624,6 +624,29 @@ def confirm(criterion_id: str, user: CurrentUser) -> dict:
     return ok({"id": criterion_id, "confirmed": True})
 
 
+class KindPatch(BaseModel):
+    #: `None` clears the override and returns the criterion to the computed kind.
+    kind: Literal["gate", "obligation", "instruction", "form", "spec"] | None = None
+
+
+@router.post("/api/criteria/{criterion_id}/kind")
+def set_kind(criterion_id: str, body: KindPatch, user: CurrentUser) -> dict:
+    """Correct what role a requirement plays.
+
+    The classifier's ceiling is named in `deterministic/requirement_kind.py`: a gate phrased
+    without any noun the rules recognise is filed as an obligation and silently stops voting.
+    This is the escape hatch, and its usage rate is the measurement that would justify adding
+    a model pass over the residue.
+    """
+    authz.check(user, authz.DRAFT)
+    updated = db.set_criterion_kind(criterion_id, user.workspace_id, body.kind)
+    if not updated:
+        raise ApiError(404, "CRITERION_NOT_FOUND", "criterion not found in your workspace")
+    db.write_audit(user.workspace_id, user.user_id, "criterion_kind_set", "criterion",
+                   criterion_id, after={"kind": body.kind})
+    return ok({"id": criterion_id, "kind": body.kind})
+
+
 @router.post("/api/tenders/{tender_id}/lock")
 def lock(tender_id: str, user: CurrentUser) -> dict:
     if not db.get_tender(tender_id, user.workspace_id):

@@ -17,9 +17,11 @@ from dataclasses import dataclass
 from pipeline.analyzer import ModelEval, evaluate_criterion
 
 from .deterministic.eligibility import CriterionOutcome, compare_numeric, recommend
+from .deterministic.requirement_kind import effective_kind
 from .deterministic.types import (
     FUZZY_REVIEW_THRESHOLD,
     Recommendation,
+    RequirementKind,
     RequirementLevel,
     SourceAnchor,
     Verdict,
@@ -88,26 +90,56 @@ def decide(row: dict, ev: ModelEval) -> CriterionVerdict:
     )
 
 
-def _weighted_score(verdicts: list[CriterionVerdict]) -> int:
-    """Strength on desirable/scored criteria only (C-FR5) — mandatory gates don't count here."""
+def _weighted_score(verdicts: list[CriterionVerdict]) -> int | None:
+    """Strength on desirable/scored criteria only (C-FR5) — mandatory gates don't count here.
+
+    `None`, not 0, when the tender states nothing scoreable. Zero out of a hundred is a
+    claim that the bidder scored nothing; an absent denominator is a different sentence, and
+    a catalogue bid legitimately states no scored criterion at all. Once only gates are
+    evaluated this is the common case rather than the edge one — the live wire-rope bid has
+    five gates and no scored criteria, and the card read "0/100" beside a verdict that had
+    found no gaps.
+    """
     scored = [v for v in verdicts if v.requirement_level is not RequirementLevel.MANDATORY]
     if not scored:
-        return 0
+        return None
     passed = sum(1 for v in scored if v.verdict is Verdict.PASS)
     return round(100 * passed / len(scored))
 
 
 def analyze(criteria_rows: list[dict], profile_json: dict) -> dict:
-    """Full analysis over a locked TOM's criteria vs the vendor profile."""
+    """Full analysis over a locked TOM's criteria vs the vendor profile.
+
+    ONLY GATES ARE EVALUATED, and only gates vote. A pre-bid eligibility condition is a
+    question about the bidder and has an answer; a post-award duty, a quoting instruction and
+    a blank declaration form do not, and scoring them produced a NO-BID on the live wire-rope
+    bid from a clause about an inspection that happens months after a contract exists. See
+    `deterministic/requirement_kind.py` for the measurement.
+
+    Everything else travels back as `checklist` — visible, actionable, and not a verdict. It
+    is a cost saving as well as a correctness fix: 18 of 35 criteria on that tender were
+    mandatory and 2 were gates, so this is one model call instead of eighteen.
+    """
+    gates = [r for r in criteria_rows if effective_kind(r) is RequirementKind.GATE]
+    checklist = [
+        {
+            "criterion_id": r["id"],
+            "verbatim_text": r.get("verbatim_text", ""),
+            "kind": effective_kind(r).value,
+            "requirement_level": str(r.get("requirement_level") or ""),
+            "source_anchor": _anchor(r),
+        }
+        for r in criteria_rows
+        if effective_kind(r) is not RequirementKind.GATE
+    ]
+
     # Evaluate criteria concurrently — each is an independent model call; sequential blows
     # the request budget on a large tender (retry cap bounds cost per call).
     with ThreadPoolExecutor(max_workers=6) as pool:
         evals = list(
-            pool.map(
-                lambda row: evaluate_criterion(row["verbatim_text"], profile_json), criteria_rows
-            )
+            pool.map(lambda row: evaluate_criterion(row["verbatim_text"], profile_json), gates)
         )
-    verdicts = [decide(row, ev) for row, ev in zip(criteria_rows, evals, strict=True)]
+    verdicts = [decide(row, ev) for row, ev in zip(gates, evals, strict=True)]
 
     outcomes = [
         CriterionOutcome(
@@ -136,6 +168,10 @@ def analyze(criteria_rows: list[dict], profile_json: dict) -> dict:
         "conservative": recommendation is Recommendation.NO_BID,
         "weighted_score": _weighted_score(verdicts),
         "counts": counts,
+        # What the tender asks for that is not a question about the bidder. Named rather than
+        # silently dropped: an obligation nobody planned for is still a way to lose money,
+        # it just is not a reason to skip the bid.
+        "checklist": checklist,
         "verdicts": [
             {
                 "criterion_id": v.criterion_id,
@@ -152,3 +188,11 @@ def analyze(criteria_rows: list[dict], profile_json: dict) -> dict:
         ],
         "gaps": gaps,
     }
+
+
+def _kind_counts(criteria_rows: list[dict]) -> dict[str, int]:
+    """How many of each kind, for a screen that wants to explain the verdict's scope."""
+    counts = dict.fromkeys((k.value for k in RequirementKind), 0)
+    for row in criteria_rows:
+        counts[effective_kind(row).value] += 1
+    return counts

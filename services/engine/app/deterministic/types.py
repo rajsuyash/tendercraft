@@ -39,6 +39,22 @@ class SentenceClass(StrEnum):
     PLACEHOLDER = "placeholder"  # explicit sourcing instruction
 
 
+class RequirementKind(StrEnum):
+    """What a bidder is supposed to DO about a requirement — and so whether it may vote.
+
+    Orthogonal to `criterion_category`, which says what SUBJECT a requirement belongs to. A
+    financial requirement can be a gate ("average annual turnover of ₹10 Cr") or an
+    instruction ("quote rates inclusive of taxes"); on the live wire-rope bid all four
+    mandatory financial rows were instructions. See `deterministic/requirement_kind.py`.
+    """
+
+    GATE = "gate"  # a pre-bid condition — the only kind that votes on bid/no-bid
+    OBLIGATION = "obligation"  # a duty that binds after award
+    INSTRUCTION = "instruction"  # how to prepare or submit; can neither pass nor fail
+    FORM = "form"  # a template to fill and attach
+    SPEC = "spec"  # a technical parameter belonging to the schedule
+
+
 class SectionKind(StrEnum):
     """Whether a section is allowed to contain uncited narrative at all."""
 

@@ -3,7 +3,12 @@
 from app.deterministic.readiness import compute_readiness
 
 
-def _crit(cid, level="mandatory", conf=0.95, confirmed=True, page=12, clause="4.1(a)"):
+def _crit(cid, level="mandatory", conf=0.95, confirmed=True, page=12, clause="4.1(a)",
+          kind="gate"):
+    """A criterion row. `kind_override="gate"` by default because these tests are about the
+    PRIORITY mapping for things that can pass or fail; a non-gate never reaches those branches
+    and `criterion {cid}` classifies as an obligation. The non-gate path has its own tests at
+    the bottom of this file."""
     return {
         "id": cid,
         "verbatim_text": f"criterion {cid}",
@@ -12,6 +17,7 @@ def _crit(cid, level="mandatory", conf=0.95, confirmed=True, page=12, clause="4.
         "confirmed": confirmed,
         "anchor_page": page,
         "anchor_clause": clause,
+        "kind_override": kind,
     }
 
 
@@ -201,3 +207,46 @@ def test_confirm_item_carries_decision_fields():
     item = r["items"][0]
     assert item["priority"] == "confirm"
     assert item["decision"] == "ignore" and item["comment"] == "note"
+
+
+
+# --- non-gates never block ------------------------------------------------------------------
+
+
+def test_a_post_award_obligation_never_blocks_generation():
+    """The regression this pairs with: `analyze` evaluates gates only, so a non-gate has no
+    verdict — and the mandatory fallthrough is "no verdict yet, block until matched". Without
+    a kind branch every obligation on the tender would become a blocking P0 the moment gates
+    started being filtered, which is worse than the defect being fixed."""
+    duty = _crit("o", kind="obligation")
+
+    out = compute_readiness([duty], None, [], [])
+
+    assert _priority(out, "o") == "p2"
+    assert out["summary"]["p0_blocking"] == 0
+    assert out["summary"]["ready_to_generate"] is True
+
+
+def test_every_non_gate_kind_says_what_it_is():
+    """A checklist that reads "Run analysis to check eligibility" against a blank declaration
+    form has told the user nothing and asked them to do the wrong thing."""
+    rows = [
+        _crit("o", kind="obligation"), _crit("i", kind="instruction"),
+        _crit("f", kind="form"), _crit("s", kind="spec"),
+    ]
+
+    items = {i["criterion_id"]: i for i in compute_readiness(rows, None, [], [])["items"]}
+
+    assert "Post-award" in items["o"]["status"]
+    assert "submit" in items["i"]["status"]
+    assert items["f"]["action"] == "upload"
+    assert "schedule" in items["s"]["status"]
+    assert all(i["priority"] == "p2" for i in items.values())
+
+
+def test_a_low_confidence_non_gate_is_still_confirmed_first():
+    """Confirmation is about whether the EXTRACTION is right, which is a question about every
+    requirement regardless of what it later turns out to be."""
+    row = _crit("x", conf=0.6, confirmed=False, kind="obligation")
+
+    assert _priority(compute_readiness([row], None, [], []), "x") == "confirm"

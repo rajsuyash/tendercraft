@@ -88,6 +88,20 @@ def confirm_criterion(criterion_id: str, workspace_id: str) -> list[dict]:
     )
 
 
+def set_criterion_kind(criterion_id: str, workspace_id: str, kind: str | None) -> list[dict]:
+    """A human's correction to the computed requirement kind. `None` clears it.
+
+    Sent as an explicit null rather than omitted, because clearing an override is the whole
+    point of being able to set one — the `{k: v for ... if v is not None}` filter that would
+    strip it is a defect this repo has already shipped once (PATCH /api/opportunities/{id}).
+    """
+    return _rest(
+        "PATCH", "criteria",
+        params={"id": f"eq.{criterion_id}", "workspace_id": f"eq.{workspace_id}"},
+        json={"kind_override": kind},
+    )
+
+
 def get_criterion_in_tender(criterion_id: str, tender_id: str, workspace_id: str) -> dict | None:
     """Existence check that a criterion belongs to this tender AND this workspace — the guard on any
     write that binds a criterion (decisions, per-item doc links). One query covers ET-6.

@@ -18,7 +18,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from .types import EXTRACTION_CONFIRM_THRESHOLD, RequirementLevel
+from .requirement_kind import effective_kind
+from .types import EXTRACTION_CONFIRM_THRESHOLD, RequirementKind, RequirementLevel
 
 # Evidence states that mean "no usable drafted response yet".
 _UNDRAFTED = {"missing", "placeholder", None}
@@ -47,10 +48,37 @@ class ReadinessItem:
 _PRIORITY_ORDER = {"confirm": 0, "p0": 1, "p1": 2, "p2": 3, "covered": 4}
 
 
+#: What a non-gate requirement says on the checklist. None of these can pass or fail, so none
+#: of them blocks: an obligation binds after award, an instruction tells you how to bid, a form
+#: is a template to attach, a spec belongs to the schedule screen. Before kinds existed they
+#: were all evaluated as eligibility and all read "Run analysis to check eligibility" — which
+#: is how eighteen mandatory rows on a catalogue bid produced a NO-BID.
+_NON_GATE_STATUS = {
+    RequirementKind.OBLIGATION: (
+        "Post-award duty — plan for it; it does not affect eligibility", "review",
+    ),
+    RequirementKind.INSTRUCTION: ("How to submit — follow it when you bid", "review"),
+    RequirementKind.FORM: ("A form to fill in and attach", "upload"),
+    RequirementKind.SPEC: ("A technical parameter — see schedule fit", "review"),
+}
+
+
 def _classify(
-    level: RequirementLevel, verdict: str | None, draft_status: str | None, exempted: bool
+    level: RequirementLevel, verdict: str | None, draft_status: str | None, exempted: bool,
+    kind: RequirementKind = RequirementKind.GATE,
 ) -> tuple[str, str, str]:
-    """Return (priority, status, action) for one already-confirmed criterion."""
+    """Return (priority, status, action) for one already-confirmed criterion.
+
+    A NON-GATE never reaches the eligibility branches below. It has no verdict — `analyze`
+    does not evaluate it — and the mandatory fallthrough is "no verdict yet, block until
+    matched", so without this branch every post-award obligation would become a blocking P0
+    the moment gates started being filtered. That would be a worse regression than the defect
+    being fixed, and it is invisible from the analysis side.
+    """
+    if kind is not RequirementKind.GATE:
+        status, action = _NON_GATE_STATUS[kind]
+        return "p2", status, action
+
     undrafted = draft_status in _UNDRAFTED
     is_mandatory = level is RequirementLevel.MANDATORY
 
@@ -119,6 +147,7 @@ def compute_readiness(
             (v or {}).get("verdict"),
             status_by.get(cid),
             bool((v or {}).get("exemption_granted", False)),
+            effective_kind(c),
         )
         items.append(ReadinessItem(
             cid, c["verbatim_text"], level.value, anchor, priority, status, action,

@@ -19,7 +19,9 @@ interface CriterionVerdict {
 interface AnalysisResult {
   recommendation: "bid" | "no_bid" | "needs_review";
   conservative: boolean;
-  weighted_score: number;
+  /** `null` when the tender states no scored criteria — which is not the same as scoring
+   *  zero, and is the common case on a catalogue bid. */
+  weighted_score: number | null;
   counts: { pass: number; fail: number; needs_review: number };
   verdicts: CriterionVerdict[];
   gaps: { criterion_id: string; gap: string; source: string }[];
@@ -101,13 +103,31 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
 
         <div className="rounded-card border border-border bg-surface p-card">
           <p className="text-xs text-muted">Weighted eligibility score</p>
-          <p className="mt-1 font-heading text-2xl font-semibold text-ink">{a.weighted_score}/100</p>
-          <div className="mt-2 h-1.5 rounded-full bg-surface-alt">
-            <div className="h-1.5 rounded-full bg-primary" style={{ width: `${a.weighted_score}%` }} />
-          </div>
-          <p className="mt-2 text-xs text-muted">
-            Scored on desirable + technical criteria only. Mandatory criteria are gates, not weights.
-          </p>
+          {a.weighted_score === null ? (
+            <>
+              <p className="mt-1 font-heading text-2xl font-semibold text-muted">—</p>
+              <p className="mt-2 text-xs text-muted">
+                This tender states no scored criteria, so there is nothing to score against.
+                That is not the same as scoring zero.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 font-heading text-2xl font-semibold text-ink">
+                {a.weighted_score}/100
+              </p>
+              <div className="mt-2 h-1.5 rounded-full bg-surface-alt">
+                <div
+                  className="h-1.5 rounded-full bg-primary"
+                  style={{ width: `${a.weighted_score}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                Scored on desirable + technical criteria only. Mandatory criteria are gates,
+                not weights.
+              </p>
+            </>
+          )}
         </div>
 
         <div className="rounded-card border border-border bg-surface p-card">
