@@ -41,6 +41,7 @@ from .deterministic.facts import (
 )
 from .deterministic.requirement_kind import effective_kind
 from .deterministic.types import (
+    FUZZY_REVIEW_THRESHOLD,
     CheckType,
     Recommendation,
     RequirementKind,
@@ -77,6 +78,22 @@ class CriterionVerdict:
     missing_facts: tuple[str, ...] = ()
     exemption_clause: str = ""
 
+
+
+def _checklist_item(row: dict, note: str = "") -> dict:
+    """A requirement that is not a question about whether the bidder qualifies.
+
+    Named rather than silently dropped: an obligation nobody planned for is still a way to
+    lose money, it just is not a reason to skip the bid.
+    """
+    return {
+        "criterion_id": row["id"],
+        "verbatim_text": row.get("verbatim_text", ""),
+        "kind": effective_kind(row).value,
+        "requirement_level": str(row.get("requirement_level") or ""),
+        "source_anchor": _anchor(row),
+        "note": note,
+    }
 
 
 def _anchor(row: dict) -> str:
@@ -182,13 +199,7 @@ def analyze(
     """
     gates = [r for r in criteria_rows if effective_kind(r) is RequirementKind.GATE]
     checklist = [
-        {
-            "criterion_id": r["id"],
-            "verbatim_text": r.get("verbatim_text", ""),
-            "kind": effective_kind(r).value,
-            "requirement_level": str(r.get("requirement_level") or ""),
-            "source_anchor": _anchor(r),
-        }
+        _checklist_item(r)
         for r in criteria_rows
         if effective_kind(r) is not RequirementKind.GATE
     ]
@@ -197,8 +208,30 @@ def analyze(
     # the request budget on a large tender (retry cap bounds cost per call).
     with ThreadPoolExecutor(max_workers=6) as pool:
         reqs = list(pool.map(lambda row: extract_requirement(row["verbatim_text"]), gates))
+
+    # A second, independent reading. `requirement_kind` classifies from the sentence's
+    # vocabulary; the extractor read the whole clause and can say there is no pre-bid
+    # condition in it at all. When it says so CONFIDENTLY, the rules over-reached — a
+    # requirement nobody can check is not a gate, and scoring it would park the card on
+    # needs-review permanently, with no fact a user could ever supply to clear it.
+    #
+    # The confidence floor is the whole guard. A `none` at zero confidence is a MODEL
+    # FAILURE, not a reading, and must stay a gate so it reads needs-review and a human
+    # looks at it. Those two states are identical in the payload and opposite in meaning.
+    scored, demoted = [], []
+    for row, req in zip(gates, reqs, strict=True):
+        target = (demoted if req.check is CheckType.NONE
+                  and req.confidence >= FUZZY_REVIEW_THRESHOLD else scored)
+        target.append((row, req))
+    checklist.extend(
+        _checklist_item(row, note="Classified as an eligibility gate, but the clause states "
+                                 "no pre-bid condition that can be checked. Override its kind "
+                                 "if you disagree.")
+        for row, _ in demoted
+    )
+
     facts = profile_facts(profile_json or {})
-    verdicts = [decide(row, r, facts, bid_date) for row, r in zip(gates, reqs, strict=True)]
+    verdicts = [decide(row, r, facts, bid_date) for row, r in scored]
 
     outcomes = [
         CriterionOutcome(

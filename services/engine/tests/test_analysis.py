@@ -279,3 +279,51 @@ def test_an_override_puts_a_criterion_back_in_front_of_the_verdict(monkeypatch):
 
     assert out["recommendation"] == Recommendation.NO_BID.value
     assert out["checklist"] == []
+
+
+# --- when the two readings disagree ------------------------------------------------------------
+
+
+def test_a_gate_the_extractor_confidently_finds_nothing_to_check_in_stops_voting(monkeypatch):
+    """Two independent readings. `requirement_kind` classifies from the sentence's
+    vocabulary — "OEM", "manufacturer's authorisation" — and over-reached on four bidding
+    rules in the live tender. The extractor read the whole clause and said there is no
+    pre-bid condition in it.
+
+    Scoring it anyway parks the card on needs-review permanently, because there is no fact a
+    user could ever supply to clear it. That is a dead end wearing a verdict's clothes."""
+    row = _row("r", "mandatory",
+               text="such agent shall not be allowed to represent more than one manufacturer")
+    _patch(monkeypatch, {row["verbatim_text"]: _req(check=CheckType.NONE, confidence=0.95)})
+
+    out = analysis.analyze([row], PROFILE, BID_DATE)
+
+    assert out["verdicts"] == []
+    assert out["recommendation"] == Recommendation.NO_GATES.value
+    assert out["checklist"][0]["criterion_id"] == "r"
+    # And it says WHY it is not being scored, with the override named.
+    assert "no pre-bid condition" in out["checklist"][0]["note"]
+
+
+def test_a_model_failure_is_not_a_reading_and_keeps_its_vote(monkeypatch):
+    """The confidence floor is the whole guard, and it separates two states that are
+    identical in the payload and opposite in meaning: `none` at 0.95 is "I read it and there
+    is nothing to check"; `none` at 0.0 is a timeout. Demoting the second would silently
+    drop a real gate every time the model was unavailable."""
+    row = _row("g", "mandatory", text="Average annual turnover of Rs 10 Crore")
+    _patch(monkeypatch, {row["verbatim_text"]: _req(check=CheckType.NONE, confidence=0.0)})
+
+    out = analysis.analyze([row], PROFILE, BID_DATE)
+
+    assert out["checklist"] == []
+    assert out["verdicts"][0]["verdict"] == Verdict.NEEDS_REVIEW.value
+    assert out["recommendation"] == Recommendation.NEEDS_REVIEW.value
+
+
+def test_a_checklist_item_that_was_never_a_gate_carries_no_note(monkeypatch):
+    """The note explains a demotion. An ordinary obligation was never claimed to be a gate,
+    so there is nothing to explain and an empty string is the honest value."""
+    row = _row("o", "mandatory", kind=None,
+               text="The warranty period shall be 24 months from the date of delivery.")
+    out = analysis.analyze([row], PROFILE, BID_DATE)
+    assert out["checklist"][0]["note"] == ""

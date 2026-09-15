@@ -40,7 +40,7 @@ from .eligibility import (
     completed_within,
     is_valid_on,
 )
-from .types import CheckType, Verdict
+from .types import FUZZY_REVIEW_THRESHOLD, CheckType, Verdict
 
 #: Registration keys a tender can demand, mapped to the profile field that answers them.
 #: `make_in_india` is deliberately absent: no profile field records it, so a tender granting
@@ -301,7 +301,7 @@ def decide_requirement(
     # A requirement the model was unsure it had read correctly is not a basis for a verdict.
     # This guard applied to the fuzzy branch only; the numeric branch skipped it entirely,
     # which is how confidence 0.01 produced a hard PASS.
-    if req.confidence < 0.75:
+    if req.confidence < FUZZY_REVIEW_THRESHOLD:
         return _review(req.check,
                        "the requirement was read with low confidence — confirm the clause")
 

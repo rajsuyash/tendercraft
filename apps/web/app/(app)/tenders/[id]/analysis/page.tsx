@@ -35,6 +35,10 @@ interface ChecklistItem {
   kind: string;
   requirement_level: string;
   source_anchor: string;
+  /** Why this is not being scored, when that needs explaining — set only where the
+   *  classifier called something a gate and the reading found no condition in it. Empty on
+   *  an ordinary obligation, which was never claimed to be a gate. */
+  note?: string;
 }
 interface AnalysisResult {
   recommendation: "bid" | "no_bid" | "needs_review" | "no_gates";
@@ -70,7 +74,9 @@ const KIND_LABEL: Record<string, string> = {
   instruction: "How to bid",
   form: "To attach",
   spec: "Schedule",
-  gate: "Eligibility",
+  // A gate on the CHECKLIST is a demoted one: classified as eligibility, then read as
+  // stating no condition anyone can check. It carries a note saying so.
+  gate: "Reads like eligibility, nothing to check",
 };
 
 // S7 — Eligibility Analysis dashboard (anchor screen). S7-D1 (No-Bid on mandatory fail),
@@ -105,7 +111,10 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
   // Grouped by what you do about it, not by tender category — "If you win" and "How to bid"
   // are different jobs for different people on different days.
   const checklist = a.checklist ?? [];
-  const byKind = ["form", "obligation", "instruction", "spec"]
+  // "gate" belongs in this list even though a gate normally gets a verdict: a gate reaching
+  // the checklist has been demoted, and leaving it out of the grouping would drop it off the
+  // screen entirely — the silent exclusion this whole change exists to stop.
+  const byKind = ["gate", "form", "obligation", "instruction", "spec"]
     .map((kind) => ({ kind, items: checklist.filter((c) => c.kind === kind) }))
     .filter((g) => g.items.length > 0);
 
@@ -274,6 +283,11 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
                           <p className="mt-1 text-xs text-muted">
                             {c.requirement_level} · {c.source_anchor}
                           </p>
+                          {c.note && (
+                            <p data-demotion-note className="mt-1 text-xs text-warning">
+                              {c.note}
+                            </p>
+                          )}
                         </li>
                       ))}
                     </ul>
