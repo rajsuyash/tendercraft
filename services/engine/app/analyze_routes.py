@@ -247,7 +247,7 @@ def run_analysis(tender_id: str, user: CurrentUser) -> dict:
     # The submission deadline decides which financial years "the last three years" means and
     # whether a certificate was valid on the day. `None` is legal and routes the date-dependent
     # checks to needs-review rather than guessing a window.
-    result = analysis.analyze(criteria, profile, _bid_date(tender))
+    result = analysis.analyze(criteria, profile, _bid_date(tender), user.workspace_id)
     db.save_analysis(user.workspace_id, tender_id, result)
     return ok(result)
 

@@ -103,6 +103,23 @@ def set_criterion_kind(criterion_id: str, workspace_id: str, kind: str | None) -
     )
 
 
+def save_criterion_requirements(workspace_id: str, readings: list[dict]) -> None:
+    """Store what each criterion DEMANDS, against a hash of the text it was read from.
+
+    One PATCH per criterion rather than a bulk upsert, deliberately: a bulk body has to be
+    padded to one key set, and that is how `upsert_opportunity_matches` wrote NULL over a
+    cached relevance band — the run that reused the cache was the run that destroyed it.
+    These are at most a handful of rows per tender and only on a cache MISS, so the cost is
+    a few requests on a path that just made model calls.
+    """
+    for r in readings:
+        _rest(
+            "PATCH", "criteria",
+            params={"id": f"eq.{r['id']}", "workspace_id": f"eq.{workspace_id}"},
+            json={"requirement": r["requirement"], "requirement_hash": r["requirement_hash"]},
+        )
+
+
 def get_criterion_in_tender(criterion_id: str, tender_id: str, workspace_id: str) -> dict | None:
     """Existence check that a criterion belongs to this tender AND this workspace — the guard on any
     write that binds a criterion (decisions, per-item doc links). One query covers ET-6.

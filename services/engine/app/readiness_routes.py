@@ -134,7 +134,10 @@ def _prepare(workspace_id: str, tender_id: str) -> dict:
     # certificate was valid on the day. None is legal: the date-dependent checks then say
     # needs-review rather than guessing a window.
     bid_date = _bid_date(db.get_tender(tender_id, workspace_id) or {})
-    db.save_analysis(workspace_id, tender_id, analysis.analyze(criteria, profile, bid_date))
+    db.save_analysis(
+        workspace_id, tender_id,
+        analysis.analyze(criteria, profile, bid_date, workspace_id),
+    )
 
     # 3. Draft-match against the content library.
     do_generate(workspace_id, tender_id)

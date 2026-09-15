@@ -24,8 +24,14 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date
 
-from pipeline.analyzer import extract_requirement
+from pipeline.analyzer import (
+    extract_requirement,
+    from_json,
+    requirement_hash,
+    to_json,
+)
 
+from . import db
 from .deterministic.eligibility import (
     CriterionOutcome,
     normalise_fy,
@@ -182,8 +188,57 @@ def _weighted_score(verdicts: list[CriterionVerdict]) -> int | None:
     return round(100 * passed / len(scored))
 
 
+def _readings(gates: list[dict], workspace_id: str | None) -> list[Requirement]:
+    """What each gate demands — read once, then stored against the text it was read from.
+
+    This is a correctness mechanism, not a performance one. `decide` is pure arithmetic with
+    no model near it, and the card still moved between identical runs, because whether a
+    clause IS a gate depends on a model reading. Measured on the live Oil India bid: six
+    extractions of one OEM-authorisation clause returned `none` at 0.90 four times and
+    `certification_valid` at 1.00 twice — confidently on both sides, so no threshold could
+    separate them, and the recommendation alternated with nothing about the tender or the
+    bidder having changed. A compliance product may not answer the same question two ways.
+
+    The hash covers the criterion text AND the prompt file's digest, so improving the prompt
+    re-reads every tender rather than freezing them on the old reading — the cache silently
+    becoming the product is the failure mode this guards against. `workspace_id` is optional
+    so the function stays callable without a database; without it nothing is stored and every
+    run re-reads, which is the pre-0045 behaviour and is what the unit tests exercise.
+    """
+    wanted = [requirement_hash(row.get("verbatim_text") or "") for row in gates]
+    cached: list[Requirement | None] = [
+        from_json(row["requirement"])
+        if row.get("requirement") and row.get("requirement_hash") == h
+        else None
+        for row, h in zip(gates, wanted, strict=True)
+    ]
+
+    misses = [i for i, c in enumerate(cached) if c is None]
+    if misses:
+        # Concurrent — each is an independent model call, and sequential blows the request
+        # budget on a large tender (the retry cap bounds cost per call).
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            fresh = list(pool.map(
+                lambda i: extract_requirement(gates[i].get("verbatim_text") or ""), misses,
+            ))
+        for i, req in zip(misses, fresh, strict=True):
+            cached[i] = req
+        if workspace_id:
+            db.save_criterion_requirements(workspace_id, [
+                {"id": gates[i]["id"], "requirement": to_json(req),
+                 "requirement_hash": wanted[i]}
+                for i, req in zip(misses, fresh, strict=True)
+                # A failed read is not a reading. Storing `none` at zero confidence would
+                # make one timeout permanent, and the next run would serve it from cache
+                # instead of trying again.
+                if req.confidence > 0.0
+            ])
+    return [c for c in cached if c is not None]
+
+
 def analyze(
-    criteria_rows: list[dict], profile_json: dict, bid_date: date | None = None
+    criteria_rows: list[dict], profile_json: dict, bid_date: date | None = None,
+    workspace_id: str | None = None,
 ) -> dict:
     """Full analysis over a locked TOM's criteria vs the vendor profile.
 
@@ -204,10 +259,7 @@ def analyze(
         if effective_kind(r) is not RequirementKind.GATE
     ]
 
-    # Evaluate criteria concurrently — each is an independent model call; sequential blows
-    # the request budget on a large tender (retry cap bounds cost per call).
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        reqs = list(pool.map(lambda row: extract_requirement(row["verbatim_text"]), gates))
+    reqs = _readings(gates, workspace_id)
 
     # A second, independent reading. `requirement_kind` classifies from the sentence's
     # vocabulary; the extractor read the whole clause and can say there is no pre-bid

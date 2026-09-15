@@ -96,3 +96,49 @@ def test_a_model_failure_is_silence_at_zero_confidence(monkeypatch):
 def test_an_empty_answer_falls_back_to_the_criterion_as_its_own_source(monkeypatch):
     _stub(monkeypatch, {"check": "none", "confidence": 0.0})
     assert analyzer.extract_requirement("the clause").raw_text == "the clause"
+
+
+# --- the stored reading -------------------------------------------------------------------------
+
+
+def test_a_requirement_survives_a_round_trip_through_jsonb():
+    from app.deterministic.facts import Requirement
+
+    req = Requirement(check=CheckType.TURNOVER_AVG, operator=">=", threshold_cr=10.0,
+                      fy_count=3, fy_labels=("FY24", "FY25"), min_count=2, years_window=5,
+                      certification_name="ISO 9001", registration_key="udyam",
+                      exemption_for=("mse",), exemption_clause="Cl. 4.5", raw_text="t",
+                      confidence=0.9)
+    assert analyzer.from_json(analyzer.to_json(req)) == req
+
+
+def test_the_stored_shape_is_plain_json():
+    """It goes into a jsonb column, so an enum or a tuple leaking through would be a write
+    error at the boundary rather than a type error anyone could see here."""
+    import json
+
+    from app.deterministic.facts import Requirement
+
+    raw = analyzer.to_json(Requirement(check=CheckType.NET_WORTH, fy_labels=("FY24",)))
+    assert json.loads(json.dumps(raw)) == raw
+    assert raw["check"] == "net_worth"
+
+
+def test_the_hash_changes_with_the_text_and_with_the_prompt(monkeypatch):
+    a = analyzer.requirement_hash("Average annual turnover of Rs 10 Crore")
+    assert a != analyzer.requirement_hash("Average annual turnover of Rs 20 Crore")
+    assert a == analyzer.requirement_hash("  Average annual turnover of Rs 10 Crore  ")
+
+    monkeypatch.setattr(analyzer, "PROMPT_DIGEST", "different")
+    assert analyzer.requirement_hash("Average annual turnover of Rs 10 Crore") != a
+
+
+def test_the_prompt_digest_is_read_from_the_file_not_hand_maintained():
+    """A version number someone must remember to bump is a cache that silently becomes the
+    product: the prompt improves, every existing tender keeps the old reading, and nothing
+    anywhere says so."""
+    import hashlib
+    from pathlib import Path
+
+    text = (Path(analyzer.__file__).resolve().parents[1] / "prompts" / "analyzer.md").read_text()
+    assert analyzer.PROMPT_DIGEST == hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]

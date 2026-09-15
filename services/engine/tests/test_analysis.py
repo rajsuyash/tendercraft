@@ -328,3 +328,110 @@ def test_a_checklist_item_that_was_never_a_gate_carries_no_note(monkeypatch):
                text="The warranty period shall be 24 months from the date of delivery.")
     out = analysis.analyze([row], PROFILE, BID_DATE)
     assert out["checklist"][0]["note"] == ""
+
+
+# --- the reading is stored, so the verdict is reproducible ---------------------------------------
+
+
+def _cached_row(cid, req: Requirement, text="Average annual turnover of Rs 10 Crore"):
+    from pipeline.analyzer import requirement_hash, to_json
+    row = _row(cid, text=text)
+    row["requirement"] = to_json(req)
+    row["requirement_hash"] = requirement_hash(text)
+    return row
+
+
+def test_a_stored_reading_is_used_and_the_model_is_not_asked_again(monkeypatch):
+    """The card used to move between identical runs, because whether a clause IS a gate
+    depends on a model reading and that reading is stochastic. Measured on the live bid: one
+    OEM-authorisation clause came back `none` at 0.90 four times in six and
+    `certification_valid` at 1.00 twice — confidently on both sides, so no threshold could
+    separate them. A compliance product may not answer the same question two ways."""
+    called: list[str] = []
+    monkeypatch.setattr(analysis, "extract_requirement",
+                        lambda text: called.append(text) or _turnover(999))
+
+    out = analysis.analyze([_cached_row("c1", _turnover(8))], PROFILE, BID_DATE)
+
+    assert called == []
+    assert out["verdicts"][0]["verdict"] == Verdict.PASS.value  # the 8, not the fresh 999
+
+
+def test_editing_the_criterion_text_re_reads_it(monkeypatch):
+    """The hash covers the text. A human correcting a mis-extracted clause must not keep the
+    reading taken from the old words."""
+    _patch(monkeypatch, {"Average annual turnover of Rs 99 Crore": _turnover(99)})
+    row = _cached_row("c1", _turnover(8))
+    row["verbatim_text"] = "Average annual turnover of Rs 99 Crore"
+
+    out = analysis.analyze([row], PROFILE, BID_DATE)
+
+    assert out["verdicts"][0]["verdict"] == Verdict.FAIL.value
+
+
+def test_editing_the_prompt_re_reads_every_tender(monkeypatch):
+    """Without the prompt's digest in the key, improving the prompt would freeze every
+    existing tender on the old reading forever — the cache silently becoming the product."""
+    from pipeline import analyzer as pa
+
+    row = _cached_row("c1", _turnover(8))
+    monkeypatch.setattr(pa, "PROMPT_DIGEST", "a-different-prompt")
+    _patch(monkeypatch, {row["verbatim_text"]: _turnover(99)})
+
+    out = analysis.analyze([row], PROFILE, BID_DATE)
+
+    assert out["verdicts"][0]["verdict"] == Verdict.FAIL.value
+
+
+def test_a_fresh_reading_is_written_back_against_its_hash(monkeypatch):
+    from pipeline.analyzer import requirement_hash
+
+    saved: list = []
+    monkeypatch.setattr(analysis.db, "save_criterion_requirements",
+                        lambda ws, rows: saved.append((ws, rows)))
+    _patch(monkeypatch, {"crit": _turnover(8)})
+
+    analysis.analyze([_row("c1")], PROFILE, BID_DATE, "ws-1")
+
+    assert saved[0][0] == "ws-1"
+    assert saved[0][1][0]["id"] == "c1"
+    assert saved[0][1][0]["requirement_hash"] == requirement_hash("crit")
+    assert saved[0][1][0]["requirement"]["check"] == "turnover_avg"
+
+
+def test_a_failed_read_is_never_stored(monkeypatch):
+    """A timeout is not a reading. Storing `none` at zero confidence would make one outage
+    permanent — the next run would serve it from cache instead of trying again."""
+    saved: list = []
+    monkeypatch.setattr(analysis.db, "save_criterion_requirements",
+                        lambda ws, rows: saved.append(rows))
+    _patch(monkeypatch, {"crit": _req(check=CheckType.NONE, confidence=0.0)})
+
+    analysis.analyze([_row("c1")], PROFILE, BID_DATE, "ws-1")
+
+    assert saved == [[]]
+
+
+def test_nothing_is_written_without_a_workspace(monkeypatch):
+    """The function stays callable with no database — which is what every test above does."""
+    def boom(*_a, **_k):
+        raise AssertionError("wrote to the database with no workspace")
+    monkeypatch.setattr(analysis.db, "save_criterion_requirements", boom)
+    _patch(monkeypatch, {"crit": _turnover(8)})
+
+    analysis.analyze([_row("c1")], PROFILE, BID_DATE)
+
+
+def test_a_row_stored_in_an_older_shape_degrades_to_needs_review(monkeypatch):
+    """Tolerant rehydration. A row written by a previous schema must not raise inside the
+    analysis of an unrelated tender; `none` at zero confidence reads needs-review, which is
+    a human looking at the clause."""
+    from pipeline.analyzer import requirement_hash
+
+    row = _row("c1")
+    row["requirement"] = {"model_verdict": "pass", "actual_value_cr": 99}
+    row["requirement_hash"] = requirement_hash("crit")
+
+    out = analysis.analyze([row], PROFILE, BID_DATE)
+
+    assert out["verdicts"][0]["verdict"] == Verdict.NEEDS_REVIEW.value
