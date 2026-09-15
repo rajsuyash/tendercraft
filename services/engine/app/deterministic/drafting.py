@@ -144,6 +144,41 @@ def classify_sentence(
     return SentenceClass.NARRATIVE
 
 
+# A claim that a document is ENCLOSED, attached or submitted.
+#
+# The drafter cannot see what will be attached — it is handed retrieved chunks, not the
+# annexure list — so any such sentence is a statement about the submission that nothing in
+# the system checked. Worse, the compliance matrix in the same document is built from real
+# rows and will say the opposite. That contradiction is a false statement to a public buyer,
+# not a wording nit.
+#
+# `prompts/section_drafter.md` has forbidden this since it was written, and a prompt is not
+# a control: this repo has already shipped a gate whose only protection was the model obeying
+# an instruction (`is_financial`, see known-pitfalls). Derived from the TEXT here, so prompt
+# obedience is no longer what stands between a drafted sentence and a false claim.
+#
+# The second half of the alternation is what keeps it usable. "Attached" as an ADJECTIVE
+# before a noun ("the attached format", quoting the tender) is the tender's own wording; it
+# is the VERB form asserting the act of enclosing that is a claim about our submission.
+_ENCLOSURE_CLAIM = re.compile(
+    r"\b(?:(?:is|are|has been|have been|being|duly|herewith)\s+(?:\w+\s+){0,2}"
+    r"(?:enclosed|attached|annexed|appended|submitted|furnished|evidenced)"
+    r"|(?:enclosed|attached|annexed|appended|submitted|furnished)\s+(?:herewith|herein|"
+    r"along ?with|as annexure|as evidence|for (?:your )?(?:perusal|reference|kind))"
+    r"|as (?:detailed|evidenced|shown|seen) in the (?:enclosed|attached|submitted|annexed)"
+    r"|(?:please|kindly) (?:find|refer to the) (?:enclosed|attached))\b",
+    re.I,
+)
+
+
+def claims_enclosure(text: str) -> bool:
+    """Does this sentence assert that something is enclosed with the bid?
+
+    True is a defect in the sentence, never a property of the bidder.
+    """
+    return bool(_ENCLOSURE_CLAIM.search(text or ""))
+
+
 def derive_flags(text: str, cls: SentenceClass) -> tuple[bool, bool]:
     """(requires_citation, is_financial) from the TEXT and resolved class — not model labels."""
     requires_citation = cls is SentenceClass.CLAIM
@@ -176,6 +211,13 @@ def validate_draft(
         # fabricated amount is never merely "unverified" — it is non-overridable.
         if r.is_financial and not r.is_transcluded:
             flags.append(SentenceFlag(r.text, "uncited_financial"))
+            continue
+        # A claim about what is enclosed with the bid. Checked on EVERY class including
+        # NARRATIVE, because that is exactly where it appears — "as detailed in the enclosed
+        # curriculum vitae" is forward-looking prose by every other test, and it is still a
+        # statement the compliance matrix in the same document will contradict.
+        if claims_enclosure(r.text):
+            flags.append(SentenceFlag(r.text, "claims_enclosure"))
             continue
         # B-FR1: a claim whose citation doesn't resolve to a retrieved chunk.
         if r.requires_citation and not any(c in valid_chunk_ids for c in r.citations):

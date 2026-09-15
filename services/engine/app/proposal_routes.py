@@ -270,8 +270,9 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
         # What was left out, and which signal was missing. Reported rather than silently
         # omitted: a section the user expected and did not get is a bug report they cannot
         # file unless the document says why it is gone.
-        "absent": [{"key": k, "missing": m}
-                   for k, m in outline.absent(sections.SECTION_SPECS, signals)],
+        "absent": [{"key": a.key, "heading": a.heading, "missing": a.missing,
+                    "because": a.because}
+                   for a in outline.absent(sections.SECTION_SPECS, signals)],
     }
     db.save_proposal_outline(workspace_id, proposal["id"], derived)
 

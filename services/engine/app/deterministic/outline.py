@@ -211,17 +211,47 @@ def derive(specs: Sequence, signals: Mapping[str, Signal]) -> tuple[OutlineEntry
     return tuple(sorted(out, key=lambda e: e.order))
 
 
-def absent(specs: Sequence, signals: Mapping[str, Signal]) -> tuple[tuple[str, str], ...]:
-    """What was left out, and which signal was missing.
+#: What each signal means in a sentence a bidder can read. The signal NAME is an internal
+#: token — "personnel", "eval_heads" — and three absent sections all reporting "(personnel)"
+#: told a reader nothing they could act on.
+_SIGNAL_MEANING = {
+    "schedule": "it states no schedule of items",
+    "forms": "it prescribes no forms",
+    "personnel": "it asks for no named personnel or CVs",
+    "solution": "it asks for no software or system design",
+    "training": "it asks for no training",
+    "support": "it asks for no ongoing support, SLA or maintenance",
+    "workplan": "it states no plan, milestones or delivery schedule",
+    "eval_heads": "it publishes no evaluation weights",
+}
+
+
+@dataclass(frozen=True)
+class AbsentEntry:
+    key: str
+    heading: str
+    missing: str   # the raw signal names, for a machine
+    because: str   # why, in a sentence, for a person
+
+
+def absent(specs: Sequence, signals: Mapping[str, Signal]) -> tuple[AbsentEntry, ...]:
+    """What was left out, and why.
 
     Reported rather than silently omitted, on the same reasoning as the analysis checklist:
     a section the user expected and did not get is a bug report they cannot file unless the
-    screen says why it is gone.
+    screen says why it is gone. It carries the HEADING as well as the key — a user-facing
+    list rendering `team_composition` is showing someone a database identifier.
     """
     missing = []
     for spec in specs:
         required = getattr(spec, "requires", frozenset())
         gaps = sorted(set(required) - set(signals))
         if gaps:
-            missing.append((spec.key, ", ".join(gaps)))
+            missing.append(AbsentEntry(
+                key=spec.key,
+                heading=getattr(spec, "heading", spec.key),
+                missing=", ".join(gaps),
+                because=" and ".join(_SIGNAL_MEANING.get(g, f"it raises no {g} signal")
+                                     for g in gaps),
+            ))
     return tuple(missing)

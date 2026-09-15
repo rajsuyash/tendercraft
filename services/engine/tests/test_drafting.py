@@ -4,9 +4,12 @@ The coercion tests are the load-bearing ones: they prove a model cannot escape a
 by mislabelling a sentence, which is what made the B-AC4 gate unreachable before.
 """
 
+import pytest
+
 from app.deterministic.drafting import (
     DraftSentence,
     claim_verifiability,
+    claims_enclosure,
     classify_sentence,
     derive_flags,
     is_money_shaped,
@@ -359,3 +362,59 @@ def test_no_prior_flags_is_not_an_error():
     assert surviving_financial_flags("anything", []) == []
     assert surviving_financial_flags("", None) == []
     assert surviving_financial_flags("x", [{"reason": "uncited_financial", "text": ""}]) == []
+
+
+# --- a claim about what is enclosed ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("text", [
+    "The curriculum vitae is enclosed for your reference.",
+    "Copies of the certificates are attached herewith.",
+    "As detailed in the enclosed curriculum vitae, the team lead has twelve years.",
+    "The completion certificate has been submitted along with the bid.",
+    "Please find attached the audited statements.",
+    "The ISO certificate is duly annexed.",
+    "Supporting documents have been furnished herewith.",
+])
+def test_a_sentence_claiming_a_document_is_enclosed_is_flagged(text):
+    """The drafter cannot see what will be attached — it is handed retrieved chunks, not the
+    annexure list. So the sentence is a statement about the submission that nothing checked,
+    and the compliance matrix in the same document is built from real rows and will say the
+    opposite. That contradiction is a false statement to a public buyer, not a wording nit."""
+    assert claims_enclosure(text) is True
+
+
+@pytest.mark.parametrize("text", [
+    # The TENDER's own wording, quoted. "Attached" as an adjective before a noun describes a
+    # form the buyer prescribed; it asserts nothing about our submission.
+    "The attached format must be signed by the authorised signatory.",
+    "Submit the certificate as per annexure attached.",
+    "The undertaking shall be in the prescribed proforma.",
+    # Ordinary claims and forward commitments.
+    "The bidder holds a valid ISO 9001 certification.",
+    "We will deploy a team of six engineers across two shifts.",
+    "Capability against each parameter is set out in Form 6.",
+])
+def test_quoting_the_tender_is_not_claiming_an_enclosure(text):
+    """A rule that fires on the tender's own words would flag half the document and get
+    switched off."""
+    assert claims_enclosure(text) is False
+
+
+def test_the_flag_blocks_export_even_in_forward_looking_prose():
+    """It is checked on EVERY class including NARRATIVE, because that is exactly where it
+    appears: "as detailed in the enclosed curriculum vitae" is forward-looking by every other
+    test this module applies, and it is still a statement the matrix will contradict.
+
+    `prompts/section_drafter.md` has forbidden this since it was written, and a prompt is not
+    a control — this repo already shipped a gate whose only protection was the model obeying
+    an instruction."""
+    out = validate_draft(
+        [DraftSentence(text="As detailed in the enclosed curriculum vitae, the team lead "
+                            "brings deep domain experience.",
+                       citations=(), cls=SentenceClass.NARRATIVE)],
+        valid_chunk_ids=set(),
+        section=SectionKind.NARRATIVE,
+    )
+    assert [f.reason for f in out.flags] == ["claims_enclosure"]
+    assert out.status == "unverified"  # which the export gate blocks on

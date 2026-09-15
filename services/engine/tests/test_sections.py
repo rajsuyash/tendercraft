@@ -462,3 +462,33 @@ def test_a_tender_with_no_criteria_produces_no_response_section_body():
     from app.sections import assemble_requirement_responses
 
     assert "No data available" in assemble_requirement_responses([], []).body_md
+
+
+def test_a_parameter_renders_its_label_not_its_database_key():
+    """`standard_ref` in a column a bidder reads is a database identifier leaking into a
+    document that goes to a public buyer."""
+    from app.sections import assemble_item_compliance
+
+    a = assemble_item_compliance({"lines": [_item_line(parameters=[
+        {"key": "standard_ref", "match": "match", "required": "IS 2266", "capability": "IS 2266"},
+    ])]})
+    assert "| Standard |" in a.body_md
+    assert "standard_ref" not in a.body_md
+
+
+def test_an_unknown_parameter_key_still_renders_rather_than_blanking():
+    from app.sections import assemble_item_compliance
+
+    a = assemble_item_compliance({"lines": [_item_line(parameters=[
+        {"key": "not_in_registry", "match": "unknown", "required": "x", "capability": ""},
+    ])]})
+    assert "not_in_registry" in a.body_md
+
+
+def test_the_unassessed_notice_links_the_page_it_names():
+    """A sentence naming an action and its destination with no way to start it is the same
+    dead end as a disabled button with no explanation."""
+    from app.sections import assemble_item_compliance
+
+    a = assemble_item_compliance({"lines": [_item_line(parameters=[])]})
+    assert "[your capability page](/capability)" in a.body_md

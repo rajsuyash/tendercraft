@@ -118,7 +118,10 @@ export interface Outline {
   derived_at: string;
   signals: Record<string, string>;
   sections: { key: string; heading: string; order: number; because: string }[];
-  absent: { key: string; missing: string }[];
+  /** `heading` and `because` are what a person reads; `key` and `missing` are the machine's
+   *  names for the same thing and must not reach the screen — a user-facing list rendering
+   *  `team_composition` is showing someone a database identifier. */
+  absent: { key: string; heading?: string; missing: string; because?: string }[];
 }
 
 export function ProposalDocument({
@@ -271,10 +274,9 @@ export function ProposalDocument({
                 <ul className="mt-2 space-y-1">
                   {outline.absent.map((a) => (
                     <li key={a.key} data-outline-absent>
-                      <span className="line-through">{a.key}</span>
-                      {" — nothing in this tender asks for it ("}
-                      {a.missing}
-                      {")"}
+                      <span className="line-through">{a.heading ?? a.key}</span>
+                      {" — not included because "}
+                      {a.because ?? `this tender raises no ${a.missing} signal`}
                     </li>
                   ))}
                 </ul>

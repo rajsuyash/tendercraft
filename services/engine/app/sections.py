@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from .deterministic import spec_params
 from .deterministic.drafting import DraftSentence, template_placeholders
 from .deterministic.eligibility import average_annual_turnover
 from .deterministic.requirement_kind import effective_kind
@@ -464,7 +465,10 @@ def assemble_item_compliance(schedule: dict | None = None) -> AssembledSection:
             state = str(m.get("match") or "unknown")
             unassessed += state == "unknown"
             offered = str(m.get("capability") or "").strip()
-            rows.append([str(m.get("key") or "—"), str(m.get("required") or "—"),
+            key = str(m.get("key") or "")
+            param = spec_params.REGISTRY.get(key)
+            rows.append([param.label if param else (key or "—"),
+                         str(m.get("required") or "—"),
                          offered or "Not recorded", label.get(state, "Not assessed")])
             if state in ("match", "equivalent") and offered:
                 # The offered value comes from a structured `product_specs` row, so it
@@ -474,10 +478,13 @@ def assemble_item_compliance(schedule: dict | None = None) -> AssembledSection:
         blocks.append(_table(["Parameter", "Tender requires", "Offered", "Status"], rows))
 
     if unassessed:
+        # Linked, not named. A sentence that names an action and its destination without
+        # offering a way to start it is the same dead end as a disabled button with no
+        # explanation — the defect this plan removed from three other screens.
         blocks.append(
-            f"_{unassessed} parameter(s) could not be assessed. Record the capability on "
-            "/capability, or state the offer for each line, before this section can be "
-            "exported._"
+            f"_{unassessed} parameter(s) could not be assessed. Record what you can make on "
+            "[your capability page](/capability), then re-generate this document. Until then "
+            "this section cannot be exported._"
         )
     return AssembledSection(
         "\n\n".join(blocks), tuple(sents),

@@ -205,7 +205,26 @@ def test_a_gated_section_names_the_row_that_included_it():
 def test_what_was_left_out_names_the_missing_signal():
     """Reported rather than silently omitted: a section the user expected and did not get is
     a bug report they cannot file unless the screen says why it is gone."""
-    assert absent([UNIVERSAL, GATED, TWO], {}) == (("cvs", "personnel"),
-                                                   ("both", "personnel, schedule"))
+    assert [(a.key, a.missing) for a in absent([UNIVERSAL, GATED, TWO], {})] == [
+        ("cvs", "personnel"), ("both", "personnel, schedule")]
     signals = detect_signals([crit("Key personnel CVs required.")])
-    assert absent([UNIVERSAL, GATED, TWO], signals) == (("both", "schedule"),)
+    assert [(a.key, a.missing) for a in absent([UNIVERSAL, GATED, TWO], signals)] == [
+        ("both", "schedule")]
+
+
+def test_an_absent_section_is_named_by_its_heading_and_explained_in_a_sentence():
+    """A user-facing list rendering `team_composition` is showing someone a database
+    identifier, and three entries all reading "(personnel)" explain nothing a reader can
+    act on."""
+    from app.sections import SPEC_BY_KEY
+
+    [entry] = [a for a in absent(list(SPEC_BY_KEY.values()), {}) if a.key == "cvs"]
+    assert entry.heading == "Form 10: Curriculum Vitae of Key Personnel"
+    assert entry.because == "it asks for no named personnel or CVs"
+
+
+def test_a_signal_with_no_written_meaning_still_produces_a_sentence():
+    """A new signal added without a line in the table must degrade to something readable
+    rather than to a blank."""
+    assert absent([Spec("x", requires=frozenset({"quantum"}))], {})[0].because == (
+        "it raises no quantum signal")
