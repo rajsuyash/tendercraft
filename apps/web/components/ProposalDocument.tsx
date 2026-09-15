@@ -100,18 +100,28 @@ function Body({ md }: { md: string }) {
   return <>{blocks}</>;
 }
 
+export type ExportDecision = {
+  exportable: boolean;
+  hard_blockers: string[];
+  override_blockers: string[];
+};
+
 export function ProposalDocument({
   tenderId,
   proposalId,
   tenderTitle,
   sections,
   totalWords,
+  exportDecision = null,
 }: {
   tenderId: string;
   proposalId: string | null;
   tenderTitle: string;
   sections: DocSection[];
   totalWords: number;
+  /** The engine's own export decision. `null` when it could not be read, which is treated
+   *  as a shut gate — see the note beside `canDownload`. */
+  exportDecision?: ExportDecision | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -142,6 +152,16 @@ export function ProposalDocument({
   }
 
   const unapproved = sections.filter((s) => s.kind === "narrative" && !s.approved_at);
+  // The SERVER's decision, not a local guess at it. Approving every narrative section is a
+  // strict subset of the export rule — which also enforces the approval chain, segregation
+  // of duties, open placeholders, mandatory-row statuses and the non-overridable financial
+  // gate — so this link used to go live while the endpoint returned 409, ejecting the user
+  // onto a raw JSON envelope of UUIDs and AC codes. `null` means the decision could not be
+  // read, and an unknown gate is treated as shut.
+  const canDownload = exportDecision?.exportable === true;
+  const downloadBlockers = exportDecision
+    ? [...exportDecision.hard_blockers, ...exportDecision.override_blockers]
+    : [];
 
   async function post(path: string, label: string) {
     setBusy(label);
@@ -234,7 +254,7 @@ export function ProposalDocument({
           >
             Compliance &amp; export
           </Link>
-          {unapproved.length === 0 ? (
+          {canDownload ? (
             <a
               href={`/api/tenders/${tenderId}/export/docx`}
               data-download-docx
@@ -243,16 +263,21 @@ export function ProposalDocument({
               Download .docx
             </a>
           ) : (
-            // Never a live primary link while the gate is shut. It used to navigate the
-            // user out of the app onto a raw JSON envelope full of UUIDs and AC codes.
+            // Never a live primary link while the gate is shut.
             <span
               data-download-blocked
-              title={`${unapproved.length} section${
-                unapproved.length === 1 ? "" : "s"
-              } still need approval before this can be downloaded`}
+              data-blocker-count={downloadBlockers.length}
+              title={
+                downloadBlockers.length
+                  ? downloadBlockers.join("\n")
+                  : "The export gate has not been read — open Compliance & export."
+              }
               className="cursor-not-allowed rounded bg-surface-alt px-3 py-2 text-sm font-medium text-muted"
             >
-              Download .docx — {unapproved.length} to approve
+              Download .docx —{" "}
+              {downloadBlockers.length
+                ? `${downloadBlockers.length} to resolve`
+                : "gate not read"}
             </span>
           )}
         </div>

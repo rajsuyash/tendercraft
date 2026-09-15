@@ -481,6 +481,7 @@ export function OpportunityFeed({
   // The count comes from the server too, for the same reason: counted here it could only ever
   // describe the rows this page happened to receive.
   const closedCount = data.counts.closed ?? 0;
+  const [sweepError, setSweepError] = useState<string | null>(null);
   const visibleItems = items;
 
   // Workspace-wide, from the server. Counting the rows on THIS page made the figure read 21 on
@@ -587,9 +588,30 @@ export function OpportunityFeed({
 
   async function refresh() {
     setSweeping(true);
+    setSweepError(null);
     try {
-      await fetch("/api/opportunities/refresh?max_pages=3", { method: "POST" });
+      // The response was awaited and thrown away, so a sweep that failed — a connector down,
+      // a source refusing, an envelope carrying an error code — looked exactly like a sweep
+      // that found nothing new. A feed whose whole promise is coverage cannot fail silently.
+      const res = await fetch("/api/opportunities/refresh?max_pages=3", { method: "POST" });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.ok) {
+        setSweepError(body?.error?.message ?? t("The sweep did not complete"));
+      } else {
+        // Per MARKET, not one number: one healthy connector must never vouch for a dead one,
+        // the same reasoning the freshness header already uses. The engine has always
+        // reported this — `ingest.refresh_markets` collects per-market failures rather than
+        // raising precisely so the response can carry them — and nothing read it.
+        const failed: { market: string; error: string }[] = body.data?.swept?.failed ?? [];
+        if (failed.length) {
+          setSweepError(
+            `${t("No response from")}: ${failed.map((f) => f.market).join(", ")}`,
+          );
+        }
+      }
       startTransition(() => router.refresh());
+    } catch {
+      setSweepError(t("The sweep could not be reached"));
     } finally {
       setSweeping(false);
     }
@@ -675,6 +697,14 @@ export function OpportunityFeed({
           >
             {busy ? t("Sweeping {portal}…").replace("{portal}", portal) : t("Refresh")}
           </button>
+          {sweepError && (
+            <span
+              data-sweep-error
+              className="rounded-control border border-danger bg-danger-bg px-2 py-1 text-xs text-danger"
+            >
+              {sweepError}
+            </span>
+          )}
           {/* Only offered when there is something to check — a button that can only ever say
               "nothing to check" is furniture. */}
           {watchedCount > 0 && (

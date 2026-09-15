@@ -1,17 +1,33 @@
 import { notFound } from "next/navigation";
 
-import { ProposalDocument, type DocSection } from "@/components/ProposalDocument";
+import {
+  ProposalDocument,
+  type DocSection,
+  type ExportDecision,
+} from "@/components/ProposalDocument";
+import { engineFetch } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 
 // S9 — Proposal document. `id` here is the tender id (one proposal per tender).
 export default async function ProposalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [{ data: tender }, { data: proposal }] = await Promise.all([
+  // The export decision goes out WITH the other two rather than after them: the download
+  // button is gated on it, and a serial third round trip would pay the app-to-database
+  // latency this codebase has already been bitten by.
+  const [{ data: tender }, { data: proposal }, gateRes] = await Promise.all([
     supabase.from("tenders").select("id,title,status").eq("id", id).single(),
     supabase.from("proposals").select("id,status").eq("tender_id", id).maybeSingle(),
+    engineFetch(`/api/tenders/${id}/compliance-matrix`),
   ]);
   if (!tender) notFound();
+
+  // A gate that could not be read is a shut gate, never an open one.
+  let exportDecision: ExportDecision | null = null;
+  if (gateRes.ok) {
+    const body = await gateRes.json().catch(() => null);
+    if (body?.ok) exportDecision = body.data as ExportDecision;
+  }
 
   let sections: DocSection[] = [];
   if (proposal) {
@@ -30,6 +46,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
       tenderTitle={tender.title}
       sections={sections}
       totalWords={sections.reduce((n, s) => n + (s.word_count ?? 0), 0)}
+      exportDecision={exportDecision}
     />
   );
 }

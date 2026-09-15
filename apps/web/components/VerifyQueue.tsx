@@ -24,6 +24,23 @@ function anchorLabel(c: Criterion, withDocument: boolean): string {
   return sourceAnchor(c.anchor_page, c.anchor_clause, withDocument ? c.anchor_document : null);
 }
 
+/** Does this criterion block the TOM lock?
+ *
+ *  Mirrors the server gate exactly — `deterministic/lock.py::evaluate_lock` plus
+ *  `types.SourceAnchor.is_resolvable`, which is `page > 0`. **Not a clause.**
+ *
+ *  Exported so it can be tested against that contract, because it was wrong and nothing on
+ *  either side of the wire noticed. It also demanded a clause, and the comment above it said
+ *  that was the server's rule. It never was: `tests/test_lock_gate.py` pins the looser
+ *  contract on purpose, after a real NABARD RFP produced 12 of 192 criteria from unnumbered
+ *  prose. The effect was a permanently disabled Lock button on any prose-anchored tender,
+ *  with no affordance anywhere to supply the clause being demanded — a dead end created
+ *  entirely by the client being stricter than the thing it claimed to mirror.
+ */
+export function blocksLock(c: Criterion): boolean {
+  return (!c.confirmed && c.confidence < CONFIRM_THRESHOLD) || !c.anchor_page;
+}
+
 // S4 — verification queue. Lock is disabled while any sub-0.80 item is unconfirmed,
 // and the blocker count is exposed as [data-lock-blocked-count] (S4-D1).
 export function VerifyQueue({
@@ -46,12 +63,7 @@ export function VerifyQueue({
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Mirror the server lock gate exactly (deterministic/lock.py): a criterion blocks the
-  // lock if it's sub-0.80 and unconfirmed, OR it lacks a resolvable page+clause anchor.
-  const blocked = items.filter(
-    (c) =>
-      (!c.confirmed && c.confidence < CONFIRM_THRESHOLD) || !c.anchor_page || !c.anchor_clause,
-  );
+  const blocked = items.filter(blocksLock);
   const blockedCount = blocked.length;
   const confirmedCount = items.filter((c) => c.confirmed).length;
 

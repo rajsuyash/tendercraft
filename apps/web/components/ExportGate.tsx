@@ -50,6 +50,38 @@ export function ExportGate({
   const blockerCount = blockers.length;
   const done = new Set(matrix.approvals.map((a) => a.stage));
 
+  /** Record the export, then hand over the file.
+   *
+   *  The button says "Export final documents" and used to produce the word "Exported." and a
+   *  page refresh. The bytes lived on a different screen entirely — a user had to navigate
+   *  back to /proposals/:id to find the download — so the most consequential control in the
+   *  product delivered nothing it named.
+   *
+   *  Two requests rather than one on purpose. `docs/conventions.md` makes the binary
+   *  download the single documented exception to the response envelope, and it is the GET
+   *  that holds it: every state-changing POST keeps `{ok,data,error}`. So the POST records
+   *  the export and the audit row, and only then does the browser fetch the file. The GET
+   *  stays idempotent, which is also what makes re-download work.
+   */
+  async function exportNow(override = false) {
+    setBusy(true);
+    setMsg(null);
+    const q = override ? "?override=true" : "";
+    const res = await fetch(`/api/tenders/${tenderId}/export${q}`, { method: "POST" });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      setMsg(body?.error?.message ?? "Failed");
+      setBusy(false);
+      return;
+    }
+    setMsg(override ? "Exported (override logged). Downloading…" : "Exported. Downloading…");
+    // Same tab: a download response does not navigate, so the page stays put and the
+    // refresh below still lands. `_blank` would leave an empty tab behind.
+    window.location.href = `/api/tenders/${tenderId}/export/docx${q}`;
+    router.refresh();
+    setBusy(false);
+  }
+
   async function post(url: string, okMsg: string) {
     setBusy(true);
     setMsg(null);
@@ -82,7 +114,7 @@ export function ExportGate({
         </div>
         <div className="text-right">
           <button
-            onClick={() => post(`/api/tenders/${tenderId}/export`, "Exported.")}
+            onClick={() => void exportNow()}
             disabled={!matrix.exportable || busy}
             data-export
             className="rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
@@ -93,7 +125,7 @@ export function ExportGate({
             <div className="mt-2">
               {/* S10-D3: admin override is secondary-styled with a warning, never the primary */}
               <button
-                onClick={() => post(`/api/tenders/${tenderId}/export?override=true`, "Exported (override logged).")}
+                onClick={() => void exportNow(true)}
                 disabled={busy}
                 data-admin-override
                 className="rounded border border-warning px-3 py-1 text-xs font-medium text-warning hover:bg-warning-bg disabled:opacity-50"
@@ -101,6 +133,17 @@ export function ExportGate({
                 ⚠ Admin override (logged)
               </button>
             </div>
+          )}
+          {matrix.exportable && (
+            <p className="mt-2">
+              <a
+                href={`/api/tenders/${tenderId}/export/docx`}
+                data-download-docx
+                className="text-xs font-medium text-primary underline"
+              >
+                Download again (.docx)
+              </a>
+            </p>
           )}
           {msg && <p className="mt-1 text-xs text-muted">{msg}</p>}
         </div>
