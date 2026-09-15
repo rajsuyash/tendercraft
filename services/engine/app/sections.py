@@ -19,9 +19,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from .deterministic.drafting import DraftSentence
+from .deterministic.drafting import DraftSentence, template_placeholders
 from .deterministic.eligibility import average_annual_turnover
-from .deterministic.types import SectionKind, SentenceClass
+from .deterministic.requirement_kind import effective_kind
+from .deterministic.types import RequirementKind, SectionKind, SentenceClass
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,14 @@ class SectionSpec:
     # NOT grounds to skip them — an empty section scores zero. Whether a section may bail is
     # a deterministic decision; left to the model it self-vetoes on noisy retrieval.
     needs_bidder_evidence: bool = False
+    # Which SIGNALS the tender must carry for this section to be included
+    # (`app/deterministic/outline.py`). Empty means universal — a covering letter and an
+    # evidence index belong in every bid regardless of what is being bought.
+    #
+    # This is what turns SECTION_SPECS from *the outline* into *the catalogue*. Derivation
+    # picks entries from here; it may never mint a key, because a fresh key would have no
+    # drafting brief, no assembler, no rubric emphasis and no stable `answer_usages.target`.
+    requires: frozenset[str] = frozenset()
 
 
 # Ordered as a bid is actually submitted: covering letter, PQ compliance, then the
@@ -54,19 +63,21 @@ SECTION_SPECS: tuple[SectionSpec, ...] = (
                 "scope of work objectives deliverables requirements"),
     SectionSpec("solution", "Form 7(a): Proposed Solution and Technical Architecture", 40,
                 SectionKind.NARRATIVE, 3000,
-                "solution architecture technology platform infrastructure security integration"),
+                "solution architecture technology platform infrastructure security integration",
+                requires=frozenset({"solution"})),
     SectionSpec("approach_methodology", "Form 7(c): Technical Approach and Methodology", 50,
                 SectionKind.NARRATIVE, 2500,
                 "implementation methodology phases delivery governance"),
     SectionSpec("workplan", "Form 8: Proposed Work Plan", 60,
                 SectionKind.NARRATIVE, 800,
-                "timeline milestones deliverables work breakdown"),
+                "timeline milestones deliverables work breakdown",
+                requires=frozenset({"workplan"})),
     SectionSpec("team_composition", "Form 9: Team Composition", 70,
-                SectionKind.COMPLIANCE, 0),
+                SectionKind.COMPLIANCE, 0, requires=frozenset({"personnel"})),
     SectionSpec("cvs", "Form 10: Curriculum Vitae of Key Personnel", 80,
-                SectionKind.COMPLIANCE, 0),
+                SectionKind.COMPLIANCE, 0, requires=frozenset({"personnel"})),
     SectionSpec("deployment", "Form 11: Deployment of Personnel", 90,
-                SectionKind.COMPLIANCE, 0),
+                SectionKind.COMPLIANCE, 0, requires=frozenset({"personnel"})),
     SectionSpec("project_citations", "Form 6: Project Citation Format", 100,
                 SectionKind.COMPLIANCE, 0),
     SectionSpec("qa", "Quality Assurance and Testing Approach", 110,
@@ -74,17 +85,33 @@ SECTION_SPECS: tuple[SectionSpec, ...] = (
                 "quality assurance testing UAT defect management standards"),
     SectionSpec("training", "Training and Capacity Building", 120,
                 SectionKind.NARRATIVE, 1000,
-                "training capacity building user manuals handholding"),
+                "training capacity building user manuals handholding",
+                requires=frozenset({"training"})),
     SectionSpec("support_sla", "Support, SLA and Operations & Maintenance", 130,
                 SectionKind.NARRATIVE, 1200,
-                "support helpdesk SLA maintenance warranty operations"),
+                "support helpdesk SLA maintenance warranty operations",
+                requires=frozenset({"support"})),
     SectionSpec("risk", "Risk Management and Mitigation", 140,
                 SectionKind.NARRATIVE, 1000,
                 "risk mitigation contingency dependencies"),
+    # Goods bids: one group per schedule line, a parameter table per group. Gated on the
+    # schedule actually existing, so a services tender never renders an empty grid.
+    SectionSpec("item_compliance", "Item-wise Technical Compliance", 145,
+                SectionKind.COMPLIANCE, 0, requires=frozenset({"schedule"})),
     SectionSpec("deviations", "Form 12: Deviations", 150,
+                SectionKind.COMPLIANCE, 0),
+    # The per-criterion drafts, in the document. `do_generate` already pays a model call per
+    # criterion and validates every sentence, and until now that work reached the exported
+    # file only as the word "Comply" in a matrix cell. Universal: every tender has
+    # requirements, so every proposal answers them.
+    SectionSpec("requirement_responses", "Responses to Tender Requirements", 155,
                 SectionKind.COMPLIANCE, 0),
     SectionSpec("compliance_matrix", "Technical Compliance Matrix", 160,
                 SectionKind.COMPLIANCE, 0),
+    # An INDEX of the templates the tender prescribes and where it asks for them — never the
+    # forms themselves. A drafter must not author the body of a certificate the bidder signs.
+    SectionSpec("prescribed_forms", "Prescribed Forms and Declarations", 165,
+                SectionKind.COMPLIANCE, 0, requires=frozenset({"forms"})),
     SectionSpec("annexures", "Annexures and Evidence Index", 170,
                 SectionKind.COMPLIANCE, 0),
 )
@@ -129,6 +156,11 @@ def _fmt_cr(v) -> str:
 class AssembledSection:
     body_md: str
     sentences: tuple[DraftSentence, ...]
+    #: An assembled section used to be `drafted` unconditionally, which was true while every
+    #: assembler read structured rows that either existed or did not. `item_compliance` makes
+    #: a clause-by-clause claim about goods the bidder will be bound to supply, so it has to
+    #: be able to say "this is not finished" in the one vocabulary the export gate reads.
+    status: str = "drafted"
 
 
 def assemble_project_citations(experience: list[dict]) -> AssembledSection:
@@ -341,24 +373,189 @@ def assemble_deviations(schedule: dict | None = None) -> AssembledSection:
     return AssembledSection("\n\n".join(parts), ())
 
 
-def assemble_compliance_matrix(criteria: list[dict], responses: list[dict]) -> AssembledSection:
-    """Clause-by-clause Comply / Not Comply table, cross-referenced to the response."""
+def assemble_compliance_matrix(
+    criteria: list[dict], responses: list[dict], has_responses_section: bool = False
+) -> AssembledSection:
+    """Clause-by-clause index of where each requirement is answered.
+
+    IT NO LONGER SAYS "Comply". A draft status of `drafted` means a model wrote a response
+    and the citation validator did not flag it; it does not mean the bidder complies, and
+    printing that word to a public buyer on the strength of it is a claim nobody made. The
+    same mapping turned `placeholder` into "Not addressed", which reads as a decision rather
+    than as unfinished work.
+
+    So the column becomes a cross-reference into `requirement_responses`, where the actual
+    answer now lives, and the state column describes the RESPONSE rather than the bidder:
+    answered / source pending / not yet answered. Whether the bidder complies is a judgement
+    the bid owner makes and signs, which is the same reasoning that keeps `assemble_deviations`
+    from defaulting to a nil-deviation statement.
+    """
     by_crit = {r.get("criterion_id"): r for r in responses}
-    status_label = {
-        "drafted": "Comply", "unverified": "Comply (source pending)",
-        "placeholder": "Not addressed", "missing": "Not addressed",
+    state_label = {
+        "drafted": "Answered",
+        "unverified": "Answered — source pending",
+        "placeholder": "Not yet answered",
+        "missing": "Not yet answered",
     }
     rows = []
-    for c in criteria:
+    for i, c in enumerate(criteria, 1):
         r = by_crit.get(c["id"], {})
         rows.append([
             (c.get("verbatim_text") or "")[:160],
             str(c.get("requirement_level") or "—"),
-            status_label.get(r.get("draft_status"), "Not addressed"),
+            state_label.get(r.get("draft_status"), "Not yet answered"),
+            f"Requirement responses, item {i}" if has_responses_section else "—",
             str(c.get("source_anchor") or c.get("anchor_clause") or "—"),
         ])
     return AssembledSection(
-        _table(["Requirement", "Level", "Compliance", "Tender reference"], rows), ()
+        "_This index says where each requirement is answered, not whether the bidder "
+        "complies. Compliance is the bid owner's judgement to make and sign._\n\n"
+        + _table(
+            ["Requirement", "Level", "Response state", "Answered in", "Tender reference"],
+            rows,
+        ),
+        (),
+    )
+
+
+def assemble_item_compliance(schedule: dict | None = None) -> AssembledSection:
+    """One group per schedule line, a parameter table per group. The goods path's answer to
+    a Technical Compliance section, and the first place the goods path transcludes anything.
+
+    THE RULE THIS SECTION IS SHAPED AROUND: an unassessed parameter renders "Not assessed",
+    never "Comply". The same asymmetry `spec_match` is built on, and it matters more here
+    than anywhere else in the document — this table is a clause-by-clause statement to a
+    public buyer about goods the bidder will be contractually bound to supply. So a line
+    carrying any unknown forces the SECTION to `placeholder`, which the export gate blocks
+    on, rather than exporting a compliance claim nobody checked.
+
+    The negative test that shaped it is the Oil India package, whose BOQ csv is an unfilled
+    template — literal `Title1` / `Description1` cells. Against that input this must render
+    "not assessed" and refuse to export, not claim compliance against `Description1`.
+    """
+    lines = list((schedule or {}).get("lines") or [])
+    if not lines:
+        return AssembledSection(_EMPTY, (), status="placeholder")
+
+    label = {"match": "Comply", "deviation": "Deviation", "equivalent": "Equivalent offered",
+             "unknown": "Not assessed"}
+    blocks: list[str] = []
+    sents: list[DraftSentence] = []
+    unassessed = 0
+
+    for line in lines:
+        ref = " · ".join(
+            str(x) for x in (line.get("schedule_ref"), line.get("item_ref")) if x
+        ) or "Unnumbered line"
+        desc = " ".join(str(line.get("description") or "").split())[:120] or "—"
+        blocks.append(f"**{ref}** — {desc}")
+
+        params = list(line.get("parameters") or [])
+        if not params:
+            unassessed += 1
+            blocks.append(
+                "_No technical parameter was read from this line, so nothing has been "
+                "compared. This is unknown, not compliance._"
+            )
+            continue
+
+        rows = []
+        for m in params:
+            state = str(m.get("match") or "unknown")
+            unassessed += state == "unknown"
+            offered = str(m.get("capability") or "").strip()
+            rows.append([str(m.get("key") or "—"), str(m.get("required") or "—"),
+                         offered or "Not recorded", label.get(state, "Not assessed")])
+            if state in ("match", "equivalent") and offered:
+                # The offered value comes from a structured `product_specs` row, so it
+                # transcludes — the goods path's first exemption from B-AC4, and the only
+                # honest way to state a number the bidder will be held to.
+                sents.append(_val(offered, f"product_specs:{line.get('id')}.{m.get('key')}"))
+        blocks.append(_table(["Parameter", "Tender requires", "Offered", "Status"], rows))
+
+    if unassessed:
+        blocks.append(
+            f"_{unassessed} parameter(s) could not be assessed. Record the capability on "
+            "/capability, or state the offer for each line, before this section can be "
+            "exported._"
+        )
+    return AssembledSection(
+        "\n\n".join(blocks), tuple(sents),
+        status="placeholder" if unassessed else "drafted",
+    )
+
+
+def assemble_prescribed_forms(criteria: list[dict]) -> AssembledSection:
+    """An INDEX of the templates this tender prescribes and where it asks for them.
+
+    Never the forms themselves. A drafter must not author the body of a certificate the
+    bidder signs — a generated undertaking is a false statement with the bidder's name on it,
+    and an unfilled template reaching the library is already a known way for placeholder text
+    to arrive in a submission wearing a citation.
+
+    A form still carrying a blank marker is called out by name, because that is the state a
+    bidder loses a bid to: the template was attached and nobody filled it in.
+    """
+    rows = []
+    for c in criteria:
+        if effective_kind(c) is not RequirementKind.FORM:
+            continue
+        text = " ".join(str(c.get("verbatim_text") or "").split())
+        blanks = template_placeholders(text)
+        rows.append([
+            text[:140] + ("…" if len(text) > 140 else ""),
+            str(c.get("requirement_level") or "—"),
+            str(c.get("source_anchor") or c.get("anchor_clause")
+                or (f"p.{c['anchor_page']}" if c.get("anchor_page") else "—")),
+            "Blanks to fill" if blanks else "Attach signed",
+        ])
+    if not rows:
+        return AssembledSection(_EMPTY, ())
+    return AssembledSection(
+        "_This tender prescribes the following forms. Attach each one signed; the text of a "
+        "declaration is the bidder's to write, never this system's._\n\n"
+        + _table(["Form / declaration", "Level", "Tender reference", "Action"], rows),
+        (),
+    )
+
+
+def assemble_requirement_responses(criteria: list[dict], responses: list[dict]) -> AssembledSection:
+    """The per-criterion drafts, in the document.
+
+    `do_generate` already pays a model call per criterion and validates every sentence, and
+    until now that work reached the exported document only as the word "Comply" in a matrix
+    cell. Here it is the response itself.
+
+    Flags are deliberately NOT carried across. They are already reported on the per-criterion
+    layer and by the export gate; repeating them here would report one blocker twice under
+    two names, which is the disagreeing-counters problem `submission.py` was written about.
+    The stored sentences ARE carried, because they were validated and they hold the
+    transclusions.
+    """
+    by_crit = {r.get("criterion_id"): r for r in responses}
+    blocks: list[str] = []
+    sents: list[DraftSentence] = []
+    open_count = 0
+
+    for c in criteria:
+        r = by_crit.get(c["id"])
+        text = " ".join(str(c.get("verbatim_text") or "").split())
+        ref = str(c.get("source_anchor") or c.get("anchor_clause")
+                  or (f"p.{c['anchor_page']}" if c.get("anchor_page") else "—"))
+        body = " ".join(str((r or {}).get("draft_text") or "").split())
+        if not body:
+            open_count += 1
+            body = ("_No response drafted for this requirement yet._")
+        blocks.append(f"**{ref}** — {text[:200]}\n\n{body}")
+        for raw in ((r or {}).get("sentences") or []):
+            if isinstance(raw, dict) and raw.get("is_transcluded"):
+                sents.append(_val(str(raw.get("text") or ""), str(raw.get("source_ref") or "")))
+
+    if not blocks:
+        return AssembledSection(_EMPTY, ())
+    return AssembledSection(
+        "\n\n".join(blocks), tuple(sents),
+        status="placeholder" if open_count else "drafted",
     )
 
 

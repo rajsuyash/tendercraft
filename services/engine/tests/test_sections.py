@@ -195,10 +195,25 @@ def test_matrix_maps_status_and_flags_gaps():
         {"id": "c2", "verbatim_text": "ISO 9001", "requirement_level": "desirable"},
     ]
     responses = [{"criterion_id": "c1", "draft_status": "drafted"}]
-    body = assemble_compliance_matrix(criteria, responses).body_md
-    assert "Comply" in body
-    assert "Not addressed" in body  # c2 has no response
+    body = assemble_compliance_matrix(criteria, responses, has_responses_section=True).body_md
+
+    # It no longer says "Comply". A draft status of `drafted` means a model wrote a response
+    # and the validator did not flag it; printing that as compliance to a public buyer is a
+    # claim nobody made. The column describes the RESPONSE.
+    assert "Comply" not in body
+    assert "Answered" in body
+    assert "Not yet answered" in body  # c2 has no response — unfinished, not a decision
+    assert "Requirement responses, item 1" in body  # a cross-reference, not a verdict
     assert "p.8 Cl.3.1" in body
+    assert "not whether the bidder complies" in body
+
+
+def test_the_matrix_does_not_point_at_a_section_the_tender_did_not_select():
+    """The cross-reference names a place in the document. If `requirement_responses` is not
+    in the outline, pointing at it sends the reader somewhere that does not exist."""
+    criteria = [{"id": "c1", "verbatim_text": "Turnover", "requirement_level": "mandatory"}]
+    body = assemble_compliance_matrix(criteria, [], has_responses_section=False).body_md
+    assert "Requirement responses" not in body
 
 
 # --- annexures ---
@@ -296,3 +311,154 @@ def test_no_turnover_gate_means_no_window_rather_than_a_guessed_one():
     assert _required_fys({"verdicts": []}) == ()
     # A turnover gate whose window could not be resolved must not fall through to a default.
     assert _required_fys({"verdicts": [{"check": "turnover_avg", "fy_window": []}]}) == ()
+
+
+# --- item compliance (the goods path) ---------------------------------------------------------
+
+
+def _item_line(**kw):
+    row = {"id": "l1", "schedule_ref": "Schedule-A", "item_ref": "14",
+           "description": "Wire rope 32mm 6x36", "parameters": []}
+    row.update(kw)
+    return row
+
+
+def test_an_assessed_line_states_what_is_offered_and_transcludes_it():
+    from app.sections import assemble_item_compliance
+
+    a = assemble_item_compliance({"lines": [_item_line(parameters=[
+        {"key": "diameter_mm", "match": "match", "required": "32 mm", "capability": "32 mm"},
+    ])]})
+
+    assert a.status == "drafted"
+    assert "Comply" in a.body_md
+    # The offered value comes from a structured product_specs row, so it transcludes — the
+    # goods path's first exemption from B-AC4 and the only honest way to state a number the
+    # bidder will be held to.
+    assert [s.is_transcluded for s in a.sentences] == [True]
+    assert a.sentences[0].source_ref.startswith("product_specs:l1.")
+
+
+def test_an_unassessed_parameter_never_reads_as_comply_and_blocks_the_export():
+    """The same asymmetry `spec_match` is built on, and it matters more here than anywhere
+    else in the document: this table is a clause-by-clause statement to a public buyer about
+    goods the bidder will be contractually bound to supply."""
+    from app.sections import assemble_item_compliance
+
+    a = assemble_item_compliance({"lines": [_item_line(parameters=[
+        {"key": "construction", "match": "unknown", "required": "6x36", "capability": ""},
+    ])]})
+
+    assert "Not assessed" in a.body_md
+    assert "Comply" not in a.body_md
+    assert a.status == "placeholder"  # which the export gate blocks on
+    assert a.sentences == ()
+
+
+def test_an_unfilled_boq_template_refuses_to_claim_compliance():
+    """The plan's negative test, and the Oil India package is the real input: its BOQ csv is
+    an unfilled template with literal `Title1` / `Description1` cells, so nothing was read
+    from any line."""
+    from app.sections import assemble_item_compliance
+
+    a = assemble_item_compliance({"lines": [
+        _item_line(id="l1", item_ref="1", description="Description1", parameters=[]),
+        _item_line(id="l2", item_ref="2", description="Description2", parameters=[]),
+    ]})
+
+    assert a.status == "placeholder"
+    assert "nothing has been compared" in a.body_md
+    assert "Comply" not in a.body_md
+
+
+def test_no_schedule_at_all_is_a_placeholder_not_a_clean_sheet():
+    from app.sections import assemble_item_compliance
+
+    assert assemble_item_compliance({"lines": []}).status == "placeholder"
+    assert assemble_item_compliance(None).status == "placeholder"
+
+
+def test_a_line_with_no_reference_is_still_named():
+    from app.sections import assemble_item_compliance
+
+    a = assemble_item_compliance({"lines": [_item_line(schedule_ref=None, item_ref=None)]})
+    assert "Unnumbered line" in a.body_md
+
+
+# --- prescribed forms -------------------------------------------------------------------------
+
+
+def test_the_forms_section_indexes_the_templates_and_never_writes_one():
+    """A drafter must not author the body of a certificate the bidder signs: a generated
+    undertaking is a false statement with the bidder's name on it."""
+    from app.sections import assemble_prescribed_forms
+
+    a = assemble_prescribed_forms([
+        {"id": "c1", "verbatim_text": "Make in India certificate as per format enclosed.",
+         "requirement_level": "mandatory", "anchor_page": 31},
+        {"id": "c2", "verbatim_text": "The warranty period shall be 24 months.",
+         "requirement_level": "mandatory", "anchor_page": 12},
+    ])
+
+    assert "Make in India certificate" in a.body_md
+    assert "warranty period" not in a.body_md  # not a form
+    assert "Attach signed" in a.body_md
+    assert "the bidder's to write, never this system's" in a.body_md
+    assert a.sentences == ()
+
+
+def test_a_form_still_carrying_blanks_is_called_out_by_name():
+    """The state a bidder loses a bid to: the template was attached and nobody filled it in."""
+    from app.sections import assemble_prescribed_forms
+
+    a = assemble_prescribed_forms([{
+        "id": "c1", "requirement_level": "mandatory", "anchor_page": 40,
+        "verbatim_text": "The details of the location(s) are as follows: ________________",
+    }])
+    assert "Blanks to fill" in a.body_md
+
+
+def test_a_tender_prescribing_no_form_says_so():
+    from app.sections import assemble_prescribed_forms
+
+    a = assemble_prescribed_forms([{"id": "c1", "verbatim_text": "Warranty is 24 months."}])
+    assert "No data available" in a.body_md
+
+
+# --- requirement responses --------------------------------------------------------------------
+
+
+def test_the_per_criterion_drafts_reach_the_document():
+    """`do_generate` already pays a model call per criterion and validates every sentence,
+    and until now that work reached the exported file only as the word "Comply"."""
+    from app.sections import assemble_requirement_responses
+
+    a = assemble_requirement_responses(
+        [{"id": "c1", "verbatim_text": "Average annual turnover of Rs 5 Crore.",
+          "source_anchor": "p.8 · Cl. 3.1"}],
+        [{"criterion_id": "c1", "draft_text": "The bidder meets the stated turnover test.",
+          "sentences": [{"text": "₹8.20 Cr", "is_transcluded": True,
+                         "source_ref": "profile_financials:avg"}]}],
+    )
+
+    assert "The bidder meets the stated turnover test." in a.body_md
+    assert "p.8 · Cl. 3.1" in a.body_md
+    assert a.status == "drafted"
+    # The validated transclusions are carried; the FLAGS are not, or one blocker is reported
+    # twice under two names.
+    assert [s.text for s in a.sentences] == ["₹8.20 Cr"]
+
+
+def test_an_unanswered_requirement_makes_the_section_a_placeholder():
+    from app.sections import assemble_requirement_responses
+
+    a = assemble_requirement_responses(
+        [{"id": "c1", "verbatim_text": "Turnover", "anchor_page": 8}], [])
+    assert a.status == "placeholder"
+    assert "No response drafted" in a.body_md
+
+
+def test_a_tender_with_no_criteria_produces_no_response_section_body():
+    from app.sections import assemble_requirement_responses
+
+    assert "No data available" in assemble_requirement_responses([], []).body_md

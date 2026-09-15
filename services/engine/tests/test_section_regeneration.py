@@ -32,7 +32,7 @@ def _draft(key, heading, target, context, ev, needs, style):
 @pytest.fixture
 def wired(monkeypatch):
     """Everything `do_generate_sections` touches, with the writes captured."""
-    state = {"written": {}, "sections": [], "reuse": set()}
+    state = {"written": {}, "sections": [], "reuse": set(), "dropped": [], "outline": None}
     db = proposal_routes.db
 
     monkeypatch.setattr(db, "get_proposal_by_tender", lambda t, w: {"id": "p-1"})
@@ -44,8 +44,15 @@ def wired(monkeypatch):
     # The PQ sheet's FY window comes from the stored analysis (B9). No analysis means no
     # window, which is the honest state, not a reason to average whatever is on file.
     monkeypatch.setattr(db, "get_analysis", lambda t, w: None)
+    # No schedule and no outline yet: this fixture is a services-shaped tender, so the
+    # derivation selects the universal spine and nothing gated.
+    monkeypatch.setattr(db, "get_line_items", lambda t, w: [])
+    monkeypatch.setattr(db, "save_proposal_outline", lambda w, p, o: state.__setitem__("outline", o))
+    monkeypatch.setattr(db, "set_section_included",
+                        lambda w, p, key, inc: state["dropped"].append(key))
     monkeypatch.setattr(db, "get_style_profile", lambda w: None)
-    monkeypatch.setattr(db, "get_sections", lambda p, w: state["sections"])
+    monkeypatch.setattr(db, "get_sections",
+                        lambda p, w, include_dropped=False: state["sections"])
     monkeypatch.setattr(db, "get_reuse_targets", lambda w, p: state["reuse"])
     monkeypatch.setattr(db, "upsert_section",
                         lambda w, p, key, row: state["written"].__setitem__(key, row))
@@ -61,7 +68,9 @@ def test_a_section_a_human_edited_is_not_regenerated(wired):
 
     assert "solution" not in wired["written"], "a human's rewrite was overwritten"
     assert "solution" in out["kept"]
-    assert len(wired["written"]) == len(SECTION_SPECS) - 1
+    assert "solution" not in wired["dropped"], (
+        "a section somebody rewrote was dropped from the document by a re-derive"
+    )
 
 
 def test_regenerating_a_section_voids_its_approval_in_the_same_write(wired):
@@ -94,8 +103,14 @@ def test_an_untouched_document_is_still_fully_regenerated(wired):
     out = proposal_routes.do_generate_sections("ws-1", "t-1")
 
     assert out["kept"] == []
-    assert set(wired["written"]) == {s.key for s in SECTION_SPECS}
-    assert all(wired["written"][k]["body_md"] == f"fresh {k}" for k in NARRATIVE_KEYS)
+    # The outline decides WHICH sections exist; this test is about whether the ones the
+    # tender selected get rewritten. The fixture's tender carries no signal at all, so that
+    # set is the universal spine.
+    chosen = {e["key"] for e in out["outline"]["sections"]}
+    assert set(wired["written"]) == chosen
+    assert all(wired["written"][k]["body_md"] == f"fresh {k}"
+               for k in NARRATIVE_KEYS if k in chosen)
+    assert {s.key for s in SECTION_SPECS} - chosen, "a tender with no signal selected everything"
 
 
 def test_a_criterion_with_an_accepted_prior_answer_survives_re_match(monkeypatch):

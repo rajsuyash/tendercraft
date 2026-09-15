@@ -4,6 +4,7 @@ import {
   ProposalDocument,
   type DocSection,
   type ExportDecision,
+  type Outline,
 } from "@/components/ProposalDocument";
 import { engineFetch } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
@@ -17,7 +18,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
   // latency this codebase has already been bitten by.
   const [{ data: tender }, { data: proposal }, gateRes] = await Promise.all([
     supabase.from("tenders").select("id,title,status").eq("id", id).single(),
-    supabase.from("proposals").select("id,status").eq("tender_id", id).maybeSingle(),
+    supabase.from("proposals").select("id,status,outline").eq("tender_id", id).maybeSingle(),
     engineFetch(`/api/tenders/${id}/compliance-matrix`),
   ]);
   if (!tender) notFound();
@@ -35,6 +36,11 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
       .from("proposal_sections")
       .select("key,heading,kind,status,body_md,word_count,flags,approved_at,edited_at")
       .eq("proposal_id", proposal.id)
+      // A re-derive marks a section out of the document rather than deleting it. Without
+      // this the screen would keep showing sections the engine has already excluded from the
+      // export gate and the coverage count — four counters describing the same object, and
+      // one of them wrong.
+      .eq("included", true)
       .order("order_index", { ascending: true });
     sections = (data ?? []) as DocSection[];
   }
@@ -45,6 +51,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
       proposalId={proposal?.id ?? null}
       tenderTitle={tender.title}
       sections={sections}
+      outline={(proposal?.outline as Outline | null) ?? null}
       totalWords={sections.reduce((n, s) => n + (s.word_count ?? 0), 0)}
       exportDecision={exportDecision}
     />

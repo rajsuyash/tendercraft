@@ -16,7 +16,7 @@ from pipeline.section_drafter import draft_section
 
 from . import authz, db, docx_export, learning, sections, spec_service
 from .auth import AuthedUser, get_current_user
-from .deterministic import export_gate
+from .deterministic import export_gate, outline
 from .deterministic.drafting import mandatory_coverage
 from .envelope import ApiError, ok
 
@@ -126,13 +126,24 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
     # while leaving `approved_at` in place — so an approved section came back as new AI prose
     # still badged approved, which is the one thing the watermark exists to prevent (B-FR4),
     # and a rewritten section came back as the model's words still badged "Your edit".
+    # Dropped rows included: this is the one caller that has to know a key EXISTS before
+    # deciding whether to re-include it or leave a human's words alone.
+    section_rows = db.get_sections(proposal["id"], workspace_id, include_dropped=True)
+    existing = {s["key"] for s in section_rows}
     protected = {
-        s["key"] for s in db.get_sections(proposal["id"], workspace_id) if s.get("edited_by")
+        s["key"] for s in section_rows if s.get("edited_by")
     } | {
         t.split(":", 1)[1]
         for t in db.get_reuse_targets(workspace_id, proposal["id"])
         if t.startswith("section:")
     }
+    # WHICH sections this tender needs, before anything is drafted. The catalogue is the menu;
+    # the tender chooses from it, and the outline records the row behind each choice.
+    line_items = db.get_line_items(tender_id, workspace_id)
+    signals = outline.detect_signals(criteria, line_items)
+    entries = outline.derive(sections.SECTION_SPECS, signals)
+    chosen = {e.key for e in entries}
+
     today = datetime.now(UTC).date().isoformat()
     docs = db.get_valid_library_docs(workspace_id, today)
     profile = db.get_profile_context(workspace_id)
@@ -158,7 +169,11 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
         ]
     )
 
+    schedule_fit = spec_service.assess_schedule(workspace_id, tender_id, tender)
     assembled = {
+        "item_compliance": sections.assemble_item_compliance(schedule_fit),
+        "prescribed_forms": sections.assemble_prescribed_forms(criteria),
+        "requirement_responses": sections.assemble_requirement_responses(criteria, responses),
         "compliance_pq": sections.assemble_compliance_pq(
             profile, profile.get("certifications") or [], today,
             _required_fys(db.get_analysis(tender_id, workspace_id)),
@@ -171,10 +186,9 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
         "deployment": sections.assemble_deployment(cv_docs),
         # Form 12 is built from the schedule fit, never from a nil-deviation default: the
         # declaration is signed by the bidder, so it may only say what was compared.
-        "deviations": sections.assemble_deviations(
-            spec_service.assess_schedule(workspace_id, tender_id, tender)
-        ),
-        "compliance_matrix": sections.assemble_compliance_matrix(criteria, responses),
+        "deviations": sections.assemble_deviations(schedule_fit),
+        "compliance_matrix": sections.assemble_compliance_matrix(
+            criteria, responses, "requirement_responses" in chosen),
         "annexures": sections.assemble_annexures(docs, today),
     }
 
@@ -189,7 +203,8 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
             spec.needs_bidder_evidence, style_brief,
         )
 
-    narrative_specs = [sections.SPEC_BY_KEY[k] for k in sections.NARRATIVE_KEYS]
+    narrative_specs = [sections.SPEC_BY_KEY[k] for k in sections.NARRATIVE_KEYS
+                       if k in chosen]
     with ThreadPoolExecutor(max_workers=5) as pool:
         drafted = list(pool.map(_narrative, narrative_specs))
     drafted_by_key = {d.key: d for d in drafted}
@@ -197,7 +212,21 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
     total_words = 0
     written: list[dict] = []
     kept: list[str] = []
+    dropped: list[str] = []
     for spec in sections.SECTION_SPECS:
+        if spec.key not in chosen:
+            if spec.key in protected:
+                # A section somebody rewrote or reused stays in the document, whatever the
+                # signals now say. Their words are not the system's to remove, and it is
+                # reported as kept rather than vanishing into neither list.
+                kept.append(spec.key)
+            elif spec.key in existing:
+                # Never DELETED. The row is marked out of the document and keeps
+                # `original_md`, `edited_by`, `approved_at` and every `answer_usages`
+                # receipt — the only record proving no suggestion entered a draft unaccepted.
+                db.set_section_included(workspace_id, proposal["id"], spec.key, False)
+                dropped.append(spec.key)
+            continue
         if spec.key in protected:
             kept.append(spec.key)
             continue
@@ -211,8 +240,9 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
                      "source_ref": s.source_ref, "is_transcluded": s.is_transcluded}
                     for s in a.sentences
                 ],
-                "status": "drafted", "confidence": 1.0, "flags": [],
+                "status": a.status, "confidence": 1.0, "flags": [],
                 "word_count": len(a.body_md.split()),
+                "included": True,
                 # New text, so any signature on the old text is void. The upsert merges, so
                 # these have to be written explicitly — a field left out keeps its old value.
                 "approved_by": None, "approved_at": None,
@@ -223,7 +253,7 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
                 "heading": spec.heading, "order_index": spec.order, "kind": "narrative",
                 "body_md": d.body_md, "sentences": d.sentences, "status": d.status,
                 "confidence": d.confidence, "flags": d.flags, "word_count": d.word_count,
-                "approved_by": None, "approved_at": None,
+                "approved_by": None, "approved_at": None, "included": True,
             }
         db.upsert_section(workspace_id, proposal["id"], spec.key, row)
         total_words += row["word_count"]
@@ -231,8 +261,24 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
                         "status": row["status"], "words": row["word_count"],
                         "flags": len(row["flags"])})
 
+    derived = {
+        "source": "derived",
+        "derived_at": datetime.now(UTC).isoformat(),
+        "signals": {name: sig.because for name, sig in sorted(signals.items())},
+        "sections": [{"key": e.key, "heading": e.heading, "order": e.order,
+                      "because": e.because} for e in entries],
+        # What was left out, and which signal was missing. Reported rather than silently
+        # omitted: a section the user expected and did not get is a bug report they cannot
+        # file unless the document says why it is gone.
+        "absent": [{"key": k, "missing": m}
+                   for k, m in outline.absent(sections.SECTION_SPECS, signals)],
+    }
+    db.save_proposal_outline(workspace_id, proposal["id"], derived)
+
     return {
         "proposal_id": proposal["id"],
+        "outline": derived,
+        "dropped": dropped,
         "sections": written,
         "kept": kept,
         "total_words": total_words,

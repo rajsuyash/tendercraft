@@ -295,7 +295,7 @@ def get_proposal(proposal_id: str, workspace_id: str) -> dict | None:
     rows = _rest(
         "GET", "proposals",
         params={"id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
-                "select": "id,tender_id,status,approvals_required"},
+                "select": "id,tender_id,status,approvals_required,outline"},
     )
     return rows[0] if rows else None
 
@@ -335,14 +335,52 @@ def upsert_section(workspace_id: str, proposal_id: str, key: str, section: dict)
     )
 
 
-def get_sections(proposal_id: str, workspace_id: str) -> list[dict]:
-    return _rest(
-        "GET", "proposal_sections",
-        params={
-            "proposal_id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
-            "select": "*", "order": "order_index.asc",
-        },
-    ) or []
+def save_proposal_outline(workspace_id: str, proposal_id: str, outline: dict) -> None:
+    """Which sections this tender selected, and why each one is there."""
+    _rest(
+        "PATCH", "proposals",
+        params={"id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}"},
+        json={"outline": outline},
+    )
+
+
+def set_section_included(
+    workspace_id: str, proposal_id: str, key: str, included: bool
+) -> None:
+    """A re-derive that drops a section marks it, and never deletes it.
+
+    `answer_usages` cascades from the section's proposal and the row carries `original_md`,
+    `edited_by` and `approved_at` — a DELETE would destroy the G-AC6 acceptance receipts,
+    which are the only record proving no suggestion entered a draft unaccepted.
+    """
+    _rest(
+        "PATCH", "proposal_sections",
+        params={"proposal_id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
+                "key": f"eq.{key}"},
+        json={"included": included},
+    )
+
+
+def get_sections(
+    proposal_id: str, workspace_id: str, include_dropped: bool = False
+) -> list[dict]:
+    """The proposal's sections, in document order.
+
+    Filtered to `included` by default, and that default is the important half: a re-derive
+    marks a section out of the document rather than deleting it, so without the filter every
+    dropped section would keep exporting, keep counting toward coverage, and keep blocking
+    the gate — the change would do nothing except grow the row count.
+
+    `include_dropped=True` is for the regeneration path only, which has to know a key exists
+    before deciding whether to re-include it or leave it alone.
+    """
+    params = {
+        "proposal_id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
+        "select": "*", "order": "order_index.asc",
+    }
+    if not include_dropped:
+        params["included"] = "is.true"
+    return _rest("GET", "proposal_sections", params=params) or []
 
 
 def approve_section(

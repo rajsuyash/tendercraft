@@ -106,11 +106,27 @@ export type ExportDecision = {
   override_blockers: string[];
 };
 
+/** Why this document has the sections it has.
+ *
+ *  A fixed seventeen-section IT-services packet used to be applied to every tender, wire-rope
+ *  supply bids included. The catalogue is now a menu the tender chooses from, and every
+ *  choice names the row behind it — so a section the user did not expect is answerable
+ *  rather than arbitrary, and one they expected and did not get says which signal was
+ *  missing instead of silently not being there. */
+export interface Outline {
+  source: string;
+  derived_at: string;
+  signals: Record<string, string>;
+  sections: { key: string; heading: string; order: number; because: string }[];
+  absent: { key: string; missing: string }[];
+}
+
 export function ProposalDocument({
   tenderId,
   proposalId,
   tenderTitle,
   sections,
+  outline = null,
   totalWords,
   exportDecision = null,
 }: {
@@ -118,6 +134,9 @@ export function ProposalDocument({
   proposalId: string | null;
   tenderTitle: string;
   sections: DocSection[];
+  /** `null` on a proposal generated before outlines existed: it keeps every section it has
+   *  and behaves exactly as it did. */
+  outline?: Outline | null;
   totalWords: number;
   /** The engine's own export decision. `null` when it could not be read, which is treated
    *  as a shut gate — see the note beside `canDownload`. */
@@ -152,6 +171,7 @@ export function ProposalDocument({
   }
 
   const unapproved = sections.filter((s) => s.kind === "narrative" && !s.approved_at);
+  const because = new Map((outline?.sections ?? []).map((e) => [e.key, e.because]));
   // The SERVER's decision, not a local guess at it. Approving every narrative section is a
   // strict subset of the export rule — which also enforces the approval chain, segregation
   // of duties, open placeholders, mandatory-row statuses and the non-overridable financial
@@ -230,6 +250,37 @@ export function ProposalDocument({
               </span>
             )}
           </p>
+          {outline && (
+            <details data-outline className="mt-2 text-xs text-muted">
+              <summary className="cursor-pointer">
+                Why these {outline.sections.length} sections
+                {outline.absent.length > 0
+                  ? `, and what the tender did not ask for (${outline.absent.length})`
+                  : ""}
+              </summary>
+              <ul className="mt-2 space-y-1">
+                {outline.sections.map((e) => (
+                  <li key={e.key}>
+                    <span className="text-ink">{e.heading}</span>
+                    {" — "}
+                    {e.because || "in every proposal"}
+                  </li>
+                ))}
+              </ul>
+              {outline.absent.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {outline.absent.map((a) => (
+                    <li key={a.key} data-outline-absent>
+                      <span className="line-through">{a.key}</span>
+                      {" — nothing in this tender asks for it ("}
+                      {a.missing}
+                      {")"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
+          )}
         </div>
         <div className="flex gap-2">
           <button
@@ -299,7 +350,14 @@ export function ProposalDocument({
             className="rounded-card border border-border bg-surface p-card"
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <h2 className="font-heading text-lg font-medium text-ink">{s.heading}</h2>
+              <div>
+                <h2 className="font-heading text-lg font-medium text-ink">{s.heading}</h2>
+                {because.get(s.key) && (
+                  <p data-section-because className="mt-0.5 text-xs text-muted">
+                    Included because of {because.get(s.key)}
+                  </p>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <span className={`rounded px-2 py-0.5 text-2xs font-semibold uppercase ${st.cls}`}>
                   {st.label}
