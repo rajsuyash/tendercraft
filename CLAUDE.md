@@ -144,3 +144,4 @@ Assumptions surfaced: <none | list>
 - @docs/known-pitfalls.md — read BEFORE writing code; append when you hit a new one
 - @docs/multi-market.md — proposed architecture for a second market (France); read before any i18n or new-source work
 - @docs/feedback/usha-martin.md — design-partner feedback (Usha Martin, Aug 2026); read before any product-spec, catalogue, inbound-email or price-history work
+- @docs/reviews/2026-09-15-codex-product-audit.md — outside end-to-end review of the bidder product (unactioned); §V names two confirmed defects, §D names four findings to re-check before acting on them
