@@ -7,20 +7,19 @@ declarations — which is precisely the evidence the product needs and the only 
 style or answer library could ever be built from. Without OCR, half of what a customer hands us
 is invisible, and the half that is invisible is the half that is theirs.
 
-WHAT THIS IS NOT. `tools/vision_ocr.swift` is macOS-only, so this is the LOCAL proof. The engine
-image is Linux and cannot run it: `available()` returns False there and every caller degrades to
-"no text", exactly as today. A Linux adapter and its validation against the same pages is M2.
-Enabling this as though it were the production answer would leave scans silently unread in the
-one place it matters.
+THE ENGINE. Tesseract, chosen on measurement rather than preference: task A1
+(docs/ocr-measurement.md) ran it against that same real corpus and it recovered 242 of 248
+previously-unreadable pages (98%), at zero marginal cost, with samples read by a human before
+adoption. Revisit with that script, not with an opinion.
 
-SAFETY. Document content never reaches a command line. `pdftoppm` and the adapter are invoked
+SAFETY. Document content never reaches a command line. `pdftoppm` and `tesseract` are invoked
 with fixed argv shapes and paths this module generates inside a temp directory it owns and
 deletes; no shell, no globbing, no caller-supplied strings as arguments (G-6). Every call is
 bounded by page count, resolution and wall-clock timeout, because a 500-page scan must not be
 able to occupy a worker indefinitely.
 
-COST. Zero. Vision ships with macOS and no page leaves the machine, which also keeps the
-data-residency question out of the way while the approach is being proven.
+COST. Zero. Both binaries are open source and run inside the engine's own container; no page
+ever leaves it, which also keeps the data-residency question out of the way.
 """
 
 from __future__ import annotations
@@ -35,9 +34,10 @@ from pathlib import Path
 
 log = logging.getLogger("tendercraft.engine")
 
-#: Emitted by the Swift adapter between pages. A record separator, so it cannot collide with
-#: anything Vision returns as text.
-_PAGE_BREAK = "\x1eTENDERCRAFT_PAGE_BREAK\x1e"
+#: The OCR engine. Tesseract because A1 measured it against the real customer corpus and it
+#: cleared the bar at zero marginal cost — 242 of 248 unreadable pages recovered, samples read
+#: by a human. docs/ocr-measurement.md carries the numbers.
+_TESSERACT = "tesseract"
 
 #: Bounds. A scanned tender package is routinely 50+ pages and a customer can upload several;
 #: these exist so one document cannot occupy a worker indefinitely.
@@ -45,42 +45,14 @@ MAX_PAGES = int(os.environ.get("OCR_MAX_PAGES", "60"))
 DPI = int(os.environ.get("OCR_DPI", "200"))          # legible for 8-10pt certificate text
 TIMEOUT_S = int(os.environ.get("OCR_TIMEOUT_S", "300"))
 
-_ADAPTER_SRC = Path(__file__).resolve().parents[3] / "tools" / "vision_ocr.swift"
-_BUILT: Path | None = None
-
-
-def _binary() -> Path | None:
-    """Compile the adapter once per process, or None where it cannot be built.
-
-    Compiled rather than run through `swift` each time: the interpreter re-parses on every
-    invocation, and this is called per document.
-    """
-    global _BUILT
-    if _BUILT is not None:
-        return _BUILT if _BUILT.exists() else None
-    if not _ADAPTER_SRC.exists() or not shutil.which("swiftc"):
-        return None
-    out = Path(tempfile.gettempdir()) / "tendercraft-vision-ocr"
-    if not out.exists():
-        try:
-            subprocess.run(
-                ["swiftc", "-O", "-o", str(out), str(_ADAPTER_SRC)],
-                check=True, capture_output=True, timeout=180,
-            )
-        except (subprocess.SubprocessError, OSError) as exc:
-            log.warning("OCR adapter did not build; scans stay unreadable: %s", exc)
-            return None
-    _BUILT = out
-    return out
-
 
 def available() -> bool:
-    """Can this process OCR at all? False on Linux, and on any machine without the toolchain.
+    """Can this process OCR at all?
 
     Callers must check rather than catch: "no OCR here" is an ordinary deployment fact, not an
-    error, and a page that could not be read must look the same as it does today.
+    error, and a page that could not be read must look exactly as illegible as it already was.
     """
-    return bool(shutil.which("pdftoppm")) and _binary() is not None
+    return bool(shutil.which("pdftoppm")) and bool(shutil.which(_TESSERACT))
 
 
 def ocr_pdf_pages(data: bytes, pages: Sequence[int]) -> dict[int, str]:
@@ -96,10 +68,6 @@ def ocr_pdf_pages(data: bytes, pages: Sequence[int]) -> dict[int, str]:
         # Said out loud rather than silently truncated: a partial OCR that looks complete is
         # the same class of failure as a capped sweep that reports success.
         log.warning("OCR capped at %d pages; %d requested", MAX_PAGES, len(pages))
-
-    binary = _binary()
-    if binary is None:
-        return {}
 
     work = Path(tempfile.mkdtemp(prefix="tc-ocr-"))
     try:
@@ -121,31 +89,24 @@ def ocr_pdf_pages(data: bytes, pages: Sequence[int]) -> dict[int, str]:
             matches = sorted(work.glob(f"p{page}-*.png"))
             if matches:
                 rendered.append((page, matches[0]))
-        if not rendered:
-            return {}
 
-        try:
-            proc = subprocess.run(
-                [str(binary), *(str(p) for _, p in rendered)],
-                check=True, capture_output=True, timeout=TIMEOUT_S, text=True,
-            )
-        except (subprocess.SubprocessError, OSError) as exc:
-            log.warning("OCR adapter failed on %d pages: %s", len(rendered), exc)
-            return {}
-
-        parts = proc.stdout.split(_PAGE_BREAK)
-        if len(parts) != len(rendered):
-            # A mismatch means the adapter and this module disagree about the protocol. Return
-            # nothing rather than pairing text with the wrong page: a citation anchored to the
-            # wrong page is worse than a page nobody could read.
-            log.warning("OCR returned %d blocks for %d pages; discarding",
-                        len(parts), len(rendered))
-            return {}
-        # NUL bytes: Postgres text cannot store one (see app/ingest.parse_pdf_pages).
-        return {
-            page: parts[i].replace("\x00", "").strip()
-            for i, (page, _) in enumerate(rendered)
-            if parts[i].strip()
-        }
+        out: dict[int, str] = {}
+        for page, image in rendered:
+            try:
+                proc = subprocess.run(
+                    [_TESSERACT, str(image), "stdout"],
+                    check=True, capture_output=True, timeout=TIMEOUT_S, text=True,
+                )
+            except (subprocess.SubprocessError, OSError) as exc:
+                # One page, one failure. The batched macOS adapter discarded all sixty pages
+                # when its page-break protocol disagreed; per-page has no protocol to disagree
+                # with — nothing here can desynchronise the rest.
+                log.warning("OCR failed on page %d: %s", page, exc)
+                continue
+            # NUL bytes: Postgres text cannot store one (app/ingest.parse_pdf_pages).
+            text = proc.stdout.replace("\x00", "").strip()
+            if text:
+                out[page] = text
+        return out
     finally:
         shutil.rmtree(work, ignore_errors=True)

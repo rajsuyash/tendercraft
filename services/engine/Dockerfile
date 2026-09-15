@@ -6,6 +6,15 @@
 
 FROM python:3.12-slim AS base
 
+# OCR. Measured against the real customer corpus before being chosen — docs/ocr-measurement.md.
+# Without these two binaries `ocr.available()` is False and every scanned page stays unread,
+# which was production's behaviour until this line existed: 52% of one real tender folder,
+# almost all of it the bidder's own certificates and licences.
+# `--no-install-recommends` keeps this to roughly 60 MB rather than pulling X11.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      poppler-utils tesseract-ocr tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
 # uv gives us the same locked resolution the test suite runs against.
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 
