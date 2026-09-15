@@ -62,3 +62,48 @@ def test_stage_labels_are_human_not_internal_keys():
     for key, label in STAGES:
         assert key.islower() and "_" not in label
         assert label[0].isupper()
+
+
+# --- readiness and the export gate answer the same question ---------------------------------
+
+
+def test_a_gate_blocker_the_counters_cannot_see_still_blocks_submission():
+    """Codex C3, reproduced: readiness reported 100% and can_submit while export refused the
+    same proposal. The counters here summarise SECTIONS and APPROVALS; a mandatory criterion
+    whose response is still a placeholder lives in neither, so a fully-approved document with
+    an unanswered mandatory requirement read as ready."""
+    state = compute(
+        confirm_open=0, p0_blocking=0,
+        sections_total=17, sections_placeholder=0, narrative_unapproved=0,
+        approvals_done=2, approvals_required=2,
+        mandatory_unanswered=3,
+    )
+    assert state.can_submit is False
+    assert state.percent < 100
+    assert any("3 mandatory requirement(s) still have no answer" == b.detail
+               for b in state.blockers)
+
+
+def test_unanswered_mandatory_requirements_are_one_counted_line_not_one_row_each():
+    """The first cut appended the gate's own strings: 24 rows on a real tender, 11 of them a
+    bare UUID and three restating the line above. A "how close am I" meter cannot also be the
+    itemised list."""
+    state = compute(
+        confirm_open=0, p0_blocking=0,
+        sections_total=17, sections_placeholder=0, narrative_unapproved=9,
+        approvals_done=1, approvals_required=2,
+        mandatory_unanswered=11,
+    )
+    assert len(state.blockers) == 3
+    assert not any("-" in b.detail and len(b.detail) > 100 for b in state.blockers)
+
+
+def test_a_clean_proposal_with_no_gate_blockers_can_submit():
+    """The control: the guard must not make submission unreachable."""
+    state = compute(
+        confirm_open=0, p0_blocking=0,
+        sections_total=17, sections_placeholder=0, narrative_unapproved=0,
+        approvals_done=2, approvals_required=2,
+    )
+    assert state.can_submit is True
+    assert state.percent == 100

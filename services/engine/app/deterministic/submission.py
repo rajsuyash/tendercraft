@@ -57,6 +57,7 @@ def compute(
     approvals_done: int,
     approvals_required: int,
     hard_blockers: Sequence[str] = (),
+    mandatory_unanswered: int = 0,
 ) -> SubmissionState:
     """The single source of "how close am I", with every blocker named."""
     blockers: list[Blocker] = []
@@ -80,8 +81,23 @@ def compute(
     if approvals_done < approvals_required:
         blockers.append(Blocker("signoff", "Approvals complete",
                                 f"{approvals_done} of {approvals_required} sign-offs collected"))
+    # A mandatory requirement whose response is still a placeholder blocks the export and is
+    # invisible to every counter above, which summarise SECTIONS and APPROVALS. Without it
+    # this meter could read "ready to submit" while the export endpoint refused the same
+    # proposal — two gates answering one question and disagreeing.
+    #
+    # A COUNT, not one row per criterion. The first cut appended the gate's own strings and
+    # produced 24 rows on a real tender, 11 of them a bare UUID, three of them restating a
+    # summary line immediately above. A meter whose job is "how close am I" cannot also be
+    # the itemised list; the itemised list is the export screen, one click away.
+    if mandatory_unanswered:
+        blockers.append(Blocker(
+            "document", "Proposal drafted",
+            f"{mandatory_unanswered} mandatory requirement(s) still have no answer"))
+
     for h in hard_blockers:
-        # Non-overridable: an unsourced figure can never reach a submitted document.
+        # Itemised, unlike the count above, because these are rare, severe and
+        # non-overridable: an unsourced figure can never reach a submitted document.
         blockers.append(Blocker("review", "Sections approved", h))
 
     blocked_stages = {b.stage for b in blockers}

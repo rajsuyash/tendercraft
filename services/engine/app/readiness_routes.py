@@ -15,12 +15,12 @@ from fastapi import APIRouter, Depends
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from . import analysis, db
+from . import analysis, db, export_service
 from .auth import AuthedUser, get_current_user
 from .deterministic import submission
 from .deterministic.lock import evaluate_lock
 from .deterministic.readiness import OVERRIDDEN_DECISIONS, compute_readiness
-from .deterministic.types import Criterion, RequirementLevel, SourceAnchor
+from .deterministic.types import CoverageStatus, Criterion, RequirementLevel, SourceAnchor
 from .envelope import ApiError, ok
 
 router = APIRouter()
@@ -160,6 +160,35 @@ def submission_state(tender_id: str, user: CurrentUser) -> dict:
         )
         required = proposal.get("approvals_required", 2)
 
+    # Ask the EXPORT GATE what is blocking, rather than approximating it here. These two
+    # answered the same question — "can this be submitted?" — from two different piles of
+    # rows, and disagreed: readiness could report 100% and `can_submit: true` while the
+    # export endpoint refused the same proposal over an open mandatory placeholder, because
+    # this function only ever looked at sections and approvals. A compliance product whose
+    # readiness meter and whose gate disagree has no readiness meter.
+    #
+    # Both classes are passed on. Hard blockers can never clear; override blockers clear only
+    # under a logged admin override, which is not a state "ready to submit" should describe.
+    hard_blockers: list[str] = []
+    mandatory_unanswered = 0
+    if proposal:
+        decision, rows = export_service.evaluate(
+            db.get_criteria(tender_id, user.workspace_id),
+            db.get_responses(proposal["id"], user.workspace_id),
+            approvals_required=required,
+            approvals_done=len(approvals),
+            sections=doc_sections,
+            approvals=approvals,
+        )
+        hard_blockers = list(decision.hard_blockers)
+        # Counted from the gate's own rows rather than parsed out of its message strings —
+        # a format change in a message must not silently zero a blocker count.
+        mandatory_unanswered = sum(
+            1 for r in rows
+            if r.requirement_level is RequirementLevel.MANDATORY
+            and r.status is not CoverageStatus.COVERED
+        )
+
     state = submission.compute(
         confirm_open=readiness["confirm_open"],
         p0_blocking=readiness["p0_blocking"],
@@ -171,6 +200,8 @@ def submission_state(tender_id: str, user: CurrentUser) -> dict:
         ),
         approvals_done=len(approvals),
         approvals_required=required,
+        hard_blockers=hard_blockers,
+        mandatory_unanswered=mandatory_unanswered,
     )
     return ok({
         "stage": state.stage,
