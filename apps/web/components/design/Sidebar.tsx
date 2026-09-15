@@ -4,6 +4,7 @@ import { LocaleToggle } from "@/components/LocaleToggle";
 import { translator, type Locale } from "@/lib/i18n";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 /**
  * C1 — fixed 280px primary navigation; active item primary-tinted.
@@ -69,14 +70,82 @@ const NAV_FOOTER = [
  */
 export function Sidebar({ switcher, locale = "en" }: { switcher?: React.ReactNode; locale?: Locale }) {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  // Any navigation closes the drawer. Without this, tapping a link below `lg` leaves the
+  // panel covering the page it just opened.
+  useEffect(() => setOpen(false), [pathname]);
+
+  return (
+    <>
+      {/* Below `lg` the rail is hidden, and until now NOTHING replaced it: every route in the
+          product was unreachable from every other route on a tablet or a phone. A bid manager
+          checking a deadline on the way to a meeting had a page and no way off it.
+          GLB-D2 names the affordance — `[data-nav-toggle]` — and it did not exist. */}
+      <div className="chrome-material sticky top-0 z-30 flex items-center gap-2 border-b border-border px-3 py-2 lg:hidden">
+        <button
+          type="button"
+          data-nav-toggle
+          aria-expanded={open}
+          aria-controls="app-nav-drawer"
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-h-9 items-center gap-2 rounded px-2 py-1.5 text-sm font-medium text-ink hover:bg-surface-alt"
+        >
+          <span aria-hidden className="text-base leading-none">
+            {open ? "✕" : "☰"}
+          </span>
+          <span>{translator(locale)("Menu")}</span>
+        </button>
+        <span className="font-heading text-sm font-semibold tracking-[-0.01em] text-ink">
+          TenderCraft
+        </span>
+      </div>
+
+      {open && (
+        <>
+          {/* A plain button, not a div: the overlay is a real dismiss control, so it must be
+              reachable from the keyboard like one. */}
+          <button
+            type="button"
+            aria-label={translator(locale)("Close menu")}
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-30 bg-ink/20 lg:hidden"
+          />
+          <div
+            id="app-nav-drawer"
+            className="fixed inset-y-0 left-0 z-40 w-sidebar max-w-[85vw] overflow-y-auto border-r border-border bg-surface px-3 py-5 lg:hidden"
+          >
+            <NavContents switcher={switcher} locale={locale} pathname={pathname} />
+          </div>
+        </>
+      )}
+
+      {/* Sticky + translucent: this is the one place the app uses glass, because it is chrome
+          sitting over scrolling content — exactly where iOS uses it. Data surfaces stay opaque. */}
+      <nav
+        data-nav
+        className="chrome-material sticky top-0 hidden h-screen w-sidebar shrink-0 flex-col border-r border-border px-3 py-5 lg:flex"
+      >
+        <NavContents switcher={switcher} locale={locale} pathname={pathname} />
+      </nav>
+    </>
+  );
+}
+
+/** The rail's contents, rendered identically in the desktop rail and the below-lg drawer —
+ *  one list, so the two can never drift into offering different destinations. */
+function NavContents({
+  switcher,
+  locale,
+  pathname,
+}: {
+  switcher?: React.ReactNode;
+  locale: Locale;
+  pathname: string;
+}) {
   const t = translator(locale);
   return (
-    // Sticky + translucent: this is the one place the app uses glass, because it is chrome
-    // sitting over scrolling content — exactly where iOS uses it. Data surfaces stay opaque.
-    <nav
-      data-nav
-      className="chrome-material sticky top-0 hidden h-screen w-sidebar shrink-0 flex-col border-r border-border px-3 py-5 lg:flex"
-    >
+    <>
       <div className="mb-6 flex items-center gap-2.5 px-2">
         <span className="grid h-8 w-8 place-items-center rounded bg-primary text-xs font-bold text-on-primary shadow-sm">
           TC
@@ -141,6 +210,6 @@ export function Sidebar({ switcher, locale = "en" }: { switcher?: React.ReactNod
           <LocaleToggle locale={locale} />
         </div>
       </div>
-    </nav>
+    </>
   );
 }

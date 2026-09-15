@@ -29,7 +29,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!user) redirect("/login");
 
   return (
-    <div className="flex min-h-screen">
+    // Column below `lg` so the compact nav bar sits ABOVE the page, row at `lg` and up so the
+    // 280px rail sits beside it. One container, two orientations — the alternative is two
+    // shells that drift.
+    <div className="flex min-h-screen flex-col lg:flex-row">
       <Sidebar
         locale={locale}
         switcher={

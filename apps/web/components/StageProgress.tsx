@@ -2,27 +2,23 @@
 
 import { useEffect, useState } from "react";
 
-/** Named stages that advance on a timer during a long request.
+/** What a long request is doing, and how long it has been doing it.
  *
  * The journey walk spent roughly five of twenty-two minutes staring at one line of grey
- * text — "Parsing rfp.pdf…", then "Drafting…" for two minutes ten seconds while the heading
- * above it still said "No proposal document yet". The user could not tell whether anything
- * was happening.
+ * text with no sign that anything was happening, which is why this exists.
  *
- * ponytail: elapsed-time estimate, not real telemetry. Honest about that — it says
- * "usually about N" rather than showing a fake percentage, and it never claims to have
- * finished. Real per-stage progress needs the job model in the backlog; this removes the
- * "is it broken?" question today for the cost of one component.
+ * It used to advance a checklist on a TIMER: after `secondsPerStage` it ticked the first
+ * stage done and moved to the second, with no signal from the server at all. On a slow
+ * package that put three green checkmarks beside work that had not started, and on a
+ * failing one it sat "active" on a stage that would never finish. A progress indicator
+ * that cannot observe progress must not draw one — the checkmark is a claim, and this
+ * component was making it up.
+ *
+ * So: the stages are listed as what the request does, elapsed time is real, and no stage
+ * is ever marked done. Real per-stage state needs the durable job model (plan R3-1), and
+ * when it lands the states come from job events rather than from `setInterval`.
  */
-export function StageProgress({
-  stages,
-  secondsPerStage,
-  note,
-}: {
-  stages: string[];
-  secondsPerStage: number;
-  note?: string;
-}) {
+export function StageProgress({ stages, note }: { stages: string[]; note?: string }) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -30,31 +26,23 @@ export function StageProgress({
     return () => clearInterval(t);
   }, []);
 
-  // Never advance past the last stage: claiming completion we cannot observe is the lie
-  // this component exists to avoid.
-  const active = Math.min(Math.floor(elapsed / secondsPerStage), stages.length - 1);
-
   return (
     <div data-stage-progress className="rounded-card border border-border bg-surface-alt p-card">
-      <ol className="space-y-1.5">
-        {stages.map((s, i) => (
-          <li
-            key={s}
-            data-stage-state={i < active ? "done" : i === active ? "active" : "pending"}
-            className={`flex items-center gap-2 text-sm ${
-              i < active ? "text-muted" : i === active ? "text-ink" : "text-muted/60"
-            }`}
-          >
+      <p className="text-sm font-medium text-ink">
+        Working — {elapsed}s elapsed{note ? ` · ${note}` : ""}
+      </p>
+      <p className="mt-2 text-xs text-muted">This run does, in order:</p>
+      <ol className="mt-1 space-y-1 text-sm text-muted">
+        {stages.map((s) => (
+          <li key={s} className="flex items-center gap-2">
             <span aria-hidden className="w-4 shrink-0 text-center">
-              {i < active ? "✓" : i === active ? "◍" : "○"}
+              ·
             </span>
-            <span className={i === active ? "font-medium" : ""}>{s}</span>
+            <span>{s}</span>
           </li>
         ))}
       </ol>
-      <p className="mt-3 text-xs text-muted">
-        {elapsed}s elapsed{note ? ` · ${note}` : ""}. Leaving this page will not cancel it.
-      </p>
+      <p className="mt-3 text-xs text-muted">Leaving this page will not cancel it.</p>
     </div>
   );
 }

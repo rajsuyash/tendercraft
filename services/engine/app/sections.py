@@ -254,19 +254,91 @@ def assemble_deployment(cv_docs: list[dict]) -> AssembledSection:
     )
 
 
-def assemble_deviations() -> AssembledSection:
-    """Form 12 — deviations. A nil-deviation statement is the compliant default.
+def assemble_deviations(schedule: dict | None = None) -> AssembledSection:
+    """Form 12 — deviations, read from the schedule fit rather than assumed.
 
-    Deliberately NOT model-generated: proposing a deviation is a commercial decision with
-    contractual consequences, and a hallucinated one could invalidate the bid.
+    This used to return a flat "The bidder confirms **no deviations**" on every tender,
+    which is a declaration to a public buyer that nothing in the document had checked —
+    and it could contradict the same workspace's own schedule screen, where `spec_match`
+    had already found a parameter outside the plant's range. A nil-deviation statement is
+    not a safe default; it is a claim, and the bidder signs it.
+
+    So there are three outcomes and never one:
+      - deviations found  → they are listed, with the tender's requirement beside the
+        recorded capability, for the bid owner to accept, withdraw or clarify.
+      - nothing found AND something was assessed → a nil statement QUALIFIED by what was
+        actually compared, because "no deviations among the 14 parameters we could read"
+        is true and "no deviations" is not.
+      - nothing assessed (no schedule read, or no capability recorded) → no statement at
+        all. An unassessed parameter is unknown, never compliant (the same asymmetry
+        `spec_match` is built on).
+
+    Still deliberately NOT model-generated: proposing a deviation is a commercial decision
+    with contractual consequences, and an invented one could invalidate the bid.
     """
-    return AssembledSection(
-        "The bidder confirms **no deviations** from the terms, conditions and specifications "
-        "of the tender document.\n\n"
-        "_Material or non-material deviations must be entered by the bid owner before "
-        "submission; this section is never auto-generated._",
-        (),
-    )
+    lines = list((schedule or {}).get("lines") or [])
+    deviating: list[list[str]] = []
+    equivalent: list[list[str]] = []
+    assessed = 0
+    unknown = 0
+    for line in lines:
+        ref = " · ".join(
+            str(x) for x in (line.get("schedule_ref"), line.get("item_ref")) if x
+        ) or (line.get("description") or "—")[:60]
+        for param in line.get("parameters") or []:
+            state = param.get("match")
+            row = [ref, str(param.get("key") or "—"), str(param.get("required") or "—"),
+                   str(param.get("capability") or "—")]
+            if state == "deviation":
+                assessed += 1
+                deviating.append(row)
+            elif state == "equivalent":
+                assessed += 1
+                equivalent.append(row)
+            elif state == "match":
+                assessed += 1
+            else:
+                unknown += 1
+
+    if not assessed and not unknown:
+        return AssembledSection(
+            "_No schedule of items has been read for this tender, so no deviation statement "
+            "can be made here. The bid owner must enter deviations — or confirm there are "
+            "none — before submission._",
+            (),
+        )
+
+    parts: list[str] = []
+    if deviating:
+        parts.append(
+            f"**{len(deviating)} deviation(s)** were found by comparing this tender's schedule "
+            "against the manufacturing capability recorded in this workspace. Each must be "
+            "accepted, withdrawn or raised as a pre-bid clarification before submission."
+        )
+        parts.append(_table(
+            ["Schedule line", "Parameter", "Tender requires", "Recorded capability"], deviating
+        ))
+    if equivalent:
+        parts.append(
+            f"A further **{len(equivalent)}** parameter(s) fall outside the recorded capability "
+            "on a requirement whose own wording invites an equivalent. They are deviations "
+            "unless the buyer accepts the equivalence."
+        )
+        parts.append(_table(
+            ["Schedule line", "Parameter", "Tender requires", "Recorded capability"], equivalent
+        ))
+    if not deviating and not equivalent:
+        parts.append(
+            f"No deviation was found among the **{assessed} parameter(s)** compared against "
+            "the manufacturing capability recorded in this workspace."
+        )
+    if unknown:
+        parts.append(
+            f"_{unknown} parameter(s) could not be compared, because no capability is recorded "
+            "for them. They are unassessed, not compliant — a nil-deviation declaration should "
+            "not be signed until they are checked._"
+        )
+    return AssembledSection("\n\n".join(parts), ())
 
 
 def assemble_compliance_matrix(criteria: list[dict], responses: list[dict]) -> AssembledSection:

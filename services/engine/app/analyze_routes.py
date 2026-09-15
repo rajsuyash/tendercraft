@@ -263,13 +263,17 @@ def _rubric_for(tender_id: str, user: CurrentUser):
     )
 
 
-@router.post("/api/tenders/{tender_id}/rubric")
+@router.get("/api/tenders/{tender_id}/rubric")
 def run_rubric(tender_id: str, user: CurrentUser) -> dict:
-    """Score the DOCUMENT on technical competence.
+    """Completeness of the DOCUMENT, measured from persisted rows.
 
-    Never suppressed, unlike /estimate: this measures an artifact we fully observe rather
-    than predicting an external committee, so it needs no historical outcomes (D-AC4 does
-    not apply). See app/deterministic/rubric.py for why the two stay separate.
+    A GET, because that is what it is: pure computation over rows we already hold, with no
+    model call and no write. It was a POST, so the score page issued a state-changing verb
+    on every render to read a number — and a "Recompute" button existed for something a
+    page refresh does. Never suppressed, unlike /estimate: this measures an artefact we
+    fully observe rather than predicting an external committee (D-AC4 does not apply).
+    See app/deterministic/rubric.py for why the two stay separate, and for why this
+    carries no verdict.
     """
     if not db.get_tender(tender_id, user.workspace_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")

@@ -184,7 +184,6 @@ export function ProposalDocument({
                 "Drafting risk and the covering letter",
                 "Checking every claim against your evidence",
               ]}
-              secondsPerStage={26}
               note="17 sections, usually about 2 minutes"
             />
           </div>

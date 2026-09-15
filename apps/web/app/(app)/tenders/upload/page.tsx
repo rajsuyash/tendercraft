@@ -214,7 +214,6 @@ function UploadForm() {
               "Reading the tender number and title",
               "Building your readiness checklist",
             ]}
-            secondsPerStage={9}
             note="usually 30–60s for a short RFP"
           />
         </div>

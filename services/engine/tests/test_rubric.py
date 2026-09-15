@@ -1,11 +1,10 @@
-"""Technical-competence rubric — deterministic scoring + computed improvement deltas."""
+"""Document completeness — deterministic measurement + computed improvement deltas."""
 
 import pytest
 
 from app.deterministic.rubric import (
     DIMENSIONS,
-    MIN_AGGREGATE_FRACTION,
-    MIN_DIMENSION_FRACTION,
+    RubricResult,
     SectionFeatures,
     score_proposal,
 )
@@ -33,7 +32,7 @@ def _empty():
     return score_proposal([], cv_count=0, matching_experience=0, valid_cert_fraction=0.0)
 
 
-# --- weights and gates ---
+# --- weights ---
 
 
 def test_weights_sum_to_one_hundred():
@@ -45,10 +44,13 @@ def test_feature_weights_sum_to_one_per_dimension():
         assert sum(d.features.values()) == pytest.approx(1.0), d.key
 
 
-def test_the_real_evaluation_gates_are_modelled():
-    # CAG OIOS §7.7.4: >=45% per section AND >=65% aggregate, else technically rejected.
-    assert MIN_DIMENSION_FRACTION == 0.45
-    assert MIN_AGGREGATE_FRACTION == 0.65
+def test_this_module_reaches_no_verdict():
+    """It measures completeness of the document we hold. It does not decide whether an
+    evaluation committee would accept the bid — those thresholds belong to the tender's own
+    marks table, and borrowing an IT-services one told a wire-rope bidder they were
+    "technically disqualified" against criteria their tender never contained."""
+    assert not hasattr(RubricResult, "technically_qualified")
+    assert not any("qualified" in f for f in RubricResult.__dataclass_fields__)
 
 
 # --- range ---
@@ -57,17 +59,13 @@ def test_the_real_evaluation_gates_are_modelled():
 def test_a_complete_proposal_scores_full_marks():
     r = _perfect()
     assert r.total == 100.0
-    assert r.technically_qualified
-    assert r.failing_dimensions == ()
     assert r.suggestions == ()  # nothing left to recommend
 
 
-def test_an_empty_proposal_scores_zero_and_is_disqualified():
+def test_an_empty_proposal_scores_zero():
     r = _empty()
     assert r.total == 0.0
-    assert not r.technically_qualified
-    assert not r.meets_aggregate_minimum
-    assert len(r.failing_dimensions) == len(DIMENSIONS)
+    assert all(d.earned == 0 for d in r.dimensions)
 
 
 def test_score_is_reproducible():
@@ -173,17 +171,19 @@ def test_trivial_gaps_are_not_reported():
     assert all(s.expected_delta >= 0.1 for s in solution)
 
 
-# --- the two-gate verdict ---
+# --- one weak section is visible without a verdict ---
 
 
-def test_a_strong_aggregate_with_one_weak_dimension_is_still_rejected():
-    """The gate real committees apply: aggregate alone is not enough."""
+def test_one_empty_section_is_named_by_its_own_score_not_by_a_verdict():
+    """A high total must not hide a section nobody wrote: the breakdown says which, and the
+    suggestion says what to do, without the product claiming the bid would be rejected."""
     secs = [_sec(k) for k in ALL_KEYS if k != "qa"]
     secs.append(_sec("qa", present=False, status="placeholder", approved=False, words=0))
     r = score_proposal(secs, cv_count=5, matching_experience=5, valid_cert_fraction=1.0)
-    assert r.meets_aggregate_minimum          # still well above 65
-    assert "qa" in r.failing_dimensions       # but below 45% on one head
-    assert not r.technically_qualified
+    assert r.total > 65                                    # the rest of the document is done
+    qa = next(d for d in r.dimensions if d.key == "qa")
+    assert qa.score < 0.45                                 # and this one is visibly not
+    assert any(s.dimension == "qa" for s in r.suggestions)
 
 
 def test_a_section_with_no_word_target_is_not_penalised_on_depth():

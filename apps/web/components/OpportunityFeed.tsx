@@ -950,7 +950,12 @@ export function OpportunityFeed({
             </p>
           )}
           <div className="overflow-x-auto rounded-card border border-hairline bg-surface">
-          <table className="w-full table-fixed text-sm">
+          {/* min-w with table-fixed is what actually makes the container scroll. `w-full`
+              alone means the table is always exactly its container's width, so below about
+              1100px the five fixed columns (694px) plus the 14% buyer column left the tender
+              column near zero and its title rendered ON TOP of the reference beneath it —
+              squeezed, never scrolled. Seen at 1024, which is the width GLB-D2 checks. */}
+          <table className="w-full min-w-[1060px] table-fixed text-sm">
             <colgroup>
               <col />
               <col className="w-[14%]" />
@@ -987,6 +992,12 @@ export function OpportunityFeed({
                 const match = { ...server, ...routed[server.opportunity_id] } as Match;
                 const opp = match.opportunities!;
                 const parsed = opp.eligibility ?? {};
+                // NULL eligibility means nobody has read this tender's bid document — the
+                // budgeted per-item fetch has not reached it, or its portal publishes no
+                // document we can parse. That is NOT the same as a tender that states no
+                // financial bar, and rendering both as "none stated" told a bidder a
+                // requirement was absent when it had simply never been looked for.
+                const documentRead = opp.eligibility != null;
                 // Per row, not per page: a mixed feed must not render euros as rupees.
                 const rowMarket = opp.market ?? market;
                 return (
@@ -1009,7 +1020,11 @@ export function OpportunityFeed({
                       </a>
                       {/* Mono is measurement here, not costume: a bid number gets read back
                           against the portal character by character. */}
-                      <span className="mt-1 block font-mono text-[11px] text-muted">
+                      {/* break-all, because an aggregated reference has no spaces in it —
+                          a 78-character IREPS/SAIL ref overflowed its cell and printed on
+                          top of the next column. Wrapped, never truncated: this is the
+                          string a bidder reads back against the portal. */}
+                      <span className="mt-1 block break-all font-mono text-[11px] text-muted">
                         {opp.portal_ref_no}
                       </span>
                     </td>
@@ -1046,10 +1061,19 @@ export function OpportunityFeed({
                             </span>
                           )}
                         </>
-                      ) : (
+                      ) : documentRead ? (
                         /* "none stated" rather than a dash: a tender with no financial bar is
-                            good news for a small bidder, and a dash reads as missing data. */
+                            good news for a small bidder, and a dash reads as missing data.
+                            Only said when the document was actually read. */
                         <span className="text-[13px] text-muted">{t("none stated")}</span>
+                      ) : (
+                        <span
+                          data-eligibility-unread
+                          title={t("Its bid document has not been read, so we do not know whether this tender states a turnover bar.")}
+                          className="text-[13px] text-muted/70"
+                        >
+                          {t("not checked")}
+                        </span>
                       )}
                       {/* The disqualifier, and only the disqualifier. Rendered against the
                           figure that decided it — which is what keeps S14-D4 satisfied without
@@ -1070,8 +1094,10 @@ export function OpportunityFeed({
                         <span className="text-ink">{formatMoney(parsed.emd_amount_inr, rowMarket)}</span>
                       ) : parsed.emd_required === false ? (
                         <span className="text-[13px] text-muted">{t("none")}</span>
-                      ) : (
+                      ) : documentRead ? (
                         <span className="text-[13px] text-muted">—</span>
+                      ) : (
+                        <span className="text-[13px] text-muted/70">{t("not checked")}</span>
                       )}
                     </td>
                     {state === "in_scope" && (

@@ -97,6 +97,11 @@ const FR: Record<string, string> = {
   Deposit: "Garantie",
   "Excluded by": "Écarté par",
   "none stated": "non précisé",
+  "not checked": "non vérifié",
+  Menu: "Menu",
+  "Close menu": "Fermer le menu",
+  "Its bid document has not been read, so we do not know whether this tender states a turnover bar.":
+    "Son dossier de consultation n'a pas été lu ; nous ignorons si cette consultation impose un seuil de chiffre d'affaires.",
   none: "aucune",
   "not published": "non publiée",
   today: "aujourd'hui",

@@ -885,6 +885,21 @@ def record_answer_usage(
     return rows[0]
 
 
+def get_reuse_targets(workspace_id: str, proposal_id: str) -> set[str]:
+    """Every `section:<key>` / `criterion:<id>` a human accepted a prior answer into.
+
+    Read before regenerating so a regeneration cannot silently discard an acceptance. The
+    receipt is the G-AC6 record that no suggestion entered a draft unaccepted; overwriting
+    the text it refers to leaves the receipt pointing at prose nobody accepted.
+    """
+    rows = _rest(
+        "GET", "answer_usages",
+        params={"workspace_id": f"eq.{workspace_id}", "proposal_id": f"eq.{proposal_id}",
+                "select": "target"},
+    ) or []
+    return {r["target"] for r in rows if r.get("target")}
+
+
 def get_past_bid_texts(workspace_id: str) -> list[str]:
     """The prose of every past bid, for measuring house style. Text only — no metadata."""
     rows = _rest(

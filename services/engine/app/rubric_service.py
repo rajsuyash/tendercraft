@@ -90,13 +90,9 @@ def compute(sections: list[dict], criteria: list[dict], profile: dict,
 def payload(r: RubricResult) -> dict:
     return {
         "total": r.total,
-        "technically_qualified": r.technically_qualified,
-        "meets_aggregate_minimum": r.meets_aggregate_minimum,
-        "failing_dimensions": list(r.failing_dimensions),
         "dimensions": [
             {"key": d.key, "label": d.label, "weight": d.weight, "score": d.score,
-             "earned": d.earned, "max_gain": d.max_gain, "features": d.features,
-             "meets_minimum": d.meets_minimum}
+             "earned": d.earned, "max_gain": d.max_gain, "features": d.features}
             for d in r.dimensions
         ],
         "suggestions": [

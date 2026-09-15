@@ -1,0 +1,85 @@
+Ignoring wrong pointing object 6 0 (offset 0)
+Ignoring wrong pointing object 8 0 (offset 0)
+Ignoring wrong pointing object 10 0 (offset 0)
+platform: Darwin arm64  ·  corpus: 33 PDFs under Sample Tender Usha Martin
+
+Moil_GEM2026B7434266/ATC.pdf
+  pages 33 · no text layer 26 · recovered 25 · 59.4s (2.3s/page)
+  sample: IHONYY. XW BOON 4O_BBNOISSHNINOD mA) ve == NOILVINYOSINOLLVEORUOONI JO SL V0/ RBI Ue bbw /satebet aLIWITNILWvHsA |: BIYN/ pre W6EEZNOVYV as Y3EWNN LNNODOV LNSNVWYad/ Ios Uy urea CLL NILE YAW ES AAO go 1d00 FATE CITI
+
+Moil_GEM2026B7434266/Local Content.pdf
+  pages 1 · no text layer 1 · recovered 1 · 1.3s (1.3s/page)
+  sample: USHA MARTIN CERTIFICATE TOWARDS LOCAL CONTENT FROM OEM BID NUMBER: GEM/2026/B/7434266 Dated 10.04.2026 We do hereby certify that the item/s offered against the tender are manufactured at our factory situated at Ranchi & that the items offer
+
+Moil_GEM2026B7434266/Provenness (1).pdf
+  pages 57 · no text layer 57 · recovered 57 · 432.1s (7.6s/page)
+  sample: USHA MARTIN SELF-CERTIFICATION OF PROVENESS BID NUMBER: GEM/2026/B/7434266 Dated 10-04-2026 The items covered in the Purchase Order(s)/Rate Contract(s) copies enclosed with the offer have been fully executed and have performed satisfactoril
+
+NMDC_GEM2026B7422159/ATC.pdf
+  pages 19 · no text layer 13 · recovered 11 · 18.2s (1.4s/page)
+  sample: “SOOPER =TYMEY . ; “*peoy aeyy ‘Suping anudAry, 1e2}005 mes SX B}- QUOI] O- LOUOIS SILLS) oe Soe em pin md as an Bg / we “hes “Wauo7s ENYENOO GNI¥S ‘G'O)_- ‘O17. NILUY vos _ -
+
+NMDC_GEM2026B7422159/LOCAL CONTENT.pdf
+  pages 1 · no text layer 1 · recovered 1 · 1.4s (1.4s/page)
+  sample: USHA MARTIN CERTIFICATE TOWARDS LOCAL CONTENT FROM OEM BID NUMBER: GEM/2026/B/7422159 Dated 08-04-2026 We do hereby certify that the item/s offered against the tender are manufactured at our factory situated at Ranchi & that the items offer
+
+NMDC_GEM2026B7422159/Proveness.pdf
+  pages 8 · no text layer 7 · recovered 7 · 14.2s (2.0s/page)
+  sample: USHA MARTIN SELF-CERTIFICATION OF PROVENESS BID NUMBER: GEM/2026/B/7422159 Dated 08-04-2026 The items covered in the Purchase Order(s)/Rate Contract(s) copies enclosed with the offer have been fully executed and have performed satisfactoril
+
+NMDC_GEM2026B7682164/ATC.pdf
+  pages 27 · no text layer 21 · recovered 20 · 39.6s (1.9s/page)
+  sample: IHONYY. XW BOON 4O_BBNOISSHNINOD mA) ve == NOILVINYOSINOLLVEORUOONI JO SL V0/ RBI Ue bbw /satebet aLIWITNILWvHsA |: BIYN/ pre W6EEZNOVYV as Y3EWNN LNNODOV LNSNVWYad/ Ios Uy urea CLL NILE YAW ES AAO go 1d00 FATE CITI
+
+NMDC_GEM2026B7682164/Local Content.pdf
+  pages 1 · no text layer 1 · recovered 1 · 1.4s (1.4s/page)
+  sample: USHA MARTIN CERTIFICATE TOWARDS LOCAL CONTENT FROM OEM BID NUMBER: GEM/2026/B/7682164 Dated 20-06-2026 We do hereby certify that the item/s offered against the tender are manufactured at our factory situated at Ranchi & that the items offer
+
+NMDC_GEM2026B7682164/Provenness-Final.pdf
+  pages 14 · no text layer 8 · recovered 8 · 18.1s (2.3s/page)
+  sample: USHA MARTIN SELF-CERTIFICATION OF PROVENESS BID NUMBER: GEM/2026/B/7682164 Dated 20-06-2026 The items covered in the Purchase Order(s)/Rate Contract(s) copies enclosed with the offer have been fully executed and have performed satisfactoril
+
+NMDC_GEM2026B7682164/ts___2026-06-18-16-05-45_0c4e1068c5404556eb349b2693fe06fc.pdf
+  pages 2 · no text layer 2 · recovered 2 · 8.9s (4.5s/page)
+  sample: ewer ef a ter Annexure - | Mmm Sree. Technical Specification Sr. No.| Material Code Short Description Long Description Uom | Cut length Required Quantity Dia. - 18 mm; Steel Core - 3 |S: - ; E : f i: 1 2000s ;40 te ; Steel co e - 1960 N/mm2
+
+Oil India_GEM2026B7431083/Local Content.pdf
+  pages 1 · no text layer 1 · recovered 1 · 1.5s (1.5s/page)
+  sample: USHA MARTIN PROFORMA - 11 UNDERTAKING FOR LOCAL CONTENT We, USHA MARTIN LTD. (Name of the bidder) have submitted Bid against Tender No. GEM/2026/B/7431083 dated 10-04-2026. We hereby undertake that we meet the mandatory minimum local conten
+
+Oil India_GEM2026B7431083/Provenness.pdf
+  pages 25 · no text layer 17 · recovered 17 · 33.8s (2.0s/page)
+  sample: USHA MARTIN Self-Declaration of Satisfactory performance of items against the submitted Orders/RCs BID NUMBER: GEM/2026/B/7431083 Dated 10-04-2026 1. The items covered in the Purchase Order(s)/ Rate Contracts) copies enclosed with our offer
+
+Oil India_GEM2026B7431083/Tender Docsorganized.pdf
+  pages 38 · no text layer 38 · recovered 38 · 83.3s (2.2s/page)
+  sample: ANNEXURE - I TECHNICAL SPECIFICATION/SCOPE OF WORK/SPECIAL TERMS & CONDITIONS AA) Specification & quantity of the items to be procured B- Length: 59.13 Mtrs ( 194'-0"), Mast Raising Drg. No. 3-96532-1-6160, One end with open Spelter and the
+
+Oil India_GEM2026B7431083/UML DOCS.pdf
+  pages 29 · no text layer 21 · recovered 20 · 38.3s (1.8s/page)
+  sample: CERTIFIED TRUE. COPY _ (GD SAR om ANY SECRETA+ 7 C. eng crear wen /PERMANENT. ACCOUNT NUMBER : : a eRCUZSOM ATA NAME : USHA: MARTIN LIMITED ; COMMISSIONER OF INCOME TAX: RANCHI
+
+UCIL_GEM2026B7441435/ATC Doc.pdf
+  pages 28 · no text layer 28 · recovered 27 · 91.8s (3.3s/page)
+  sample: 2/8/2020 FACTORY ACT- PRINT LICENCE S| Government of Jharkhand FACTORY INSPECTION DEPARTMENT (Department of Labour, Employment, Training & Skill Development) LICENCE Under Rule 4 to 10 of the Jharkhand Factories Rule 1950 and Section 6(1) o
+
+UCIL_GEM2026B7441435/Local Content.pdf
+  pages 1 · no text layer 1 · recovered 1 · 1.4s (1.4s/page)
+  sample: USHA MARTIN CERTIFICATE TOWARDS LOCAL CONTENT FROM OEM GEM BID NO: GEM/2026/B/7441435 DATED: 28-04-2026 We do hereby certify that the item/s offered against the tender are manufactured at our factory situated at Ranchi & that the items offe
+
+UCIL_GEM2026B7441435/Provenness Final.pdf
+  pages 5 · no text layer 4 · recovered 4 · 8.8s (2.2s/page)
+  sample: USHA MARTIN SELF-CERTIFICATION OF PROVENESS GEM BID NO: GEM/2026/B/7441435 DATED: 28-04-2026 The items covered in the Purchase Order(s)/Rate Contract(s) copies enclosed with the offer have been fully executed and have performed satisfactori
+
+UCIL_GEM2026B7441435/Technical specification.pdf
+  pages 1 · no text layer 1 · recovered 1 · 4.2s (4.2s/page)
+  sample: URANIUM CORPORATION OF INDIA LIMITED. BALANCE ROPES Diameter Construction Applied Standard Tensile Grade of the Wires Wire Finish Lay Length Total length Lubrication Reel Size Unit Mass Nominal Breaking Load Make Note: - JADUGUDA MINES 34mm
+
+========================================================================
+PDFs 33 · pages 478
+no text layer      248 (52% of pages)
+recovered by OCR   242 (98% of those)
+still unreadable   6
+OCR time           858s total · 3.5s/page
+
+read these 18 samples before trusting the rate above.

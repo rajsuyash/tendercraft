@@ -14,7 +14,7 @@ from pipeline.drafter import draft_response
 from pipeline.retrieval import chunk_docs, select_evidence
 from pipeline.section_drafter import draft_section
 
-from . import authz, db, docx_export, learning, sections
+from . import authz, db, docx_export, learning, sections, spec_service
 from .auth import AuthedUser, get_current_user
 from .deterministic.drafting import mandatory_coverage
 from .envelope import ApiError, ok
@@ -47,6 +47,12 @@ def do_generate(workspace_id: str, tender_id: str) -> dict:
     }
 
     proposal = db.create_proposal(workspace_id, tender_id)
+    # A human accepted a prior answer into these; re-drafting would throw that away and leave
+    # the acceptance receipt (G-AC6) pointing at prose nobody accepted. `/prepare` runs this
+    # on every Re-match, so without the skip one gap fixed on the readiness screen silently
+    # reverted every reused answer in the proposal.
+    reused = db.get_reuse_targets(workspace_id, proposal["id"])
+    criteria = [c for c in criteria if f"criterion:{c['id']}" not in reused]
 
     # Draft all criteria concurrently — each is an independent model call; sequential would
     # blow the request budget on a large tender (retry cap keeps cost bounded per call). Each
@@ -78,6 +84,7 @@ def do_generate(workspace_id: str, tender_id: str) -> dict:
     return {
         "proposal_id": proposal["id"],
         "responses": len(criteria),
+        "kept_reused": len(reused),
         "mandatory_coverage": mandatory_coverage(coverage_rows),
         "open_flags": total_flags,
     }
@@ -94,6 +101,17 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
     tender = db.get_tender(tender_id, workspace_id) or {}
     criteria = db.get_criteria(tender_id, workspace_id)
     responses = db.get_responses(proposal["id"], workspace_id)
+    # What a human has already put their hands on. Regeneration used to overwrite all of it
+    # while leaving `approved_at` in place — so an approved section came back as new AI prose
+    # still badged approved, which is the one thing the watermark exists to prevent (B-FR4),
+    # and a rewritten section came back as the model's words still badged "Your edit".
+    protected = {
+        s["key"] for s in db.get_sections(proposal["id"], workspace_id) if s.get("edited_by")
+    } | {
+        t.split(":", 1)[1]
+        for t in db.get_reuse_targets(workspace_id, proposal["id"])
+        if t.startswith("section:")
+    }
     today = datetime.now(UTC).date().isoformat()
     docs = db.get_valid_library_docs(workspace_id, today)
     profile = db.get_profile_context(workspace_id)
@@ -129,7 +147,11 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
         "team_composition": sections.assemble_team(cv_docs),
         "cvs": sections.assemble_cvs(cv_docs),
         "deployment": sections.assemble_deployment(cv_docs),
-        "deviations": sections.assemble_deviations(),
+        # Form 12 is built from the schedule fit, never from a nil-deviation default: the
+        # declaration is signed by the bidder, so it may only say what was compared.
+        "deviations": sections.assemble_deviations(
+            spec_service.assess_schedule(workspace_id, tender_id, tender)
+        ),
         "compliance_matrix": sections.assemble_compliance_matrix(criteria, responses),
         "annexures": sections.assemble_annexures(docs, today),
     }
@@ -152,7 +174,11 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
 
     total_words = 0
     written: list[dict] = []
+    kept: list[str] = []
     for spec in sections.SECTION_SPECS:
+        if spec.key in protected:
+            kept.append(spec.key)
+            continue
         if spec.key in assembled:
             a = assembled[spec.key]
             row = {
@@ -165,6 +191,9 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
                 ],
                 "status": "drafted", "confidence": 1.0, "flags": [],
                 "word_count": len(a.body_md.split()),
+                # New text, so any signature on the old text is void. The upsert merges, so
+                # these have to be written explicitly — a field left out keeps its old value.
+                "approved_by": None, "approved_at": None,
             }
         else:
             d = drafted_by_key[spec.key]
@@ -172,6 +201,7 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
                 "heading": spec.heading, "order_index": spec.order, "kind": "narrative",
                 "body_md": d.body_md, "sentences": d.sentences, "status": d.status,
                 "confidence": d.confidence, "flags": d.flags, "word_count": d.word_count,
+                "approved_by": None, "approved_at": None,
             }
         db.upsert_section(workspace_id, proposal["id"], spec.key, row)
         total_words += row["word_count"]
@@ -182,6 +212,7 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
     return {
         "proposal_id": proposal["id"],
         "sections": written,
+        "kept": kept,
         "total_words": total_words,
         "placeholders": sum(1 for s in written if s["status"] == "placeholder"),
         "open_flags": sum(s["flags"] for s in written),

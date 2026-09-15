@@ -1,13 +1,5 @@
-"use client";
-
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-
 export type Rubric = {
   total: number;
-  technically_qualified: boolean;
-  meets_aggregate_minimum: boolean;
-  failing_dimensions: string[];
   dimensions: {
     key: string;
     label: string;
@@ -15,7 +7,6 @@ export type Rubric = {
     score: number;
     earned: number;
     max_gain: number;
-    meets_minimum: boolean;
   }[];
   suggestions: {
     dimension: string;
@@ -40,104 +31,70 @@ const LINK: Record<string, (tenderId: string) => string> = {
   RENEW_CERTIFICATION: () => "/library",
 };
 
+/**
+ * How finished the proposal document is, and what would finish it.
+ *
+ * This card used to render a verdict — "Technically disqualified — below the 65%
+ * aggregate" — from an IT-services marks table (MeitY §2.6.2, CAG OIOS §7) applied to
+ * every tender regardless of what that tender's own evaluation table says. On a wire-rope
+ * supply bid it announced disqualification against criteria the tender never contained.
+ * The measurement is real and useful; the verdict was ours to stop making. See
+ * `app/deterministic/rubric.py`.
+ *
+ * No client state: the numbers are computed from persisted rows on every render, so a
+ * page refresh is the recompute button.
+ */
 export function RubricCard({ tenderId, rubric }: { tenderId: string; rubric: Rubric | null }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function run() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/tenders/${tenderId}/rubric`, { method: "POST" });
-      const body = await res.json();
-      if (!body.ok) setError(body.error?.message ?? "Could not score the proposal");
-      else router.refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (!rubric) {
     return (
       <div className="rounded-card border border-border bg-surface p-card">
-        <h2 className="font-heading text-lg font-medium text-ink">Technical competence</h2>
+        <h2 className="font-heading text-lg font-medium text-ink">Document completeness</h2>
         <p className="mt-2 text-sm text-muted">
-          Measured from the proposal document itself — not a prediction, so it is never
-          suppressed.
+          Available once the proposal document has been generated — it is measured from the
+          sections themselves.
         </p>
-        <button
-          type="button"
-          data-score-proposal
-          onClick={run}
-          disabled={busy}
-          className="mt-3 rounded bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        <a
+          href={`/proposals/${tenderId}`}
+          className="mt-3 inline-block text-sm font-medium text-primary underline"
         >
-          {busy ? "Scoring…" : "Score this proposal"}
-        </button>
-        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
+          Open the proposal →
+        </a>
       </div>
     );
   }
 
-  const qualified = rubric.technically_qualified;
-
   return (
     <div className="space-y-4">
       <div className="rounded-card border border-border bg-surface p-card">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="font-heading text-lg font-medium text-ink">Technical competence</h2>
-          <button
-            type="button"
-            onClick={run}
-            disabled={busy}
-            className="rounded border border-border px-3 py-1.5 text-xs text-ink disabled:opacity-50"
-          >
-            {busy ? "Scoring…" : "Recompute"}
-          </button>
-        </div>
-
+        <h2 className="font-heading text-lg font-medium text-ink">Document completeness</h2>
         <p className="mt-3">
           <span data-rubric-total className="font-heading text-4xl font-medium text-ink">
             {rubric.total}
           </span>
-          <span className="text-lg text-muted"> / 100</span>
-        </p>
-        <p
-          data-qualified={qualified}
-          className={`mt-1 text-sm font-medium ${qualified ? "text-success" : "text-danger"}`}
-        >
-          {qualified
-            ? "Clears both technical gates"
-            : `Technically disqualified — ${
-                rubric.meets_aggregate_minimum
-                  ? `below 45% on: ${rubric.failing_dimensions.join(", ")}`
-                  : "below the 65% aggregate"
-              }`}
+          <span className="text-lg text-muted">% complete</span>
         </p>
         <p className="mt-2 text-xs text-muted">
-          Measured from this document, not predicted. Indian government IT tenders require
-          ≥45% on every evaluation head and ≥65% in aggregate (MeitY Model RFP §2.6.2, CAG
-          OIOS §7) — below either, the commercial cover is never opened.
+          How finished this document is: sections present, long enough for their own target,
+          sub-headed, cited, approved, and backed by CVs and experience records where they
+          need to be. It is not a prediction of how an evaluation committee will mark the
+          bid — that depends on this tender&apos;s own evaluation table.
         </p>
       </div>
 
       <div className="rounded-card border border-border bg-surface p-card">
-        <h3 className="font-heading text-base font-medium text-ink">Marks by evaluation head</h3>
+        <h3 className="font-heading text-base font-medium text-ink">Completeness by section</h3>
         <div className="mt-3 space-y-2">
           {rubric.dimensions.map((d) => (
             <div key={d.key} data-dimension={d.key} className="flex items-center gap-3">
               <span className="w-56 shrink-0 text-sm text-ink">{d.label}</span>
               <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-alt">
                 <span
-                  className={`block h-full rounded-full ${
-                    d.meets_minimum ? "bg-primary" : "bg-danger"
-                  }`}
+                  className="block h-full rounded-full bg-primary"
                   style={{ width: `${Math.round(d.score * 100)}%` }}
                 />
               </span>
               <span className="w-20 shrink-0 text-right text-sm tabular-nums text-muted">
-                {d.earned.toFixed(1)}/{d.weight}
+                {Math.round(d.score * 100)}%
               </span>
             </div>
           ))}
@@ -147,11 +104,10 @@ export function RubricCard({ tenderId, rubric }: { tenderId: string; rubric: Rub
       {rubric.suggestions.length > 0 ? (
         <div className="rounded-card border border-border bg-surface p-card">
           <h3 className="font-heading text-base font-medium text-ink">
-            How to improve this score
+            What would finish this document
           </h3>
           <p className="mt-1 text-xs text-muted">
-            Each figure is the marks actually recoverable on that head — computed, not
-            estimated.
+            Ordered by how much of the document each one completes.
           </p>
           <ul className="mt-3 space-y-3">
             {rubric.suggestions.slice(0, 8).map((s, i) => (
@@ -164,7 +120,7 @@ export function RubricCard({ tenderId, rubric }: { tenderId: string; rubric: Rub
                   data-expected-delta
                   className="h-fit shrink-0 rounded bg-success-bg px-2 py-1 text-xs font-semibold tabular-nums text-success"
                 >
-                  +{s.expected_delta.toFixed(2)}
+                  +{s.expected_delta.toFixed(1)}%
                 </span>
                 <span className="text-sm">
                   <span className="font-medium text-ink">{s.dimension_label}</span>

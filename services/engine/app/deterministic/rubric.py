@@ -1,33 +1,41 @@
-"""Technical-competence rubric — scores the PROPOSAL, deterministically (Module D).
+"""Document completeness — measures the PROPOSAL we are holding, deterministically.
 
-Distinct from app/estimator.py on purpose:
-  - the estimator PREDICTS what an external evaluator will do, so it is correctly
-    suppressed until 30 comparable historical outcomes exist (D-AC4)
-  - this MEASURES how complete and defensible the document we are holding actually is.
-    Every input is a row we own, so it needs no history and must never be suppressed.
+WHAT THIS IS, AND WHAT IT IS NOT (narrowed 2026-09-15 after two audits).
 
-Merging them fails either way round: the measurement inherits a suppression it doesn't
-need, or the prediction escapes one it does.
+It measures coverage of the document: is each section present, is it long enough for its
+own target, does it carry sub-headings, do its claims resolve to a citation, has a human
+approved it, are there CVs and matching experience records behind the sections that need
+them. Every input is a row we own and the number is reproducible from the database.
 
-Weights are taken from real Indian government technical-evaluation tables, not invented:
-  - MeitY Model RFP 2018 §2.6.2.2 (QCBS Category Two): functionality 20%, technology 20%,
-    team 20%, then 7% each for training, certifications, methodology, industry experience
-  - CAG "One IAAD One System" 2019 §7: functionality 22, technology 25, methodology 15,
-    team 10, training 5, exit/O&M 8
-Both enforce a per-section minimum AND an aggregate cut-off below which a bid is
-technically rejected without the commercial cover ever being opened — modelled here.
+It is NOT an evaluation verdict, and it used to render as one. The weights below were
+taken from MeitY Model RFP 2018 §2.6.2.2 and CAG OIOS 2019 §7, and the screen reported
+"Technically disqualified — below the 65% aggregate" whenever the weighted total fell
+short. Two things were wrong with that and both are the same mistake:
 
-No model call anywhere in this module: the number must be reproducible from the DB.
+  - those thresholds belong to the *tender's* evaluation table, not ours. Applying an
+    IT-services marks table to a wire-rope supply bid produced a disqualification verdict
+    from criteria that tender never contained.
+  - word count, sub-headings and approval state measure whether a document is finished.
+    They cannot measure whether an evaluator will accept the solution, and a product that
+    says otherwise is deciding something it did not observe (PRD §2.4).
+
+So the gates are gone. The weights remain as a *relative emphasis* over the sections we
+generate — a missing team section still matters more than a missing risk section — and
+the total is a completeness percentage, named as one. When the proposal outline is derived
+from the tender itself (plan R3-2), the emphasis comes from the tender's own evaluation
+heads and this becomes a real rubric; until then it is an editorial check.
+
+Distinct from app/estimator.py on purpose: the estimator PREDICTS what an external
+committee will do and is suppressed until 30 comparable outcomes exist (D-AC4); this
+measures the artefact in hand and needs no history. Merging them fails either way round.
+
+No model call anywhere in this module.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-
-# CAG OIOS §7.7.4 / MeitY §2.6.2.2 — a bid must clear BOTH or it is technically rejected.
-MIN_DIMENSION_FRACTION = 0.45
-MIN_AGGREGATE_FRACTION = 0.65
 
 # Anti-padding: past 2.5x the target, more words stop helping. "Never pad with unsupported
 # prose" becomes a scoring property here, not just a prompt instruction.
@@ -59,7 +67,8 @@ class Dimension:
     features: dict[str, float]
 
 
-# Weights sum to 100. Mapping from MeitY/CAG heads onto the sections we actually produce.
+# Weights sum to 100, and are a relative emphasis over the sections this product generates
+# — NOT the tender's evaluation table. See the module docstring.
 DIMENSIONS: tuple[Dimension, ...] = (
     Dimension("scope_understanding", "Understanding of scope", 10, ("understanding",),
               {"presence": 0.3, "depth": 0.4, "citation_integrity": 0.1, "approved": 0.2}),
@@ -124,7 +133,6 @@ class DimensionScore:
     earned: float  # weight * score
     max_gain: float
     features: dict[str, float]
-    meets_minimum: bool
 
 
 @dataclass(frozen=True)
@@ -139,12 +147,11 @@ class Suggestion:
 
 @dataclass(frozen=True)
 class RubricResult:
+    """Completeness, its breakdown, and what would raise it. No verdict field — by design."""
+
     total: float
     dimensions: tuple[DimensionScore, ...] = field(default_factory=tuple)
     suggestions: tuple[Suggestion, ...] = field(default_factory=tuple)
-    meets_aggregate_minimum: bool = False
-    failing_dimensions: tuple[str, ...] = field(default_factory=tuple)
-    technically_qualified: bool = False
 
 
 def _depth(words: int, target: int) -> float:
@@ -218,7 +225,6 @@ def score_proposal(
                 key=dim.key, label=dim.label, weight=dim.weight, score=round(score, 4),
                 earned=round(earned, 2), max_gain=round(dim.weight - earned, 2),
                 features={k: round(v, 4) for k, v in vals.items()},
-                meets_minimum=score >= MIN_DIMENSION_FRACTION,
             )
         )
 
@@ -244,16 +250,8 @@ def score_proposal(
                 )
             )
 
-    total = round(sum(d.earned for d in dim_scores), 1)
-    failing = tuple(d.key for d in dim_scores if not d.meets_minimum)
-    meets_aggregate = total >= MIN_AGGREGATE_FRACTION * 100
-
     return RubricResult(
-        total=total,
+        total=round(sum(d.earned for d in dim_scores), 1),
         dimensions=tuple(dim_scores),
         suggestions=tuple(sorted(suggestions, key=lambda s: -s.expected_delta)),
-        meets_aggregate_minimum=meets_aggregate,
-        failing_dimensions=failing,
-        # Both gates, exactly as a real evaluation committee applies them.
-        technically_qualified=meets_aggregate and not failing,
     )

@@ -141,7 +141,6 @@ export function PastBidUpload({
               "Finding the requirements they answer",
               "Storing the answers with their provenance",
             ]}
-            secondsPerStage={8}
             note="a long bid takes a minute"
           />
         </div>

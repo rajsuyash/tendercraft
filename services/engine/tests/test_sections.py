@@ -185,15 +185,6 @@ def test_cv_sections_index_documents():
     assert "Full-time" in assemble_deployment(docs).body_md
 
 
-# --- deviations ---
-
-
-def test_deviations_defaults_to_nil_and_is_never_generated():
-    body = assemble_deviations().body_md
-    assert "no deviations" in body
-    assert "never auto-generated" in body
-
-
 # --- compliance matrix ---
 
 
@@ -222,3 +213,58 @@ def test_annexure_index_marks_expiry_against_the_bid_date():
     assert "EXPIRED 2026-03-31" in body
     assert "No expiry" in body
     assert "A-1" in body and "A-2" in body
+
+
+# --- Form 12: deviations are read, never assumed -------------------------------------------
+
+
+def _line(*params, ref="Sch-A", item="1"):
+    return {"schedule_ref": ref, "item_ref": item, "description": "Wire rope 40mm",
+            "parameters": list(params)}
+
+
+def _param(key, match, required="40 mm", capability="6–32 mm"):
+    return {"key": key, "match": match, "required": required, "capability": capability}
+
+
+def test_form_12_lists_a_deviation_the_schedule_found():
+    body = assemble_deviations(
+        {"lines": [_line(_param("diameter_mm", "deviation"))]}
+    ).body_md
+    assert "1 deviation(s)" in body
+    assert "diameter_mm" in body and "40 mm" in body and "6–32 mm" in body
+    assert "no deviations" not in body.lower()
+
+
+def test_form_12_never_declares_nil_without_naming_what_was_compared():
+    body = assemble_deviations(
+        {"lines": [_line(_param("diameter_mm", "match"), _param("grade", "match"))]}
+    ).body_md
+    assert "2 parameter(s)" in body
+    assert "No deviation was found among" in body
+
+
+def test_form_12_says_nothing_when_nothing_was_assessed():
+    """An unread schedule is not a compliant one. The old default signed a declaration on
+    every tender regardless of whether anything had been compared."""
+    body = assemble_deviations(None).body_md
+    assert "No schedule of items has been read" in body
+    # No declaration of any kind: not "confirms no deviations", and no count implying one
+    # was computed. The bid owner is told to enter them.
+    assert "confirms" not in body
+    assert "No deviation was found" not in body
+
+
+def test_form_12_reports_unassessed_parameters_as_unassessed():
+    body = assemble_deviations(
+        {"lines": [_line(_param("diameter_mm", "match"), _param("core_type", "unknown"))]}
+    ).body_md
+    assert "1 parameter(s) could not be compared" in body
+    assert "unassessed, not compliant" in body
+
+
+def test_form_12_treats_an_invited_equivalent_as_a_deviation_until_accepted():
+    body = assemble_deviations(
+        {"lines": [_line(_param("grade", "equivalent"))]}
+    ).body_md
+    assert "unless the buyer accepts the equivalence" in body
