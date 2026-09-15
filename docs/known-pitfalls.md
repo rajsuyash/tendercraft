@@ -722,3 +722,50 @@ types and the reviews that shipped the features they live in.
   one. A `viewer`, the role defined as "must never touch a draft", could sign every section and
   clear the export watermark. When a control exists to substitute for an automated guarantee,
   audit its authorization at the same time as the guarantee itself.
+
+## Letting a model's reading decide structure (eligibility rewrite, 2026-09-15)
+
+- **A verdict layer can be perfectly deterministic and still flip, if the thing feeding it
+  is a model call.** `app/analysis.py` now compares extracted requirements against profile
+  facts with pure arithmetic — no model anywhere near the decision — and the bid/no-bid card
+  *still* moves between runs, because whether a clause IS a gate depends on a model reading.
+  Measured, not inferred: six live extractions of `"In case of trader/agent, valid
+  authorization certificate from OEM to be submitted along with the bid"` returned `none` at
+  0.90 four times and `certification_valid` at 1.00 twice. **Confidently on both sides**, so
+  no threshold separates them, and widening the 0.75 floor cannot see it. Moving the model
+  out of the decision is necessary and is not sufficient; the remaining exposure is wherever
+  a model output selects a code path rather than filling a field.
+- **Check whether the flip can reach the expensive direction before treating it as a bug to
+  block on.** Here it cannot: the criterion is displayed either way — as a needs-review
+  verdict row or as a demoted checklist row — and neither reading can produce a FAIL. What
+  moves is the card's headline. That is worth a named ceiling in the code and not worth a
+  caching layer nobody asked for; the fix, when it is wanted, is the
+  `discovery/relevance.py::input_hash` idiom keyed on the criterion text, and it trades
+  "re-run the analysis" against "pick up a better prompt".
+- **`str.replace` on a token that is not in the file is a silent no-op, and a prompt is a
+  file.** `pipeline/analyzer.py` did `_PROMPT.replace("{{CRITERION}}", criterion_text)`
+  against a `prompts/analyzer.md` that never contained the token — so every call asked the
+  model to describe nothing at all. No exception, no empty response, no log line: the model
+  answered the instructions alone, plausibly, and the evals would have scored that answer.
+  Found by a structural test asserting the prompt's token set, never by reading either file.
+  Any prompt with an interpolation point needs a test that the value actually lands in the
+  string that is sent.
+- **A test that walks schemas catches what an import grep cannot.** CI greps
+  `app/deterministic/` for model imports and that check is right, but `app/analysis.py` is
+  the adapter layer: it is *supposed* to import from `pipeline` and does not live under
+  `app/deterministic/`. `model_verdict`, `actual_value_cr` and `exemption_applies` decided
+  eligibility from there for months, inside the directory the grep does not watch.
+  `tests/test_schema_discipline.py` refuses an outcome-shaped FIELD NAME in any model schema
+  instead — position-independent, and unreachable by a prompt edit.
+- **Two independent readings that disagree are information, and the cheap error is the one
+  that keeps the item visible.** The rules classified five clauses as gates on the words
+  "OEM" and "manufacturer's authorisation"; the extractor read the whole clause and found no
+  pre-bid condition. Demoting them to a named checklist row costs a possible missed gate the
+  screen still lists; scoring them costs a card stuck on needs-review with no fact any user
+  could ever supply to clear it. **A verdict nobody can act on is a dead end wearing a
+  verdict's clothes.**
+- **Adding a value to an enum silently drops rows from any UI that lists the old members.**
+  Demoted gates keep `kind: "gate"` and the analysis page grouped four kinds, so every
+  demoted row would have vanished from the screen — the exact silent exclusion the change
+  existed to stop, arriving through the fix. Grep the consumers of an enum before widening
+  what can carry one of its values.

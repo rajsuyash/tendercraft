@@ -218,6 +218,22 @@ def analyze(
     # The confidence floor is the whole guard. A `none` at zero confidence is a MODEL
     # FAILURE, not a reading, and must stay a gate so it reads needs-review and a human
     # looks at it. Those two states are identical in the payload and opposite in meaning.
+    #
+    # NAMED CEILING, measured rather than assumed. This branch is stochastic on a clause the
+    # model genuinely finds ambiguous. Six live extractions of "In case of trader/agent,
+    # valid authorization certificate from OEM to be submitted along with the bid"
+    # (2026-09-15, Gemini 2.5 Flash) returned `none` at 0.90 four times and
+    # `certification_valid` at 1.00 twice — confidently on both sides, so no threshold
+    # separates them. The consequence is visible: that criterion appears as a needs-review
+    # verdict on some runs and as a demoted checklist row on others, and the card moves
+    # between NEEDS REVIEW and NO_GATES with no change to the input.
+    #
+    # What is NOT at risk is the expensive direction: the row is displayed either way, and
+    # neither reading can produce a FAIL. Stabilising it means caching the extraction
+    # against a hash of the criterion text — the `discovery/relevance.py::input_hash` idiom,
+    # which this file does not yet use — and that trades re-running the analysis for
+    # picking up a better prompt. Do not "fix" it by widening the confidence floor: the
+    # measurement above says the floor cannot see this.
     scored, demoted = [], []
     for row, req in zip(gates, reqs, strict=True):
         target = (demoted if req.check is CheckType.NONE
