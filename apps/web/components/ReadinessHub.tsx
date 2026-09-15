@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { saveErrorMessage } from "@/components/BidVocabulary";
 import { KnowledgeUpload } from "@/components/KnowledgeUpload";
 
 type Decision = "resolve" | "ignore" | "do_not_proceed";
@@ -79,6 +80,51 @@ export function ReadinessHub({
   const [comments, setComments] = useState<Record<string, string>>({});
   const { summary, items } = readiness;
 
+  // Editable tender name — the only fix for the "Untitled tender" fallback
+  // (deterministic/tender_meta.display_title). `title` only changes once the server
+  // confirms the write, so a failed save can never leave the heading showing an unsaved name.
+  const [title, setTitle] = useState(tenderTitle);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(tenderTitle);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [savingTitle, setSavingTitle] = useState(false);
+
+  function startTitleEdit() {
+    setTitleDraft(title);
+    setTitleError(null);
+    setEditingTitle(true);
+  }
+  function cancelTitleEdit() {
+    setEditingTitle(false);
+    setTitleError(null);
+    setTitleDraft(title);
+  }
+  async function saveTitle() {
+    const next = titleDraft.trim();
+    if (!next) {
+      setTitleError("Tender name cannot be empty");
+      return;
+    }
+    setSavingTitle(true);
+    setTitleError(null);
+    const res = await fetch(`/api/tenders/${tenderId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: next }),
+    });
+    // Read the body once — saveErrorMessage also reads it, so it gets a resolved copy
+    // rather than a second read of an already-consumed stream.
+    const raw = await res.json().catch(() => null);
+    const message = await saveErrorMessage({ json: () => Promise.resolve(raw) }, "Rename failed");
+    if (message === null) {
+      setTitle(raw.data.title as string); // show what the server actually stored
+      setEditingTitle(false);
+    } else {
+      setTitleError(message); // previous name is untouched — `title` state never changed
+    }
+    setSavingTitle(false);
+  }
+
   async function post(url: string, tag: string) {
     setBusy(tag);
     setError(null);
@@ -134,8 +180,60 @@ export function ReadinessHub({
   return (
     <main className="p-page">
       <header className="mb-6">
-        <h1 className="font-heading text-2xl font-semibold text-ink">{tenderTitle}</h1>
-        {tenderTitle === "Untitled tender" && !tenderNumber && !authority && (
+        {editingTitle ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveTitle();
+            }}
+            className="flex items-center gap-2"
+          >
+            <input
+              autoFocus
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelTitleEdit();
+                }
+              }}
+              disabled={savingTitle}
+              maxLength={300}
+              aria-label="Tender name"
+              className="w-full max-w-xl rounded border border-border bg-surface px-2 py-1 font-heading text-2xl font-semibold text-ink focus:border-primary focus:outline-none disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={savingTitle || !titleDraft.trim()}
+              className="shrink-0 rounded border border-primary px-3 py-1 text-xs font-medium text-primary hover:bg-primary-tint disabled:opacity-50"
+            >
+              {savingTitle ? "…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={cancelTitleEdit}
+              disabled={savingTitle}
+              className="shrink-0 rounded border border-border px-3 py-1 text-xs font-medium text-muted hover:bg-surface-alt disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <div className="flex items-center gap-2">
+            <h1 className="font-heading text-2xl font-semibold text-ink">{title}</h1>
+            <button
+              type="button"
+              onClick={startTitleEdit}
+              aria-label="Rename tender"
+              className="shrink-0 rounded border border-border px-2 py-1 text-xs font-medium text-muted hover:bg-surface-alt"
+            >
+              Rename
+            </button>
+          </div>
+        )}
+        {titleError && <p className="mt-1 text-xs text-danger">{titleError}</p>}
+        {title === "Untitled tender" && !tenderNumber && !authority && (
           // Both halves are load-bearing — neither alone is safe:
           //  - tenderTitle check alone: the placeholder can outlive it. A pursuit backfill
           //    renames the tender once it learns a number/authority
@@ -161,7 +259,7 @@ export function ReadinessHub({
           // beneath itself is noise — the line exists to add context to a real title, not to
           // repeat one.
           const meta = [tenderNumber, authority].filter(Boolean).join(" · ");
-          return meta && meta !== tenderTitle ? (
+          return meta && meta !== title ? (
             <p className="text-xs text-muted">{meta}</p>
           ) : null;
         })()}

@@ -54,6 +54,11 @@ class CreateTender(BaseModel):
     title: str = Field(min_length=1, max_length=500)
 
 
+class TenderPatch(BaseModel):
+    # 300 chars: the column is `text`, the cap is a UI decision (a heading, not a body).
+    title: str = Field(min_length=1, max_length=300)
+
+
 class CriterionIn(BaseModel):
     verbatim_text: str
     category: str
@@ -354,6 +359,21 @@ def assign_project(tender_id: str, body: AssignProjectIn, user: CurrentUser) -> 
 def create_tender_route(body: CreateTender, user: CurrentUser) -> dict:
     tender = db.create_tender(user.workspace_id, body.title)
     return ok({"id": tender["id"], "status": tender["status"]})
+
+
+@router.patch("/api/tenders/{tender_id}")
+def rename_tender(tender_id: str, body: TenderPatch, user: CurrentUser) -> dict:
+    """User-given name for a tender the extractor could not title (fallback 'Untitled
+    tender'). Mirrors update_project's shape: authz, 404-before-write, no audit — this
+    file's neighbouring PATCH doesn't audit renames either."""
+    authz.check(user, authz.DRAFT)
+    title = body.title.strip()
+    if not title:
+        raise ApiError(400, "TITLE_REQUIRED", "tender name cannot be empty")
+    if not db.get_tender(tender_id, user.workspace_id):
+        raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
+    db.set_tender_title(tender_id, user.workspace_id, title)
+    return ok({"id": tender_id, "title": title})
 
 
 @router.post("/api/tenders/{tender_id}/criteria")
