@@ -5,6 +5,40 @@
 
 ---
 
+## 0. Execution log — 2026-09-15, shipped
+
+Five commits, pushed to `build/tendercraft` and deployed: engine revision
+`tendercraft-engine-eu-00061-rh7`, web revision `tendercraft-web-eu-00065-pvg`. Verified on
+production as FIX-1 after the deploy.
+
+| Phase | Task | State |
+|---|---|---|
+| audit | The nine defects found by the audit itself (deadline extraction, cert validity, DOCX cover, digest fields, hub nav, login copy, env names, `Form()` binding, section-approval authz) | **shipped** |
+| R0-1 | Rubric verdict removed; "Document completeness"; rubric is a GET; estimator button gone | **shipped** |
+| R0-2 | Form 12 built from the schedule fit, three outcomes, never a nil default | **shipped** |
+| R0-3 | Feed says "not checked" when no bid document was read | **shipped** |
+| R0-4 | Regeneration keeps human edits and accepted reuse; any rewrite voids its approval | **shipped** |
+| R0-5 | `StageProgress` stops drawing checkmarks it cannot observe | **shipped** |
+| R0-6 | Navigation below `lg` (`[data-nav-toggle]` + drawer); feed table scrolls instead of colliding; long refs wrap | **shipped** |
+| R0-7 | Deadline backfill | **void — no data source.** No tender was ever linked to a pursuit (the `Form()` bug), and the six existing tenders are not in the corpus at all. Nothing persists page text after ingest, so the new parser cannot be re-run over them either. Replaced by a manual entry path (below). |
+| R0-7 | `RESEND_API_KEY` / `RESEND_FROM` on the engine | **blocked — the key is not on disk.** Confirmed absent from the live service's environment; digests and assignment emails cannot send until it is set. |
+| R0-7 | Move FIX-1 out of the customer's workspace | **not done — owner's call** (§5.3). The seeded test user still operates inside Usha Martin's workspace. |
+| R0-8 | Commit; four new pitfalls appended | **shipped** |
+| — | `PATCH /api/tenders/{id}` takes a deadline; readiness header sets it, in IST | **shipped** (not in the original plan; replaces the void backfill) |
+| R1-4 | One blocker list: readiness reads the export gate's decision | **shipped** |
+| R2-1 | Closed tenders filtered by the database before the limit; true closed count | **shipped** |
+
+**What R2-1 measured on the live workspace, which is the finding of the day:** 4,221 of 4,310
+in-scope matches had already closed. The page asked for 100 rows best-fit-first and the browser
+filtered afterwards, so almost every row the server chose was a closed tender and every open
+one past position 100 was unreachable — no pagination, no search, no error. The feed now opens
+on wire-rope tenders closing tomorrow.
+
+Everything else below is unstarted. R1-1 (requirement classification) and R3-2 (tender-derived
+outline) remain the two changes that matter most, and neither is a containment fix.
+
+---
+
 ## 1. Where the two audits agree, differ, and what was disputed
 
 **Both reviews reached the same top three independently** (one from live screens, one from code alone): the proposal template is aimed at a customer this product does not have; the bid/no-bid signal is not trustworthy; the export gate does not bind to the exact document a human approved.
