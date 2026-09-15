@@ -769,3 +769,53 @@ types and the reviews that shipped the features they live in.
   demoted row would have vanished from the screen — the exact silent exclusion the change
   existed to stop, arriving through the fix. Grep the consumers of an enum before widening
   what can carry one of its values.
+
+## Deriving structure from a tender (the outline, 2026-09-16)
+
+- **Measure a keyword's reach against the real corpus before shipping it, and read the hits.**
+  Five patterns were written to decide which proposal sections a tender needs. Four fired on
+  wire-rope bids and every one looked reasonable in the editor: `\bapi\b` matched 23 times and
+  every hit was **API Specification 9A**, the petroleum institute's rope standard; `platform`
+  matched the **TReDS** and **SFMS** banking payment rails named in an MSME clause and a
+  bank-guarantee clause; `application` matched "their selection for various applications" in a
+  rope description; bare `training` matched a local-content declaration mentioning it in
+  passing. Same family as the `certif` stem matching "Project Closure Certificate": **a term
+  short enough to be an acronym will collide with a standard number**, and only the corpus
+  shows which.
+- **Tighten and then re-measure the other direction, or you trade false positives for false
+  negatives.** The same pass that removed those four initially required a training verb
+  adjacent to the noun — and the one tender that plainly needs a training section phrases it
+  "would have to be provided with adequate training by the agency". Three words of slack
+  recovered it. Meanwhile `software`, `architecture` and `ai/ml` were kept as bare stems
+  *because they were measured*: zero hits across every goods tender, real reach on the services
+  ones. `system` was measured with them and rejected — "TWO Part Bid System".
+- **A form's boilerplate must not vote on what the document contains.** A blank template is
+  prose the bidder fills in, not the buyer asking for something. The local-content declaration
+  on a live rope bid says "after sales service support like AMC/CMC etc." inside a list of what
+  is EXCLUDED from local content, and that sentence put a Support/SLA/O&M section on a rope
+  supply bid. Its EXISTENCE is a signal; its wording is not.
+- **Decide which way to be wrong, then say so where the user can see it.** Over-inclusion costs
+  a thin section the bidder deletes; omission costs a section the buyer asked for and the bid
+  does not contain, which is a rejected bid. So every included section names the row that put
+  it there and every excluded one names the signal that was missing — a section the user did
+  not expect becomes answerable instead of arbitrary.
+- **Never delete a row to remove it from a document.** A re-derive that drops a section sets
+  `included=false`; `original_md`, `edited_by`, `approved_at` and every `answer_usages` receipt
+  survive, and a section a human edited is kept in the document outright — their words are not
+  the system's to remove. The receipts are the same ones a re-harvest must upsert rather than
+  rebuild, for the same reason.
+- **Adding a soft-delete flag is only half the change: the READ has to filter.** Without
+  `included` in `db.get_sections`, a dropped section keeps exporting, keeps counting toward
+  coverage and keeps blocking the gate, and the whole feature does nothing but grow the row
+  count. The web page needed the same filter independently, or the screen and the export gate
+  would describe the same document differently.
+- **A weighted total that cannot reach 100 is a defect, not a low score.** The rubric spent 15
+  marks on "Team composition" and 20 on "Proposed solution" for a rope supply bid — 41 marks
+  unreachable whatever the bidder did, printed beside suggestions telling them to fix it.
+  Renormalise the emphasis over the sections the tender actually selected, and send the
+  integer-rounding remainder somewhere: a percentage that tops out at 99 is a bug report nobody
+  can act on.
+- **When a score you wrote to check your own work fails, read the flagged item first.** The
+  test asserting "a narrowed rubric can still reach 100" failed at 97.3, and the defect was the
+  TEST: ten thousand words against a hundred-word target scores 0.9, the anti-padding rule
+  working correctly. Acting on that number would have meant changing behaviour that was right.

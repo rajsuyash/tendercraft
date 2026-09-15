@@ -34,8 +34,55 @@ filtered afterwards, so almost every row the server chose was a closed tender an
 one past position 100 was unreachable — no pagination, no search, no error. The feed now opens
 on wire-rope tenders closing tomorrow.
 
-Everything else below is unstarted. R1-1 (requirement classification) and R3-2 (tender-derived
-outline) remain the two changes that matter most, and neither is a containment fix.
+---
+
+## 0b. Execution log — 2026-09-16: the two changes that mattered most
+
+Both of the changes named above as "the two that matter most" are shipped, plus the verdict
+rewrite that sat between them. Engine revision `tendercraft-engine-eu-00069-wz5`, web revision
+`tendercraft-web-eu-00070-599`. Migrations 0042–0046 applied to production, each confirmed
+SERVED rather than merely accepted. Verified on production as FIX-1 after every deploy.
+
+| Phase | Task | State |
+|---|---|---|
+| P1 | The dead ends: export delivers bytes, the download link reads the server's own decision, the verify queue stops being stricter than the lock gate, sweep failures are visible | **shipped** |
+| P2 | Requirement classification (`deterministic/requirement_kind.py`, migration 0042) — gate / obligation / instruction / form / spec, computed at read time, human-overridable | **shipped** |
+| P3 | The verdict is computed from facts (`deterministic/facts.py`), the model describes the requirement and never sees the bidder, exemptions are grounded, only gates vote, the working is persisted | **shipped** |
+| P3-e | B9 — the FY window reaches the PQ sheet | **shipped** |
+| P4 | Export binds to the text that was approved (content hash, migration 0043), unverified sections block, a re-save cannot launder a financial flag, "ready" knows the document was read (migration 0044) | **shipped** |
+| P5 | The document is shaped by the tender (`deterministic/outline.py`, migration 0046), three new catalogue entries, the matrix stops claiming compliance, the rubric renormalises | **shipped** |
+| — | Reading cache (migration 0045) | **shipped** — not in the plan; found by verifying P3 on production |
+
+**Three measurements from the live workspace, which are the findings of the day.**
+
+*Zero of eighteen.* On the Oil India wire-rope bid, eighteen criteria were mandatory and
+therefore voted on the card. Four were post-award inspection duties, four were quoting
+instructions, four were blank declaration forms, three were rules about how you may bid, two
+were reseller duties, one was GTC acceptance, and **none was a pre-bid eligibility gate**. The
+card read NO-BID on a tender squarely inside the bidder's product line. It now reads "nothing
+disqualifies you", with all 35 requirements listed under what you do about them.
+
+*The verdict moved between identical runs.* Found by verifying P3 on production rather than by
+reading code: two analyses minutes apart produced different cards. The decision layer is pure
+arithmetic with no model near it — what moves is whether a clause IS a gate, which depends on a
+model reading. Six extractions of one OEM-authorisation clause returned `none` at 0.90 four
+times and `certification_valid` at 1.00 twice, confidently on both sides, so no confidence
+threshold separates them. **Moving the model out of the decision was necessary and was not
+sufficient.** Fixed by reading once and storing against a hash of the criterion text plus the
+prompt file's digest; three consecutive production runs are now byte-identical where two in a
+row were not.
+
+*Four patterns fired on wire rope.* The outline's signals were measured against 2,000 live
+criteria before being trusted. `\bapi\b` matched 23 times and every hit was **API Specification
+9A**, the petroleum institute's rope standard; `platform` matched the TReDS and SFMS banking
+rails; `application` matched a rope description; bare `training` matched a local-content
+declaration. All four are gone, and the services tender that needs those sections still gets
+them. The wire-rope proposal went from 20 sections to 14, and the rubric from nine weighted
+dimensions to six that sum to 100.
+
+**Still outstanding, and none of it is engineering.** `RESEND_API_KEY`/`RESEND_FROM` are absent
+from the engine service and not on disk, so digests cannot send. The FIX-1 test user still
+operates inside Usha Martin's real workspace. Both are §5.3 owner decisions.
 
 ---
 
