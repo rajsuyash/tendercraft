@@ -61,7 +61,7 @@ def _valid_cert_fraction(certs: list[dict], today: str) -> float:
 
 
 def compute(sections: list[dict], criteria: list[dict], profile: dict,
-            library: list[dict]) -> RubricResult:
+            library: list[dict], outline: dict | None = None) -> RubricResult:
     today = datetime.now(UTC).date().isoformat()
     feats = [
         SectionFeatures(
@@ -84,6 +84,12 @@ def compute(sections: list[dict], criteria: list[dict], profile: dict,
         ),
         required_experience=3,
         valid_cert_fraction=_valid_cert_fraction(profile.get("certifications") or [], today),
+        # The emphasis follows the sections this tender selected. `None` — a proposal
+        # generated before outlines existed — leaves every dimension counting as it did.
+        outline_keys=(
+            frozenset(e["key"] for e in (outline.get("sections") or []))
+            if outline else None
+        ),
     )
 
 

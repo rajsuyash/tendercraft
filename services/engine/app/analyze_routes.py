@@ -272,6 +272,7 @@ def _rubric_for(tender_id: str, user: CurrentUser):
         db.get_criteria(tender_id, user.workspace_id),
         db.get_profile_context(user.workspace_id),
         db.get_valid_library_docs(user.workspace_id, datetime.now(UTC).date().isoformat()),
+        proposal.get("outline"),
     )
 
 

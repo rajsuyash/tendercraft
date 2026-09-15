@@ -21,9 +21,19 @@ short. Two things were wrong with that and both are the same mistake:
 
 So the gates are gone. The weights remain as a *relative emphasis* over the sections we
 generate — a missing team section still matters more than a missing risk section — and
-the total is a completeness percentage, named as one. When the proposal outline is derived
-from the tender itself (plan R3-2), the emphasis comes from the tender's own evaluation
-heads and this becomes a real rubric; until then it is an editorial check.
+the total is a completeness percentage, named as one.
+
+Since the outline became tender-derived, the emphasis is RENORMALISED over the sections
+this tender actually selected (`in_scope`). That closes the last version of the same
+mistake: a rope supply bid carries no team section, so "Team composition & key personnel
+0.0/15" spent fifteen marks of a completeness figure on something the tender never asked
+for, producing a number that could not reach 100 whatever the bidder did — reported beside
+a suggestion telling them to fix it. A proposal with no derived outline keeps every
+dimension exactly as it was.
+
+What is still NOT here is the tender's own marks table, which needs `evaluation_weight`,
+and that column is null across every sample package. The path is one dict lookup whenever
+a tender states one; nothing is sequenced behind it.
 
 Distinct from app/estimator.py on purpose: the estimator PREDICTS what an external
 committee will do and is suppressed until 30 comparable outcomes exist (D-AC4); this
@@ -192,6 +202,43 @@ def _feature_values(
     return {name: computed[name]() for name in dim.features}
 
 
+def in_scope(
+    dimensions: Sequence[Dimension], outline_keys: frozenset[str] | None
+) -> tuple[Dimension, ...]:
+    """The dimensions this tender's document is actually made of, weights renormalised to 100.
+
+    A rope supply bid carries no team section, so "Team composition & key personnel 0.0/15"
+    was fifteen marks of the completeness figure spent on a section the tender never asked
+    for — a number that could not reach 100 no matter what the bidder did, reported beside
+    suggestions telling them to fix it. Once the outline is derived, the emphasis is
+    renormalised over the sections this tender selected.
+
+    `None` means no outline was derived (a proposal generated before they existed), and then
+    every dimension counts exactly as it did. Renormalising against an empty outline would be
+    worse than not renormalising at all.
+
+    The remainder from integer rounding goes to the largest dimension rather than being
+    dropped, so the weights still sum to 100 and the percentage is a percentage.
+    """
+    if outline_keys is None:
+        return tuple(dimensions)
+    kept = [d for d in dimensions if set(d.sections) & outline_keys]
+    total = sum(d.weight for d in kept)
+    if not total:
+        return ()
+    scaled = [
+        Dimension(d.key, d.label, max(1, round(100 * d.weight / total)), d.sections,
+                  d.features)
+        for d in kept
+    ]
+    drift = 100 - sum(d.weight for d in scaled)
+    if drift:
+        i = max(range(len(scaled)), key=lambda j: scaled[j].weight)
+        big = scaled[i]
+        scaled[i] = Dimension(big.key, big.label, big.weight + drift, big.sections, big.features)
+    return tuple(scaled)
+
+
 def score_proposal(
     sections: Sequence[SectionFeatures],
     *,
@@ -199,13 +246,14 @@ def score_proposal(
     matching_experience: int = 0,
     required_experience: int = 3,
     valid_cert_fraction: float = 0.0,
+    outline_keys: frozenset[str] | None = None,
 ) -> RubricResult:
     """Score the document. Pure: same rows in, same number out, every time."""
     by_key = {s.key: s for s in sections}
     dim_scores: list[DimensionScore] = []
     suggestions: list[Suggestion] = []
 
-    for dim in DIMENSIONS:
+    for dim in in_scope(DIMENSIONS, outline_keys):
         # A section that was never generated earns nothing on ANY feature — note
         # claim_verifiability=0.0, not the 1.0 default ("no claims, so all verified"),
         # which is right for real content but would pay marks for absent content.

@@ -216,3 +216,69 @@ def test_max_gain_is_the_headroom_on_each_dimension():
         assert d.max_gain == pytest.approx(d.weight)
     for d in _perfect().dimensions:
         assert d.max_gain == pytest.approx(0.0)
+
+
+# --- the emphasis follows the tender's own outline ---------------------------------------------
+
+
+def test_a_dimension_whose_sections_the_tender_never_asked_for_is_out_of_scope():
+    """A rope supply bid carries no team section, so "Team composition 0.0/15" was fifteen
+    marks of the completeness figure spent on a section the tender never asked for — a number
+    that could not reach 100 whatever the bidder did, printed beside suggestions telling them
+    to fix it."""
+    from app.deterministic.rubric import DIMENSIONS, in_scope
+
+    goods = frozenset({"understanding", "approach_methodology", "qa", "risk",
+                       "project_citations"})
+    kept = in_scope(DIMENSIONS, goods)
+
+    assert "team" not in {d.key for d in kept}
+    assert "solution_architecture" not in {d.key for d in kept}
+    assert sum(d.weight for d in kept) == 100  # still a percentage
+
+
+def test_no_outline_leaves_every_weight_exactly_as_it_was():
+    """A proposal generated before outlines existed must behave identically. Renormalising
+    against an empty outline would be worse than not renormalising at all."""
+    from app.deterministic.rubric import DIMENSIONS, in_scope
+
+    assert in_scope(DIMENSIONS, None) == DIMENSIONS
+
+
+def test_an_outline_matching_nothing_scores_nothing_rather_than_dividing_by_zero():
+    from app.deterministic.rubric import DIMENSIONS, in_scope
+
+    assert in_scope(DIMENSIONS, frozenset({"annexures"})) == ()
+
+
+def test_the_rounding_remainder_goes_somewhere_rather_than_being_lost():
+    """Three dimensions of 10/15/8 do not scale to whole numbers that sum to 100, and a
+    completeness percentage that tops out at 99 is a bug report nobody can act on."""
+    from app.deterministic.rubric import DIMENSIONS, in_scope
+
+    for keys in (frozenset({"understanding", "qa", "risk"}),
+                 frozenset({"understanding", "solution"}),
+                 frozenset({"qa"}),
+                 frozenset({"understanding", "approach_methodology", "qa", "risk"})):
+        assert sum(d.weight for d in in_scope(DIMENSIONS, keys)) == 100, keys
+
+
+def test_a_narrowed_rubric_can_still_reach_a_hundred():
+    """The property the renormalisation exists for: on a goods bid a finished document must
+    be able to read 100% complete."""
+    from app.deterministic.rubric import DIMENSIONS, SectionFeatures, in_scope, score_proposal
+
+    keys = frozenset({"understanding", "approach_methodology", "workplan", "qa", "risk",
+                      "project_citations"})
+    # word_count == target_words on purpose. Ten thousand words against a hundred-word
+    # target scores 0.9, not 1.0: past 2.5x the target the anti-padding rule takes over, and
+    # a first cut of this test read 97.3 because of that rather than because of any weight.
+    feats = [
+        SectionFeatures(key=d_key, present=True, status="drafted", word_count=1_000,
+                        target_words=1_000, claim_verifiability=1.0, subsection_count=6,
+                        approved=True)
+        for d in in_scope(DIMENSIONS, keys) for d_key in d.sections
+    ]
+    r = score_proposal(feats, cv_count=9, matching_experience=9, required_experience=3,
+                       valid_cert_fraction=1.0, outline_keys=keys)
+    assert round(r.total) == 100
