@@ -605,3 +605,66 @@ high to low and the IS 2266 rope tender is in the feed at medium.
   tightened filter drops a real row, measure whether the prescribed loosening actually
   recovers it before applying it** — here widening the window was inert, and the honest fix
   was a better term, not a weaker rule.
+
+## Deferring work over a document nobody stored (OCR into ingest, 2026-09-15)
+
+- **Nothing in this engine persists an uploaded file.** `DOCUMENTS_BUCKET` is named in the
+  config and read by no code; there is no Storage write anywhere in `services/engine`. So
+  there is no later moment at which an uploaded page can be fetched again, and any deferred
+  work over a document has to carry the BYTES in the closure — `BackgroundTasks` runs
+  in-process after the response, which is the only reason this is possible at all. Before
+  designing any "we'll do that part later" pass over a tender, check whether the input still
+  exists at "later". Here it does not, and the whole shape of the feature follows from that
+  one fact.
+- **A per-CALL cap is not a per-PACKAGE budget, and the difference is the user's model bill.**
+  `ocr.ocr_pdf_pages` caps each call at `MAX_PAGES` (60), which is correct and was already
+  there. Calling it once per document meant a ten-annexure package could recover 600 pages and
+  fire 600 model calls — the cap looked enforced at every call site while the real unit, the
+  thing the bidder dropped on the dropzone, had none. Carry one budget across the package and
+  LOG the truncation: the Oil India package holds 77 scanned pages and loses 17 at the
+  default, which is a decision someone should make with the bill in front of them rather than
+  discover. Same family as `DEFAULT_PAGES` being sized against GeM's page size and starving
+  BidAssist — a budget belongs to the unit the work is actually measured in.
+- **Re-derive a page index by re-parsing; never carry one across a request boundary.**
+  `parse_document_pages` is deterministic over the same bytes in the same order, costs pypdf
+  and no network, and gives the recovered criterion the same page number the human already saw
+  on the uploads list. A stored index would have to stay true across a re-read that is allowed
+  to renumber.
+- **`replace_line_items` DELETEs the tender's whole schedule before inserting**, and
+  `spec_parameters` cascades from it. So re-running `persist_schedule` after an OCR pass to
+  pick up newly-readable technical criteria would destroy the parameters `_extract_quietly`
+  had just paid a model to read. The two background passes are ordered schedule-first
+  deliberately, and the reasoning lives in `_schedule_ocr`'s docstring so the next person does
+  not "fix" the order. The accepted gap: a spec that exists ONLY on a scanned page does not
+  reach the fit screen until someone presses re-read.
+
+- **A capability that is present in the code and absent from the IMAGE is invisible, because
+  its absence is an ordinary INFO log.** `ocr.available()` returning False is a correct
+  deployment fact, not an error — the pass returns quietly and every scanned page stays as
+  illegible as the response already said it was. That is indistinguishable, from every
+  surface, from a package that happened to contain no scans. The adapter shipped on
+  2026-09-14 and was called by nothing for a day; nothing anywhere reported that. **The check
+  that settles it is running the binary inside the digest Cloud Run is actually serving**, not
+  reading the Dockerfile and not trusting the build log:
+  ```bash
+  IMG=$(gcloud run revisions describe <rev> --format='value(spec.containers[0].image)' ...)
+  docker pull "$IMG"
+  docker run --rm --entrypoint sh "$IMG" -c 'tesseract --version; python -c "from app import ocr; print(ocr.available())"'
+  ```
+  Measured on revision 00060: tesseract 5.5.0, poppler 25.03.0, `available(): True`, and a
+  real scanned page recovered 1,174 characters with `GEM/2026/B/7431083` intact. Same family
+  as `GEM_CONNECTOR_URL`: a feature whose off-switch is a missing binary rather than a raised
+  exception needs a check that can see the binary.
+- **`select=*` makes a column that does not exist read exactly like a column that is NULL.**
+  `db.get_tender` selects `*`, so deploying the OCR code before migration 0041 was survivable
+  — `tender.get("ocr_completed_at")` returns None either way and the readiness endpoint keeps
+  working. That is a genuine safety property and also the trap: the only symptom of a missing
+  migration is a swallowed PATCH failure in a background task nobody is watching. Apply the
+  migration first, and if you did not, verify the column is SERVED rather than assuming the
+  200 on the read means it landed.
+- **OCR text is evidence, never an identifier.** A stamped PAN card recovers its company name
+  ("NAME : USHA: MARTIN LIMITED") and loses its number ("eRCUZSOM ATA") — scanning and
+  overprinting garble exactly the short alphanumeric strings that are most damaging to get
+  wrong. The existing rules already cover this and must not be relaxed for OCR'd pages:
+  financial and identity values transclude from structured profile data (B-FR3), never from
+  prose in a retrieved chunk. OCR makes that rule more load-bearing, not less.
