@@ -120,7 +120,7 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section>
           <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Mandatory gates first</h2>
           <ul className="space-y-3">

@@ -5,8 +5,6 @@ import { useState } from "react";
 
 import { formatDate } from "@/lib/format";
 
-import { PastBidUpload } from "./PastBidUpload";
-
 export interface PastBid {
   id: string;
   name: string;
@@ -59,21 +57,14 @@ export function PastBids({ initial, styleBrief }: { initial: PastBid[]; styleBri
 
   return (
     <section id="past-bids" data-past-bids className="rounded-card border border-border bg-surface p-card">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-heading text-sm font-semibold text-ink">
-            Past bids <span className="text-muted">— {bids.length}</span>
-          </h2>
-          <p className="mt-0.5 text-xs text-muted">
-            Proposals you have already submitted. Their answers are suggested against matching
-            requirements, with the bid they came from named — and re-checked against today&apos;s
-            evidence before anything enters a draft.
-          </p>
-        </div>
-        {/* No onUploaded: PastBidUpload refreshes the route itself, so every placement of
-            it gets the new row without each caller remembering a callback. */}
-        <PastBidUpload />
-      </div>
+      <h2 className="font-heading text-sm font-semibold text-ink">
+        Past bids <span className="text-muted">— {bids.length}</span>
+      </h2>
+      <p className="mt-0.5 text-xs text-muted">
+        Proposals you have already submitted. Their answers are suggested against matching
+        requirements, with the bid they came from named — and re-checked against today&apos;s
+        evidence before anything enters a draft.
+      </p>
 
       {error && (
         <p data-past-bid-error className="mt-3 rounded border border-danger bg-danger-bg p-3 text-sm text-danger">
@@ -81,6 +72,12 @@ export function PastBids({ initial, styleBrief }: { initial: PastBid[]; styleBri
         </p>
       )}
       {note && !error && <p className="mt-3 text-sm text-muted">{note}</p>}
+
+      {bids.length === 0 && (
+        <p data-past-bids-empty className="mt-3 text-sm text-muted">
+          Added from <em>Add a submitted bid</em> above.
+        </p>
+      )}
 
       {bids.length > 0 && (
         <table className="mt-4 w-full text-left text-sm">

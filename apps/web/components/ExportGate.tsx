@@ -106,7 +106,7 @@ export function ExportGate({
         </div>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section>
           <h2 className="mb-3 font-heading text-lg font-semibold text-ink">Compliance matrix</h2>
           <div className="overflow-x-auto rounded-card border border-border">
