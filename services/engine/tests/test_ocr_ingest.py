@@ -275,8 +275,14 @@ def test_the_ingest_ROUTE_actually_runs_the_ocr_pass_after_responding(monkeypatc
     from app.main import create_app
 
     ran: list[tuple] = []
+    # The stub carries `illegible_pages` because the real `_process_ingest` always does and
+    # the handler reads it — a stub that returns less than the real function is an assumption
+    # about another file's shape, and this repo has been bitten by exactly that (known-pitfalls,
+    # `get_criterion_in_tender`: nine green tests, and the first live call 500'd).
     monkeypatch.setattr(tenders, "_process_ingest",
-                        lambda ws, docs, name, pursuit: {"tender_id": "t-9", "pages": 1})
+                        lambda ws, docs, name, pursuit: {
+                            "tender_id": "t-9", "pages": 1, "illegible_pages": [],
+                        })
     monkeypatch.setattr(tenders, "_extract_quietly", lambda ws, t: None)
     monkeypatch.setattr(tenders, "_ocr_quietly",
                         lambda ws, t, docs: ran.append((ws, t, docs)))
@@ -338,3 +344,43 @@ def test_readiness_reports_what_ocr_recovered(monkeypatch):
     assert r.status_code == 200
     assert r.json()["data"]["ocr_pages_recovered"] == 77
     assert r.json()["data"]["ocr_completed_at"] == "2026-09-15T10:00:00+00:00"
+
+
+@pytest.mark.parametrize(
+    ("illegible", "toolchain", "expected"),
+    [
+        (["nit.pdf p.2"], True, True),
+        # The pages are unreadable and will STAY unreadable: no toolchain in this image. The
+        # pass returns quietly and logs, so without this flag the upload screen cannot tell
+        # "about to be read" from "will never be read" — and the second is the one where
+        # re-uploading a clearer copy is the honest advice.
+        (["nit.pdf p.2"], False, False),
+        # Nothing to read. Not "pending" merely because the toolchain exists.
+        ([], True, False),
+    ],
+)
+def test_ingest_says_whether_the_scanned_pages_will_actually_be_read(
+    monkeypatch, illegible, toolchain, expected,
+):
+    from fastapi.testclient import TestClient
+
+    from app.auth import AuthedUser, get_current_user
+    from app.main import create_app
+
+    monkeypatch.setattr(tenders, "_process_ingest",
+                        lambda ws, docs, name, pursuit: {
+                            "tender_id": "t-9", "pages": 1, "illegible_pages": list(illegible),
+                        })
+    monkeypatch.setattr(tenders, "_extract_quietly", lambda ws, t: None)
+    monkeypatch.setattr(tenders, "_ocr_quietly", lambda ws, t, docs: None)
+    monkeypatch.setattr(tenders.ocr, "available", lambda: toolchain)
+
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: AuthedUser(
+        user_id="u1", workspace_id="ws-9", role="admin",
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/tenders/ingest", files={"file": ("nit.pdf", b"%PDF-1.4")})
+
+    assert r.status_code == 200
+    assert r.json()["data"]["ocr_pending"] is expected

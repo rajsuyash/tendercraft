@@ -479,6 +479,13 @@ async def ingest_tender(
     # only shrink afterwards, and the response is already gone — the tender row carries the
     # outcome instead (ocr_completed_at / ocr_pages_recovered, echoed by GET .../readiness).
     _schedule_ocr(background, user.workspace_id, result["tender_id"], documents)
+    # Whether those pages will actually be looked at. `ocr.available()` is a deployment fact,
+    # not an error — without the toolchain the pass returns quietly and every scanned page
+    # stays exactly as unread as this response says (known-pitfalls: the OCR adapter shipped
+    # and was called by nothing for a day, and nothing anywhere reported that). The upload
+    # screen must not promise a read that cannot happen, and must not tell a user to re-upload
+    # a page that is about to be read successfully.
+    result["ocr_pending"] = bool(result["illegible_pages"]) and ocr.available()
     return ok(result)
 
 

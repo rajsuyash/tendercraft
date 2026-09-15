@@ -110,8 +110,12 @@ def test_the_ingest_ROUTE_actually_runs_the_read_after_responding(monkeypatch):
     from app.main import create_app
 
     ran: list[tuple] = []
+    # `illegible_pages` is part of what the real `_process_ingest` returns and the handler
+    # reads it; a stub that returns less agrees only with itself.
     monkeypatch.setattr(tenders, "_process_ingest",
-                        lambda ws, docs, name, pursuit: {"tender_id": "t-9", "pages": 1})
+                        lambda ws, docs, name, pursuit: {
+                            "tender_id": "t-9", "pages": 1, "illegible_pages": [],
+                        })
     monkeypatch.setattr(tenders, "_extract_quietly",
                         lambda ws, t: ran.append((ws, t)))
 

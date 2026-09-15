@@ -37,7 +37,9 @@ function UploadForm() {
   const pursuitId = search.get("pursuit") ?? "";
   const [status, setStatus] = useState<"idle" | "processing" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
-  const [illegible, setIllegible] = useState<{ tenderId: string; pages: string[] } | null>(null);
+  const [illegible, setIllegible] = useState<
+    { tenderId: string; pages: string[]; ocrPending: boolean } | null
+  >(null);
   const [pursuit, setPursuit] = useState<Pursuit | null>(null);
 
   // Fetched, never read out of the query string. A tender reference shown as authoritative has
@@ -85,10 +87,18 @@ function UploadForm() {
     }
     const pages: string[] = body.data.illegible_pages ?? [];
     if (pages.length > 0) {
-      // EC-1 / S3-D1: don't silently pass a low-quality scan — surface the pages to re-upload.
+      // EC-1 / S3-D1: don't silently pass a low-quality scan — surface the pages. Whether
+      // re-uploading is the right advice depends on `ocr_pending`: this list is the set as it
+      // stood BEFORE the background OCR pass, and where that pass will run it is about to
+      // shrink. Telling a user to re-upload a page the system is in the middle of reading is
+      // how a product teaches people to distrust it.
       setStatus("idle");
       setMessage(null);
-      setIllegible({ tenderId: body.data.tender_id, pages });
+      setIllegible({
+        tenderId: body.data.tender_id,
+        pages,
+        ocrPending: !!body.data.ocr_pending,
+      });
       return;
     }
     router.push(`/tenders/${body.data.tender_id}/readiness`);
@@ -224,12 +234,29 @@ function UploadForm() {
           data-ocr-gate-warning
           className="mt-4 rounded-card border border-warning bg-warning-bg p-card text-sm text-warning"
         >
-          <p className="font-medium">Some pages could not be read (OCR quality gate)</p>
+          <p className="font-medium">
+            {illegible.ocrPending
+              ? "Scanned pages — being read now"
+              : "Some pages could not be read (OCR quality gate)"}
+          </p>
           <p className="mt-1">
-            {illegible.pages.join(", ")} appear to be scans with little extractable text —
-            each is named by the document it belongs to. Re-upload a clearer copy of{" "}
-            {illegible.pages.length === 1 ? "that page" : "those pages"}, then continue to
-            verification.
+            {illegible.pages.join(", ")}{" "}
+            {illegible.pages.length === 1 ? "carries" : "carry"} no text layer — each is named
+            by the document it belongs to.{" "}
+            {illegible.ocrPending ? (
+              <>
+                {illegible.pages.length === 1 ? "It is" : "They are"} being read in the
+                background; the readiness screen says what was recovered. Re-upload a clearer
+                copy only if {illegible.pages.length === 1 ? "it is" : "they are"} still
+                missing there.
+              </>
+            ) : (
+              <>
+                Nothing here can read {illegible.pages.length === 1 ? "it" : "them"} — re-upload
+                a clearer copy of {illegible.pages.length === 1 ? "that page" : "those pages"},
+                then continue to verification.
+              </>
+            )}
           </p>
           <button
             onClick={() => router.push(`/tenders/${illegible.tenderId}/readiness`)}

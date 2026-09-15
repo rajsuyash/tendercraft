@@ -37,6 +37,49 @@ interface Summary {
 export interface Readiness {
   summary: Summary;
   items: Item[];
+  // What the background OCR pass over the scanned pages turned out to hold. The ingest
+  // response could not say — it was sent before the pass started — so the tender row is the
+  // only record, echoed here by GET /api/tenders/{id}/readiness.
+  ocr_completed_at?: string | null;
+  ocr_pages_recovered?: number | null;
+}
+
+export type OcrNote = { text: string; reupload: boolean };
+
+/** What to say about the scanned half of this package, if anything.
+ *
+ * Three states, and the third is the reason this exists: the upload screen listed pages it
+ * called unreadable, and for most packages the background pass then read them. A screen that
+ * keeps saying "re-upload a clearer copy" about a page the system has since read teaches
+ * users to distrust it (plan task A4).
+ *
+ * NULL `completed_at` means the pass has not finished — or never ran, on a deployment with no
+ * OCR toolchain, or raised. Those are indistinguishable from here and none of them is
+ * something to claim, so an unfinished pass says nothing at all rather than promising a read
+ * that may never land.
+ *
+ * How many pages are STILL unreadable is deliberately not stated: page text is never
+ * persisted, so the count cannot be recomputed, and the ingest-time list is gone with the
+ * response. A number nothing on screen could explain is what `deterministic/submission.py`
+ * exists to prevent.
+ */
+export function ocrNote(readiness: Readiness): OcrNote | null {
+  if (!readiness.ocr_completed_at) return null;
+  const n = readiness.ocr_pages_recovered ?? 0;
+  if (n > 0) {
+    return {
+      text: `${n} scanned ${n === 1 ? "page" : "pages"} had no text layer and ${
+        n === 1 ? "was" : "were"
+      } read after upload. Anything found on ${n === 1 ? "it" : "them"} is in the list below.`,
+      reupload: false,
+    };
+  }
+  return {
+    text:
+      "This package's scanned pages could not be read, even by OCR. Anything stated only on " +
+      "those pages is missing from the list below.",
+    reupload: true,
+  };
 }
 
 const DECISIONS: { key: Decision; label: string }[] = [
@@ -266,6 +309,19 @@ export function ReadinessHub({
         <p className="text-sm text-muted">
           Bid readiness — what your company already covers, and what&apos;s still needed.
         </p>
+        {(() => {
+          const note = ocrNote(readiness);
+          return note ? (
+            <p data-ocr-note className="mt-2 text-xs text-muted">
+              {note.text}{" "}
+              {note.reupload && (
+                <Link href="/tenders/upload" className="underline">
+                  Upload a clearer copy
+                </Link>
+              )}
+            </p>
+          ) : null;
+        })()}
       </header>
 
       {/* Step 1: confirm AI-uncertain requirements (folded-in verify) */}
