@@ -268,3 +268,31 @@ def test_form_12_treats_an_invited_equivalent_as_a_deviation_until_accepted():
         {"lines": [_line(_param("grade", "equivalent"))]}
     ).body_md
     assert "unless the buyer accepts the equivalence" in body
+
+
+# ── B9: the FY window reaches the sheet ──────────────────────────────────────────────
+
+
+def test_the_pq_window_is_read_off_the_stored_turnover_verdict():
+    """`assemble_compliance_pq` has always implemented the correct windowed average; its only
+    caller omitted the argument, so every proposal printed "Required FY window not
+    confirmed". The window is a property of the TENDER, and `analysis` already resolved it."""
+    from app.proposal_routes import _required_fys
+
+    result = {"verdicts": [
+        {"check": "registration_present", "fy_window": []},
+        {"check": "turnover_avg", "fy_window": ["FY24", "FY25", "FY26"]},
+    ]}
+    assert _required_fys(result) == ("FY24", "FY25", "FY26")
+
+
+def test_no_turnover_gate_means_no_window_rather_than_a_guessed_one():
+    """Empty is honest. The sheet then says the window is unconfirmed instead of averaging
+    whatever years happen to be on file — the defect the function was rewritten to kill."""
+    from app.proposal_routes import _required_fys
+
+    assert _required_fys(None) == ()
+    assert _required_fys({}) == ()
+    assert _required_fys({"verdicts": []}) == ()
+    # A turnover gate whose window could not be resolved must not fall through to a default.
+    assert _required_fys({"verdicts": [{"check": "turnover_avg", "fy_window": []}]}) == ()

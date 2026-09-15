@@ -41,6 +41,9 @@ def wired(monkeypatch):
     monkeypatch.setattr(db, "get_responses", lambda p, w: [])
     monkeypatch.setattr(db, "get_valid_library_docs", lambda w, d: [])
     monkeypatch.setattr(db, "get_profile_context", lambda w: {"legal_identity": {}})
+    # The PQ sheet's FY window comes from the stored analysis (B9). No analysis means no
+    # window, which is the honest state, not a reason to average whatever is on file.
+    monkeypatch.setattr(db, "get_analysis", lambda t, w: None)
     monkeypatch.setattr(db, "get_style_profile", lambda w: None)
     monkeypatch.setattr(db, "get_sections", lambda p, w: state["sections"])
     monkeypatch.setattr(db, "get_reuse_targets", lambda w, p: state["reuse"])

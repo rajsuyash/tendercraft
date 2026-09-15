@@ -91,6 +91,26 @@ def do_generate(workspace_id: str, tender_id: str) -> dict:
     }
 
 
+def _required_fys(analysis_result: dict | None) -> tuple[str, ...]:
+    """Which financial years the TENDER's turnover gate covers (B9).
+
+    The window is a property of the tender, not of the bidder — "Minimum Average Annual
+    Turnover (For 3 Years)" names a period, and `analysis` already resolved it from the
+    clause plus the submission deadline and stored it on the verdict. Reading it back here is
+    the whole of B9: `assemble_compliance_pq` has always implemented the correct windowed
+    average and its only caller omitted the argument, so every proposal printed "Required FY
+    window not confirmed".
+
+    Empty is the honest answer when the tender states no turnover gate, or when the window
+    could not be resolved. The sheet then says so rather than averaging whatever years are on
+    file, which is the defect that function was rewritten to kill.
+    """
+    for v in (analysis_result or {}).get("verdicts") or []:
+        if v.get("check") == "turnover_avg" and v.get("fy_window"):
+            return tuple(v["fy_window"])
+    return ()
+
+
 def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
     """Build the full long-form document: assemble the tabular sections, draft the narrative
     ones concurrently. Separate from do_generate because /prepare is the readiness hot path
@@ -140,7 +160,8 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
 
     assembled = {
         "compliance_pq": sections.assemble_compliance_pq(
-            profile, profile.get("certifications") or [], today
+            profile, profile.get("certifications") or [], today,
+            _required_fys(db.get_analysis(tender_id, workspace_id)),
         ),
         "project_citations": sections.assemble_project_citations(
             profile.get("experience_records") or []

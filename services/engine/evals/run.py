@@ -14,7 +14,8 @@ import os
 import sys
 from pathlib import Path
 
-COMPONENTS = ("extractor", "drafter", "drafter-fr", "relevance", "keywords", "answer-miner")
+COMPONENTS = ("extractor", "analyzer", "drafter", "drafter-fr", "relevance", "keywords",
+              "answer-miner")
 
 
 def load_cases(component: str) -> list[dict]:
@@ -441,8 +442,111 @@ def score_answer_miner() -> int:
     return 0 if total_pass == total else 1
 
 
+def score_analyzer() -> int:
+    """The model half of the eligibility path (C-AC5), after it stopped deciding anything.
+
+    What is under test is NOT whether a verdict is right — the model no longer emits one.
+    It is whether the requirement was READ correctly, because everything downstream is
+    arithmetic over that reading: a threshold off by a factor of a hundred (15 Lakh read as
+    15 Crore) is a hard, non-overridable financial gate answered wrongly with full
+    confidence.
+
+    Three properties, in descending order of what a miss costs:
+
+      1. No verdict field is ever populated, whatever the tender text says. This is
+         structural — `Requirement` has no such field — so the check is cheap and the
+         prompt-injection case (req-010) is really a test of the schema, not of obedience.
+      2. A post-award duty, a quoting instruction and a blank form read as `none`. Scoring
+         them as gates is what produced NO-BID on a catalogue tender inside the bidder's own
+         product line.
+      3. The numbers and the window are read as written, and a relative window stays a COUNT
+         rather than being resolved into named years the clause never stated.
+    """
+    from pipeline import analyzer
+
+    cases = load_cases("analyzer")
+    normal = [c for c in cases if not c.get("inject")]
+    inject = [c for c in cases if c.get("inject")]
+
+    passed = 0
+    print("\n== Analyzer golden set (live) ==")
+    for c in normal:
+        req = analyzer.extract_requirement(c["input"]["criterion"])
+        exp = c["expected"]
+        checks: dict[str, bool] = {}
+        if "check" in exp:
+            checks["check"] = req.check.value == exp["check"]
+        if "threshold_cr" in exp:
+            checks["threshold"] = (
+                req.threshold_cr is not None
+                and abs(req.threshold_cr - exp["threshold_cr"]) < 0.001
+            )
+        if "fy_count" in exp:
+            checks["fy_count"] = req.fy_count == exp["fy_count"]
+        if exp.get("fy_labels_empty"):
+            # "the last three financial years" names no year. Inventing them here would fix
+            # the window to whatever the model imagined the bid date to be.
+            checks["no_invented_years"] = req.fy_labels == ()
+        if "fy_labels_count" in exp:
+            checks["fy_labels"] = len(req.fy_labels) == exp["fy_labels_count"]
+        if "min_count" in exp:
+            checks["min_count"] = req.min_count == exp["min_count"]
+        if "years_window" in exp:
+            checks["years_window"] = req.years_window == exp["years_window"]
+        if "certification_name_contains" in exp:
+            checks["cert_name"] = exp["certification_name_contains"].lower() in (
+                req.certification_name or "").lower()
+        if "registration_key" in exp:
+            checks["registration"] = req.registration_key == exp["registration_key"]
+        if "exemption_for_includes" in exp:
+            checks["exemption_class"] = exp["exemption_for_includes"] in [
+                str(x).lower() for x in req.exemption_for
+            ]
+        if exp.get("exemption_clause_nonempty"):
+            checks["exemption_clause"] = bool(req.exemption_clause.strip())
+        if "min_confidence" in exp:
+            checks["confident"] = req.confidence >= exp["min_confidence"]
+        # Applies to EVERY case, not just the injection one: the property is that there is
+        # nowhere for a verdict to live.
+        checks["no_verdict_field"] = not [
+            f for f in req.__dataclass_fields__
+            if any(b in f for b in ("verdict", "actual", "passed", "eligible", "applies"))
+        ]
+        ok = all(checks.values())
+        passed += ok
+        failed = [k for k, v in checks.items() if not v]
+        print(f"  {c['id']:10} {'PASS' if ok else 'FAIL'}  check={req.check.value} "
+              f"conf={req.confidence:.2f}" + (f"  missed={failed}" if failed else ""))
+
+    print("\n== Fault injection (fallback) ==")
+    inject_passed = 0
+    orig = analyzer.generate_json
+    for c in inject:
+        analyzer.generate_json = _raise  # type: ignore[assignment]
+        try:
+            req = analyzer.extract_requirement(c["input"]["criterion"])
+            # Never a fabricated pass (ET-1/G-5): `none` at zero confidence, which the
+            # decision layer routes to needs-review.
+            ok = req.check.value == "none" and req.confidence == 0.0
+        except Exception:  # noqa: BLE001 — a crash is exactly the failure we test against
+            ok = False
+        finally:
+            analyzer.generate_json = orig  # type: ignore[assignment]
+        inject_passed += ok
+        print(f"  {c['id']:10} {'PASS' if ok else 'FAIL'}  ({c['inject']} -> fallback)")
+
+    total = len(normal) + len(inject)
+    total_pass = passed + inject_passed
+    print(f"\nSUMMARY: {total_pass}/{total} cases pass "
+          f"(normal {passed}/{len(normal)}, injection {inject_passed}/{len(inject)})")
+    print("NOTE: starter set. It proves the reading, not coverage of every clause shape an "
+          "Indian tender can take — that needs the PRD §6 corpus.")
+    return 0 if total_pass == total else 1
+
+
 _SCORERS = {
     "extractor": score_extractor,
+    "analyzer": score_analyzer,
     "drafter": score_drafter,
     "relevance": score_relevance,
     "drafter-fr": score_drafter_fr,

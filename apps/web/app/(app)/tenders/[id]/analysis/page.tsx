@@ -15,15 +15,36 @@ interface CriterionVerdict {
   source_anchor: string;
   gap_note: string;
   exemption_granted: boolean;
+  /** The working, not just the answer: what was compared to what, so a verdict can be read
+   *  without re-running it. */
+  check: string;
+  operator: string | null;
+  required_display: string;
+  actual_display: string;
+  fy_window: string[];
+  missing_facts: string[];
+  exemption_clause: string;
+}
+/** A requirement that is not a pre-bid condition on the bidder — a duty that binds after
+ *  award, an instruction about how to bid, a form to attach. It has no verdict because there
+ *  is no question to answer, and it is listed rather than dropped: an unplanned obligation
+ *  still costs money, it is just not a reason to skip the bid. */
+interface ChecklistItem {
+  criterion_id: string;
+  verbatim_text: string;
+  kind: string;
+  requirement_level: string;
+  source_anchor: string;
 }
 interface AnalysisResult {
-  recommendation: "bid" | "no_bid" | "needs_review";
+  recommendation: "bid" | "no_bid" | "needs_review" | "no_gates";
   conservative: boolean;
   /** `null` when the tender states no scored criteria — which is not the same as scoring
    *  zero, and is the common case on a catalogue bid. */
   weighted_score: number | null;
   counts: { pass: number; fail: number; needs_review: number };
   verdicts: CriterionVerdict[];
+  checklist?: ChecklistItem[];
   gaps: { criterion_id: string; gap: string; source: string }[];
 }
 
@@ -31,11 +52,25 @@ const REC_LABEL: Record<AnalysisResult["recommendation"], string> = {
   bid: "BID",
   no_bid: "NO-BID (conservative)",
   needs_review: "NEEDS REVIEW",
+  no_gates: "NOTHING DISQUALIFIES YOU",
 };
 const REC_STYLE: Record<AnalysisResult["recommendation"], string> = {
   bid: "bg-success-bg text-success",
   no_bid: "bg-danger-bg text-danger",
   needs_review: "bg-warning-bg text-warning",
+  // Not warning tokens. "Needs review" asks someone to go and resolve something; this state
+  // has nothing to resolve, and amber would read as a problem that does not exist.
+  no_gates: "bg-success-bg text-success",
+};
+
+/** What the bidder is supposed to DO about a requirement. Plain words, because the taxonomy
+ *  is ours and nobody outside this codebase has read it. */
+const KIND_LABEL: Record<string, string> = {
+  obligation: "If you win",
+  instruction: "How to bid",
+  form: "To attach",
+  spec: "Schedule",
+  gate: "Eligibility",
 };
 
 // S7 — Eligibility Analysis dashboard (anchor screen). S7-D1 (No-Bid on mandatory fail),
@@ -67,6 +102,12 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
   const verdicts = [...a.verdicts].sort((x, y) =>
     x.requirement_level === "mandatory" ? -1 : y.requirement_level === "mandatory" ? 1 : 0,
   );
+  // Grouped by what you do about it, not by tender category — "If you win" and "How to bid"
+  // are different jobs for different people on different days.
+  const checklist = a.checklist ?? [];
+  const byKind = ["form", "obligation", "instruction", "spec"]
+    .map((kind) => ({ kind, items: checklist.filter((c) => c.kind === kind) }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <main className="p-page">
@@ -97,6 +138,17 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
             <p className="mt-1 text-xs">
               {a.counts.fail} mandatory gate{a.counts.fail === 1 ? "" : "s"} failed. Fix the gaps
               below to reconsider.
+            </p>
+          )}
+          {a.recommendation === "no_gates" && (
+            <p className="mt-1 text-xs">
+              This tender states no pre-bid eligibility condition, so nothing in it can
+              disqualify you.{" "}
+              {checklist.length > 0
+                ? `It does carry ${checklist.length} requirement${
+                    checklist.length === 1 ? "" : "s"
+                  } to act on — listed below.`
+                : ""}
             </p>
           )}
         </div>
@@ -167,9 +219,69 @@ export default async function AnalysisPage({ params }: { params: Promise<{ id: s
                   {v.exemption_granted ? "Exemption applied · " : ""}
                   {v.rationale}
                 </p>
+                {/* What was compared to what. A verdict nobody can reconstruct cannot be
+                    audited, and this is the half that used to be missing entirely. */}
+                {v.required_display && (
+                  <p data-working className="mt-1 font-mono text-xs text-muted">
+                    required {v.required_display}
+                    {v.operator ? ` (${v.operator})` : ""} · yours {v.actual_display || "—"}
+                    {v.fy_window.length > 0 ? ` · ${v.fy_window.join(" ")}` : ""}
+                  </p>
+                )}
+                {v.missing_facts.length > 0 && (
+                  <p data-missing className="mt-1 text-xs text-warning">
+                    Not on file: {v.missing_facts.join(", ")}. This is unknown, not a failure.
+                  </p>
+                )}
+                {v.exemption_granted && v.exemption_clause && (
+                  <p className="mt-1 text-xs text-muted">Waived by: “{v.exemption_clause}”</p>
+                )}
               </li>
             ))}
           </ul>
+          {verdicts.length === 0 && (
+            <p className="rounded-card border border-border bg-surface p-card text-sm text-muted">
+              No pre-bid eligibility gate was found in this tender. Nothing here is a
+              condition you either meet or do not.
+            </p>
+          )}
+
+          {byKind.length > 0 && (
+            <section className="mt-8" data-checklist>
+              <h2 className="mb-1 font-heading text-lg font-semibold text-ink">
+                Everything else this tender asks for
+              </h2>
+              <p className="mb-3 text-sm text-muted">
+                {checklist.length} requirement{checklist.length === 1 ? "" : "s"} that are not
+                questions about whether you qualify, so none of them votes on the
+                recommendation. They still have to be done.
+              </p>
+              <div className="space-y-5">
+                {byKind.map((group) => (
+                  <div key={group.kind}>
+                    <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+                      {KIND_LABEL[group.kind] ?? group.kind} · {group.items.length}
+                    </h3>
+                    <ul className="space-y-2">
+                      {group.items.map((c) => (
+                        <li
+                          key={c.criterion_id}
+                          data-checklist-item
+                          data-kind={c.kind}
+                          className="rounded-card border border-border bg-surface p-card"
+                        >
+                          <p className="text-sm text-ink">{c.verbatim_text}</p>
+                          <p className="mt-1 text-xs text-muted">
+                            {c.requirement_level} · {c.source_anchor}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </section>
 
         <aside>

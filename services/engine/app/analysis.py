@@ -1,25 +1,47 @@
-"""Eligibility analysis — deterministic decisions over the model's evaluations (Module C).
+"""Eligibility analysis — the adapter between what the tender asks and what the bidder has.
 
-The model (pipeline.analyzer) extracts values + a proposed verdict per criterion; THIS
-module decides:
-  - numeric criteria -> `compare_numeric` (C-FR1); the model never decides a number
-  - fuzzy criteria    -> the 0.75 router; a sub-0.75 or evidence-less pass -> Needs-review (C-AC5)
-  - exemptions        -> a granted MSE/DPIIT relaxation waives a Fail (C-FR3)
-  - Bid/No-Bid        -> gates-not-weights via `recommend` (C-FR5); a mandatory Fail caps at No-Bid
-Every verdict carries a rationale + source anchor (C-AC4).
+Three layers, and the split is the point (PRD §2.4):
+
+  - `pipeline.analyzer.extract_requirement` reads ONE criterion and describes what it
+    DEMANDS. It is not given the profile, so it cannot report the bidder's numbers.
+  - `deterministic.facts.decide_requirement` compares that demand against
+    `db.get_profile_context`, using the comparators in `deterministic/eligibility.py`. A
+    fact that is missing is needs-review, never a failure.
+  - `deterministic.eligibility.recommend` turns the gate verdicts into Bid/No-Bid —
+    gates-not-weights (C-FR5), a mandatory Fail caps at No-Bid.
+
+Only GATES reach any of it. `deterministic/requirement_kind.py` says which criteria are
+pre-bid conditions on the bidder; a post-award duty, a quoting instruction and a blank
+declaration form are none of them and travel back as `checklist`.
+
+Every verdict carries a rationale, a source anchor (C-AC4) and the arithmetic that produced
+it, so it can be audited without re-running the model.
 """
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import date
 
-from pipeline.analyzer import ModelEval, evaluate_criterion
+from pipeline.analyzer import extract_requirement
 
-from .deterministic.eligibility import CriterionOutcome, compare_numeric, recommend
+from .deterministic.eligibility import (
+    CriterionOutcome,
+    normalise_fy,
+    recent_fys,
+    recommend,
+)
+from .deterministic.facts import (
+    ProfileFacts,
+    Requirement,
+    decide_requirement,
+    exemption_granted,
+    profile_facts,
+)
 from .deterministic.requirement_kind import effective_kind
 from .deterministic.types import (
-    FUZZY_REVIEW_THRESHOLD,
+    CheckType,
     Recommendation,
     RequirementKind,
     RequirementLevel,
@@ -30,6 +52,13 @@ from .deterministic.types import (
 
 @dataclass(frozen=True)
 class CriterionVerdict:
+    """A decided gate, with enough of the arithmetic to audit it afterwards.
+
+    The stored verdict used to carry the answer and none of the working — no threshold, no
+    actual value, no operator, no window — so nobody could reconstruct what had been compared
+    to what. Everything below is persisted.
+    """
+
     criterion_id: str
     verbatim_text: str
     requirement_level: RequirementLevel
@@ -39,6 +68,15 @@ class CriterionVerdict:
     source_anchor: str
     gap_note: str
     exemption_granted: bool
+    check: str = "none"
+    operator: str | None = None
+    required_display: str = ""
+    actual_display: str = ""
+    fy_window: tuple[str, ...] = ()
+    evidence_ids: tuple[str, ...] = ()
+    missing_facts: tuple[str, ...] = ()
+    exemption_clause: str = ""
+
 
 
 def _anchor(row: dict) -> str:
@@ -54,40 +92,60 @@ def _anchor(row: dict) -> str:
     ).label()
 
 
-def decide(row: dict, ev: ModelEval) -> CriterionVerdict:
-    """Apply the deterministic decision layer to one model evaluation."""
+def decide(
+    row: dict, req: Requirement, facts: ProfileFacts, bid_date: date | None = None
+) -> CriterionVerdict:
+    """Decide one gate from the tender's demand and the bidder's own records.
+
+    Both halves used to come from the model, and the numeric branch skipped the confidence
+    and evidence guard the other branch applied — so a model at confidence 0.01 with no
+    evidence produced a hard PASS. Now the model describes the requirement, Python supplies
+    the facts, and `deterministic/facts.py` compares them.
+    """
     level = RequirementLevel(row["requirement_level"])
 
-    if (
-        ev.check_type == "numeric"
-        and ev.required_value_cr is not None
-        and ev.actual_value_cr is not None
-        and ev.operator
-    ):
-        passed = compare_numeric(ev.actual_value_cr, ev.required_value_cr, ev.operator)
-        verdict = Verdict.PASS if passed else Verdict.FAIL
-    else:
-        verdict = Verdict(ev.model_verdict)
-        # C-AC5 + "no pass on empty evidence": a low-confidence or unevidenced pass is review
-        if verdict is Verdict.PASS and (
-            ev.confidence < FUZZY_REVIEW_THRESHOLD or not ev.evidence_ids
-        ):
-            verdict = Verdict.NEEDS_REVIEW
+    window: tuple[str, ...] = ()
+    if req.check is CheckType.TURNOVER_AVG:
+        window = _fy_window(req, bid_date)
 
-    exemption_granted = verdict is Verdict.FAIL and ev.exemption_applies
-    gap = ev.gap_note if verdict is Verdict.FAIL and not exemption_granted else ""
+    outcome = decide_requirement(req, facts, bid_date, window)
+    granted = exemption_granted(req, facts, outcome.verdict)
 
     return CriterionVerdict(
         criterion_id=row["id"],
         verbatim_text=row["verbatim_text"],
         requirement_level=level,
-        verdict=verdict,
-        confidence=ev.confidence,
-        rationale=ev.rationale,
+        verdict=outcome.verdict,
+        confidence=req.confidence,
+        rationale=outcome.rationale,
         source_anchor=_anchor(row),
-        gap_note=gap,
-        exemption_granted=exemption_granted,
+        gap_note="" if granted else outcome.gap_note,
+        exemption_granted=granted,
+        check=outcome.check.value,
+        operator=outcome.operator,
+        required_display=outcome.required_display,
+        actual_display=outcome.actual_display,
+        fy_window=outcome.fy_window or window,
+        evidence_ids=outcome.evidence_ids,
+        missing_facts=outcome.missing_facts,
+        exemption_clause=req.exemption_clause if granted else "",
     )
+
+
+def _fy_window(req: Requirement, bid_date: date | None) -> tuple[str, ...]:
+    """Which financial years an average turnover requirement covers.
+
+    Named years first — the clause said them. Otherwise a count plus the bid date, because
+    "the last three financial years" is relative to when the bid closes. NEVER derived from
+    the years the BIDDER happens to have on file: averaging whatever is stored and calling it
+    the answer is the exact defect `sections.py::assemble_compliance_pq` was rewritten to
+    kill, on a hard non-overridable financial gate.
+    """
+    if req.fy_labels:
+        return tuple(fy for fy in (normalise_fy(x) for x in req.fy_labels) if fy)
+    if req.fy_count and bid_date:
+        return recent_fys(bid_date, req.fy_count)
+    return ()
 
 
 def _weighted_score(verdicts: list[CriterionVerdict]) -> int | None:
@@ -107,7 +165,9 @@ def _weighted_score(verdicts: list[CriterionVerdict]) -> int | None:
     return round(100 * passed / len(scored))
 
 
-def analyze(criteria_rows: list[dict], profile_json: dict) -> dict:
+def analyze(
+    criteria_rows: list[dict], profile_json: dict, bid_date: date | None = None
+) -> dict:
     """Full analysis over a locked TOM's criteria vs the vendor profile.
 
     ONLY GATES ARE EVALUATED, and only gates vote. A pre-bid eligibility condition is a
@@ -136,10 +196,9 @@ def analyze(criteria_rows: list[dict], profile_json: dict) -> dict:
     # Evaluate criteria concurrently — each is an independent model call; sequential blows
     # the request budget on a large tender (retry cap bounds cost per call).
     with ThreadPoolExecutor(max_workers=6) as pool:
-        evals = list(
-            pool.map(lambda row: evaluate_criterion(row["verbatim_text"], profile_json), gates)
-        )
-    verdicts = [decide(row, ev) for row, ev in zip(gates, evals, strict=True)]
+        reqs = list(pool.map(lambda row: extract_requirement(row["verbatim_text"]), gates))
+    facts = profile_facts(profile_json or {})
+    verdicts = [decide(row, r, facts, bid_date) for row, r in zip(gates, reqs, strict=True)]
 
     outcomes = [
         CriterionOutcome(
@@ -183,16 +242,19 @@ def analyze(criteria_rows: list[dict], profile_json: dict) -> dict:
                 "source_anchor": v.source_anchor,
                 "gap_note": v.gap_note,
                 "exemption_granted": v.exemption_granted,
+                # The working, not just the answer — so a verdict can be audited without
+                # re-running it.
+                "check": v.check,
+                "operator": v.operator,
+                "required_display": v.required_display,
+                "actual_display": v.actual_display,
+                "fy_window": list(v.fy_window),
+                "evidence_ids": list(v.evidence_ids),
+                "missing_facts": list(v.missing_facts),
+                "exemption_clause": v.exemption_clause,
             }
             for v in verdicts
         ],
         "gaps": gaps,
     }
 
-
-def _kind_counts(criteria_rows: list[dict]) -> dict[str, int]:
-    """How many of each kind, for a screen that wants to explain the verdict's scope."""
-    counts = dict.fromkeys((k.value for k in RequirementKind), 0)
-    for row in criteria_rows:
-        counts[effective_kind(row).value] += 1
-    return counts

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends
@@ -225,6 +225,15 @@ def update_profile(body: ProfileIn, user: CurrentUser) -> dict:
     return ok(db.get_profile_context(user.workspace_id))
 
 
+def _bid_date(tender: dict) -> date | None:
+    """The tender's own deadline, as a date. Shared by both callers of `analyze`."""
+    raw = tender.get("deadline")
+    try:
+        return date.fromisoformat(str(raw)[:10]) if raw else None
+    except ValueError:
+        return None
+
+
 @router.post("/api/tenders/{tender_id}/analyze")
 def run_analysis(tender_id: str, user: CurrentUser) -> dict:
     tender = db.get_tender(tender_id, user.workspace_id)
@@ -235,7 +244,10 @@ def run_analysis(tender_id: str, user: CurrentUser) -> dict:
         raise ApiError(409, "TOM_NOT_LOCKED", "lock the TOM before running eligibility analysis")
     criteria = db.get_criteria(tender_id, user.workspace_id)
     profile = db.get_profile_context(user.workspace_id)
-    result = analysis.analyze(criteria, profile)
+    # The submission deadline decides which financial years "the last three years" means and
+    # whether a certificate was valid on the day. `None` is legal and routes the date-dependent
+    # checks to needs-review rather than guessing a window.
+    result = analysis.analyze(criteria, profile, _bid_date(tender))
     db.save_analysis(user.workspace_id, tender_id, result)
     return ok(result)
 

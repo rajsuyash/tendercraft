@@ -1,16 +1,38 @@
-"""Module C analysis — deterministic decisions over model evals (C-FR1/C-FR5/C-AC4/C-AC5)."""
+"""Module C analysis — the adapter layer (C-FR1/C-FR5/C-AC4/C-AC5).
+
+These tests own the DECISION boundary: which criteria reach a verdict, what the model is
+allowed to supply, and how gate verdicts roll up. The arithmetic itself belongs to
+`tests/test_facts.py`, and the classifier to `tests/test_requirement_kind.py`.
+"""
 
 from __future__ import annotations
 
+from datetime import date
+
 from app import analysis
-from app.deterministic.types import Recommendation, Verdict
-from pipeline.analyzer import ModelEval
+from app.deterministic.facts import Requirement
+from app.deterministic.types import CheckType, Recommendation, Verdict
+
+BID_DATE = date(2026, 8, 14)
+
+#: A profile with enough on file that a turnover gate can actually be decided. FY24|FY25|FY26
+#: is the window `recent_fys(2026-08-14, 3)` produces.
+PROFILE = {
+    "legal_identity": {"net_worth_cr": 4.0, "udyam_registration": "UDYAM-JH-01-0001"},
+    "financials": [
+        {"fy_label": "FY24", "turnover_cr": 6.8},
+        {"fy_label": "FY25", "turnover_cr": 8.1},
+        {"fy_label": "FY26", "turnover_cr": 9.7},
+    ],
+    "experience_records": [],
+    "certifications": [],
+}
 
 
 def _row(cid, level="mandatory", text="crit", page=12, clause="4.1(a)", kind="gate"):
     """A criterion row. `kind_override="gate"` by default because these tests are about the
-    DECISION layer, not about classification — `analyze` now evaluates gates only, so without
-    it a row of placeholder text ("crit", "d1") classifies as an obligation and is correctly
+    DECISION layer, not about classification — `analyze` evaluates gates only, so without it
+    a row of placeholder text ("crit", "d1") classifies as an obligation and is correctly
     never analysed. `tests/test_requirement_kind.py` owns the classifier."""
     return {
         "id": cid,
@@ -22,147 +44,207 @@ def _row(cid, level="mandatory", text="crit", page=12, clause="4.1(a)", kind="ga
     }
 
 
-def _eval(**kw) -> ModelEval:
-    base = dict(
-        check_type="other",
-        model_verdict="needs_review",
-        confidence=0.9,
-        rationale="because",
-        evidence_ids=("exp-1",),
-        required_value_cr=None,
-        operator=None,
-        actual_value_cr=None,
-        gap_note="",
-        exemption_applies=False,
-        exemption_clause=None,
-    )
-    base.update(kw)
-    return ModelEval(**base)
+def _req(**kw) -> Requirement:
+    """What the MODEL is allowed to say. Note what cannot be passed here: no verdict, no
+    actual value, no evidence ids, no exemption boolean. Those are not fields."""
+    kw.setdefault("confidence", 0.9)
+    return Requirement(**kw)
 
 
-def test_numeric_decided_deterministically_fail():
-    # model says pass, but 8.2 < 10 -> deterministic FAIL (the model never decides numbers)
-    ev = _eval(
-        check_type="numeric", required_value_cr=10, actual_value_cr=8.2, operator=">=",
-        model_verdict="pass", gap_note="gap ₹1.8 Cr",
-    )
-    v = analysis.decide(_row("c1"), ev)
-    assert v.verdict is Verdict.FAIL
-    assert v.gap_note == "gap ₹1.8 Cr"
-    assert "Cl. 4.1(a)" in v.source_anchor  # C-AC4 source anchor
-
-
-def test_numeric_decided_deterministically_pass():
-    ev = _eval(check_type="numeric", required_value_cr=10, actual_value_cr=12, operator=">=", model_verdict="fail")
-    assert analysis.decide(_row("c1"), ev).verdict is Verdict.PASS
-
-
-def test_fuzzy_high_confidence_pass():
-    ev = _eval(check_type="experience", model_verdict="pass", confidence=0.85, evidence_ids=("exp-1",))
-    assert analysis.decide(_row("c1"), ev).verdict is Verdict.PASS
-
-
-def test_fuzzy_low_confidence_pass_becomes_review():
-    # C-AC5: sub-0.75 fuzzy pass never auto-passes
-    ev = _eval(check_type="experience", model_verdict="pass", confidence=0.61)
-    assert analysis.decide(_row("c1"), ev).verdict is Verdict.NEEDS_REVIEW
-
-
-def test_fuzzy_pass_without_evidence_becomes_review():
-    ev = _eval(check_type="experience", model_verdict="pass", confidence=0.9, evidence_ids=())
-    assert analysis.decide(_row("c1"), ev).verdict is Verdict.NEEDS_REVIEW
-
-
-def test_exemption_waives_a_fail():
-    ev = _eval(check_type="numeric", required_value_cr=10, actual_value_cr=8, operator=">=",
-               model_verdict="fail", exemption_applies=True, exemption_clause="4.5")
-    v = analysis.decide(_row("c1"), ev)
-    assert v.verdict is Verdict.FAIL  # the raw verdict stays fail...
-    assert v.exemption_granted is True  # ...but it's flagged waived (recommend() honors it)
-    assert v.gap_note == ""  # waived items don't show a gap
+def _turnover(threshold: float) -> Requirement:
+    return _req(check=CheckType.TURNOVER_AVG, operator=">=", threshold_cr=threshold, fy_count=3)
 
 
 def _patch(monkeypatch, mapping):
-    monkeypatch.setattr(analysis, "evaluate_criterion", lambda text, profile: mapping[text])
+    monkeypatch.setattr(analysis, "extract_requirement", lambda text: mapping[text])
+
+
+# --- the model cannot report the bidder's side ------------------------------------------------
+
+
+def test_the_extractor_is_called_with_the_criterion_text_and_nothing_else(monkeypatch):
+    """The structural half of the fix, asserted at the call site: `analyze` has the profile
+    in hand and does not hand it to the model. A model that cannot see the bidder's numbers
+    cannot report them, which is worth more than any instruction in the prompt."""
+    seen: list = []
+
+    def spy(*args, **kwargs):
+        seen.append((args, kwargs))
+        return _turnover(5)
+
+    monkeypatch.setattr(analysis, "extract_requirement", spy)
+    analysis.analyze([_row("c1", text="Average annual turnover of Rs 5 Crore")], PROFILE,
+                     BID_DATE)
+
+    assert seen == [(("Average annual turnover of Rs 5 Crore",), {})]
+
+
+# --- the verdict is arithmetic over facts -----------------------------------------------------
+
+
+def test_a_shortfall_is_computed_from_the_profile_not_reported(monkeypatch):
+    """₹8.20 Cr averaged across FY24|FY25|FY26 against a ₹10 Cr demand. Nothing in the
+    model's answer names 8.2 — it cannot, it never saw the profile."""
+    v = analysis.decide(_row("c1"), _turnover(10), analysis.profile_facts(PROFILE), BID_DATE)
+
+    assert v.verdict is Verdict.FAIL
+    assert v.actual_display == "₹8.20 Cr (avg FY24|FY25|FY26)"
+    assert v.required_display == "₹10.00 Cr"
+    assert v.operator == ">="
+    assert "gap ₹1.80 Cr" in v.gap_note
+    assert v.fy_window == ("FY24", "FY25", "FY26")
+    assert "Cl. 4.1(a)" in v.source_anchor  # C-AC4 source anchor
+
+
+def test_the_same_facts_against_a_lower_threshold_pass(monkeypatch):
+    v = analysis.decide(_row("c1"), _turnover(8), analysis.profile_facts(PROFILE), BID_DATE)
+    assert v.verdict is Verdict.PASS
+    assert v.gap_note == ""
+
+
+def test_a_low_confidence_reading_never_decides_a_number(monkeypatch):
+    """C-AC5, and the defect it was missing: the confidence guard applied to the fuzzy branch
+    only, so a numeric comparison at confidence 0.01 produced a hard PASS."""
+    req = Requirement(check=CheckType.TURNOVER_AVG, operator=">=", threshold_cr=1.0,
+                      fy_count=3, confidence=0.01)
+    v = analysis.decide(_row("c1"), req, analysis.profile_facts(PROFILE), BID_DATE)
+    assert v.verdict is Verdict.NEEDS_REVIEW
+
+
+def test_an_absent_fact_is_needs_review_never_fail(monkeypatch):
+    """A false "you do not qualify" costs a bid the customer would have won, and nobody
+    audits the bids they were told to skip."""
+    v = analysis.decide(_row("c1"), _turnover(10), analysis.profile_facts({}), BID_DATE)
+    assert v.verdict is Verdict.NEEDS_REVIEW
+    assert v.missing_facts  # and it names what it wants
+
+
+def test_an_exemption_needs_a_clause_and_a_matching_registration(monkeypatch):
+    req = _req(check=CheckType.TURNOVER_AVG, operator=">=", threshold_cr=10, fy_count=3,
+               exemption_for=("mse",), exemption_clause="Cl. 4.5 — MSE relaxation")
+    v = analysis.decide(_row("c1"), req, analysis.profile_facts(PROFILE), BID_DATE)
+
+    assert v.verdict is Verdict.FAIL          # the raw verdict stays fail...
+    assert v.exemption_granted is True        # ...but recommend() honours the waiver
+    assert v.gap_note == ""                   # a waived item shows no gap
+    assert v.exemption_clause == "Cl. 4.5 — MSE relaxation"
+
+
+def test_an_exemption_the_bidder_is_not_in_is_not_granted(monkeypatch):
+    """The old `exemption_applies` was a bare model boolean, so one `true` on a mandatory
+    criterion turned NO-BID into BID with nothing resolved anywhere."""
+    req = _req(check=CheckType.TURNOVER_AVG, operator=">=", threshold_cr=10, fy_count=3,
+               exemption_for=("dpiit",), exemption_clause="Cl. 4.6 — start-up relaxation")
+    v = analysis.decide(_row("c1"), req, analysis.profile_facts(PROFILE), BID_DATE)
+
+    assert v.exemption_granted is False
+    assert v.gap_note
+
+
+# --- rolling up -------------------------------------------------------------------------------
 
 
 def test_mandatory_fail_caps_recommendation_at_no_bid(monkeypatch):
-    rows = [_row("c1", text="turnover"), _row("c2", text="iso")]
+    rows = [_row("c1", text="turnover"), _row("c2", text="networth")]
     _patch(monkeypatch, {
-        "turnover": _eval(check_type="numeric", required_value_cr=10, actual_value_cr=8, operator=">="),
-        "iso": _eval(check_type="date", model_verdict="pass", confidence=0.9),
+        "turnover": _turnover(10),
+        "networth": _req(check=CheckType.NET_WORTH, operator=">=", threshold_cr=2),
     })
-    result = analysis.analyze(rows, {})
+    result = analysis.analyze(rows, PROFILE, BID_DATE)
+
     assert result["recommendation"] == Recommendation.NO_BID.value
     assert result["conservative"] is True
-    assert result["counts"]["fail"] == 1
-    assert len(result["gaps"]) >= 0  # gap present if the fail had a gap_note
+    assert result["counts"] == {"pass": 1, "fail": 1, "needs_review": 0}
+    assert result["gaps"][0]["criterion_id"] == "c1"
 
 
 def test_all_mandatory_pass_recommends_bid(monkeypatch):
-    rows = [_row("c1", text="turnover"), _row("c2", text="exp")]
+    rows = [_row("c1", text="turnover"), _row("c2", text="udyam")]
     _patch(monkeypatch, {
-        "turnover": _eval(check_type="numeric", required_value_cr=10, actual_value_cr=12, operator=">="),
-        "exp": _eval(check_type="experience", model_verdict="pass", confidence=0.9, evidence_ids=("e1",)),
+        "turnover": _turnover(8),
+        "udyam": _req(check=CheckType.REGISTRATION_PRESENT, registration_key="udyam"),
     })
-    assert analysis.analyze(rows, {})["recommendation"] == Recommendation.BID.value
+    assert analysis.analyze(rows, PROFILE, BID_DATE)["recommendation"] == Recommendation.BID.value
 
 
 def test_weighted_score_counts_only_non_mandatory(monkeypatch):
-    rows = [_row("m", "mandatory", text="m"), _row("d1", "desirable", text="d1"), _row("d2", "desirable", text="d2")]
+    rows = [_row("m", "mandatory", text="m"),
+            _row("d1", "desirable", text="d1"),
+            _row("d2", "desirable", text="d2")]
     _patch(monkeypatch, {
-        "m": _eval(check_type="numeric", required_value_cr=1, actual_value_cr=2, operator=">="),
-        "d1": _eval(check_type="other", model_verdict="pass", confidence=0.9, evidence_ids=("e",)),
-        "d2": _eval(check_type="other", model_verdict="fail", confidence=0.9),
+        "m": _turnover(8),
+        "d1": _req(check=CheckType.NET_WORTH, operator=">=", threshold_cr=2),
+        "d2": _req(check=CheckType.NET_WORTH, operator=">=", threshold_cr=99),
     })
     # 1 of 2 desirable passed -> 50
-    assert analysis.analyze(rows, {})["weighted_score"] == 50
+    assert analysis.analyze(rows, PROFILE, BID_DATE)["weighted_score"] == 50
 
 
 def test_a_tender_with_nothing_scoreable_scores_NONE_not_zero(monkeypatch):
     """Zero out of a hundred is a claim that the bidder scored nothing. An absent denominator
     is a different sentence, and a catalogue bid legitimately states no scored criterion —
     which is the common case now that only gates are evaluated."""
-    rows = [_row("m", "mandatory", text="m")]
-    _patch(monkeypatch, {"m": _eval(check_type="numeric", required_value_cr=1,
-                                    actual_value_cr=2, operator=">=")})
-    assert analysis.analyze(rows, {})["weighted_score"] is None
+    _patch(monkeypatch, {"m": _turnover(8)})
+    assert analysis.analyze([_row("m", text="m")], PROFILE, BID_DATE)["weighted_score"] is None
 
 
-def test_every_verdict_has_rationale_and_anchor(monkeypatch):
-    rows = [_row("c1", text="x")]
-    _patch(monkeypatch, {"x": _eval(model_verdict="pass", confidence=0.9, evidence_ids=("e",))})
-    v = analysis.analyze(rows, {})["verdicts"][0]
+def test_every_verdict_carries_its_rationale_anchor_and_working(monkeypatch):
+    _patch(monkeypatch, {"x": _turnover(10)})
+    v = analysis.analyze([_row("c1", text="x")], PROFILE, BID_DATE)["verdicts"][0]
+
     assert v["rationale"]  # C-AC4
     assert "p.12" in v["source_anchor"]
+    # The working, not just the answer — a verdict nobody can reconstruct cannot be audited.
+    assert v["check"] == "turnover_avg"
+    assert v["operator"] == ">="
+    assert v["required_display"] == "₹10.00 Cr"
+    assert v["actual_display"].startswith("₹8.20 Cr")
+    assert v["fy_window"] == ["FY24", "FY25", "FY26"]
 
 
-def test_empty_criteria_needs_review():
-    # no mandatory gates -> conservative Needs-review recommendation
-    assert analysis.analyze([], {})["recommendation"] == Recommendation.NEEDS_REVIEW.value
+def test_a_tender_stating_no_gate_is_not_needs_review():
+    """NO_GATES, not NEEDS_REVIEW. Nothing here disqualifies the bidder, and there is nothing
+    for a human to go and resolve."""
+    assert analysis.analyze([], {})["recommendation"] == Recommendation.NO_GATES.value
 
 
+# --- the financial-year window -----------------------------------------------------------------
 
-# --- only gates vote ------------------------------------------------------------------------
+
+def test_a_named_window_beats_the_bid_date(monkeypatch):
+    """The clause said which years. Use them."""
+    req = _req(check=CheckType.TURNOVER_AVG, operator=">=", threshold_cr=7,
+               fy_labels=("2023-24", "2024-25"))
+    v = analysis.decide(_row("c1"), req, analysis.profile_facts(PROFILE), BID_DATE)
+    assert v.fy_window == ("FY24", "FY25")
+    assert v.actual_display == "₹7.45 Cr (avg FY24|FY25)"
+
+
+def test_without_a_bid_date_a_relative_window_cannot_be_resolved(monkeypatch):
+    """"The last three financial years" is relative to when the bid closes. With no deadline
+    on file the honest answer is needs-review, never a window guessed from whichever years the
+    BIDDER happens to have on file."""
+    v = analysis.decide(_row("c1"), _turnover(10), analysis.profile_facts(PROFILE), None)
+    assert v.verdict is Verdict.NEEDS_REVIEW
+    assert v.fy_window == ()
+
+
+# --- only gates vote ---------------------------------------------------------------------------
 
 
 def test_a_post_award_obligation_is_not_evaluated_and_does_not_vote(monkeypatch):
     """The live defect, in one test. A clause describing an inspection that happens months
     after award was scored as a condition of entry, and one mandatory needs-review dragged the
     whole card to NO-BID on a tender squarely inside the bidder's product line."""
-    gate = _row("g", "mandatory", text="Average annual turnover of Rs 10 Crore", kind=None)
+    gate = _row("g", "mandatory", text="Average annual turnover of Rs 5 Crore", kind=None)
     duty = _row(
         "o", "mandatory", kind=None,
         text="FOR ALL THE ITEMS, FULL QUANTITY PROOF LOAD TEST MUST BE CONDUCTED AND WILL BE "
              "WITNESSED BY BHEL SAFETY ENGINEER DURING PRE DESPATCH INSPECTION.",
     )
-    _patch(monkeypatch, {
-        "Average annual turnover of Rs 10 Crore": _eval(
-            check_type="numeric", required_value_cr=10, actual_value_cr=12, operator=">=",
-        ),
-    })
+    _patch(monkeypatch, {"Average annual turnover of Rs 5 Crore": _turnover(5)})
 
-    out = analysis.analyze([gate, duty], {})
+    out = analysis.analyze([gate, duty], PROFILE, BID_DATE)
 
     assert out["recommendation"] == Recommendation.BID.value
     assert [v["criterion_id"] for v in out["verdicts"]] == ["g"]
@@ -176,13 +258,11 @@ def test_a_tender_of_nothing_but_obligations_makes_no_model_call(monkeypatch):
     """Eighteen mandatory criteria on the live bid, two of them gates. Filtering before the
     fan-out is a cost saving as well as a correctness fix."""
     called: list[str] = []
-    monkeypatch.setattr(
-        analysis, "evaluate_criterion",
-        lambda text, profile: called.append(text) or _eval(),
-    )
+    monkeypatch.setattr(analysis, "extract_requirement",
+                        lambda text: called.append(text) or _req())
     rows = [_row("o1", text="Bidders to quote Rate / No. as defined above.", kind=None)]
 
-    out = analysis.analyze(rows, {})
+    out = analysis.analyze(rows, PROFILE, BID_DATE)
 
     assert called == []
     assert out["verdicts"] == []
@@ -193,10 +273,9 @@ def test_an_override_puts_a_criterion_back_in_front_of_the_verdict(monkeypatch):
     """The escape hatch for the classifier's named ceiling: a gate phrased without any noun
     the rules know is an obligation until a human says otherwise."""
     row = _row("x", "mandatory", text="Bidder must be on the approved panel.", kind="gate")
-    _patch(monkeypatch, {"Bidder must be on the approved panel.": _eval(
-        model_verdict="fail", confidence=0.9, evidence_ids=("e",))})
+    _patch(monkeypatch, {"Bidder must be on the approved panel.": _turnover(99)})
 
-    out = analysis.analyze([row], {})
+    out = analysis.analyze([row], PROFILE, BID_DATE)
 
     assert out["recommendation"] == Recommendation.NO_BID.value
     assert out["checklist"] == []

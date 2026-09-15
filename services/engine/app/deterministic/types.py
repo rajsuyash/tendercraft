@@ -39,6 +39,19 @@ class SentenceClass(StrEnum):
     PLACEHOLDER = "placeholder"  # explicit sourcing instruction
 
 
+class CheckType(StrEnum):
+    """What a pre-bid gate actually tests. The model names one of these and nothing else —
+    the enum IS the G-6 allowlist, the same shape `spec_params.PARAM_KEYS` uses."""
+
+    TURNOVER_AVG = "turnover_avg"
+    NET_WORTH = "net_worth"
+    WORKING_CAPITAL = "working_capital"
+    EXPERIENCE_COUNT = "experience_count"
+    CERTIFICATION_VALID = "certification_valid"
+    REGISTRATION_PRESENT = "registration_present"
+    NONE = "none"  # nothing checkable was stated
+
+
 class RequirementKind(StrEnum):
     """What a bidder is supposed to DO about a requirement — and so whether it may vote.
 
@@ -78,6 +91,11 @@ class Recommendation(StrEnum):
     BID = "bid"
     NO_BID = "no_bid"
     NEEDS_REVIEW = "needs_review"
+    #: The tender states no pre-bid eligibility gate at all. Distinct from NEEDS_REVIEW,
+    #: which asks a human to resolve something: here there is nothing to resolve, because
+    #: nothing in the tender can disqualify this bidder. Common rather than exotic — the
+    #: live wire-rope bid has eighteen mandatory criteria and zero gates.
+    NO_GATES = "no_gates"
 
 
 class CoverageStatus(StrEnum):

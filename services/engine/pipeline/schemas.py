@@ -5,6 +5,7 @@ text, no tool calls. Anything off-schema is rejected by the client and routed to
 """
 
 from app.deterministic.spec_params import PARAM_KEYS
+from app.deterministic.types import CheckType
 
 # Knowledge-base document classification (auto-derive metadata from ingested text).
 KB_DOC_SCHEMA = {
@@ -31,28 +32,53 @@ KB_DOC_SCHEMA = {
     "required": ["name", "doc_type"],
 }
 
-# Per-criterion eligibility evaluation against the vendor profile.
-# The model EXTRACTS values and proposes a verdict; the deterministic layer DECIDES
-# (compare_numeric for numeric, the 0.75 router for fuzzy) — §2.4.
-CRITERION_EVAL_SCHEMA = {
+# What a pre-bid gate DEMANDS. Not what the bidder has, and not whether they clear it.
+#
+# What is absent here is the design. The previous schema (`CRITERION_EVAL_SCHEMA`) carried
+# `model_verdict`, `actual_value_cr` and `exemption_applies`, and app/analysis.py let all
+# three decide: a numeric branch compared two model-supplied numbers with no confidence or
+# evidence check at all, so a model at confidence 0.01 produced a hard PASS, and one `true`
+# on `exemption_applies` turned NO-BID into BID with no clause resolved anywhere.
+#
+#   - `verdict` — absent. The model deciding its own result is the defect being fixed.
+#   - `actual_value_cr` — absent. The bidder's own number is a row Python holds. The model is
+#     not even shown the profile any more, so it cannot report one.
+#   - `evidence_ids` — absent. Python names the rows it actually used; a model cannot
+#     hallucinate an id it was never given.
+#   - `gap_note` — absent. Python formats the shortfall from the two numbers it just
+#     compared, which is strictly better prose and cannot be wrong.
+#   - `exemption_applies` — replaced by `exemption_for` (which CLASSES the tender's own text
+#     grants) plus the clause. Whether this bidder is in one of those classes is a profile
+#     lookup, not an opinion.
+#
+# `check` is rendered from `deterministic/types.CheckType` — the enum IS the G-6 allowlist,
+# the same shape SPEC_PARAMS_SCHEMA uses for its registry keys.
+ELIGIBILITY_REQUIREMENT_SCHEMA = {
     "type": "object",
     "properties": {
-        "check_type": {
-            "type": "string",
-            "enum": ["numeric", "date", "experience", "registration", "other"],
-        },
-        "required_value_cr": {"type": "number", "nullable": True},
+        "check": {"type": "string", "enum": [c.value for c in CheckType]},
         "operator": {"type": "string", "enum": [">=", "<=", ">", "<", "=="], "nullable": True},
-        "actual_value_cr": {"type": "number", "nullable": True},
-        "evidence_ids": {"type": "array", "items": {"type": "string"}},
-        "model_verdict": {"type": "string", "enum": ["pass", "fail", "needs_review"]},
-        "confidence": {"type": "number"},
-        "rationale": {"type": "string"},
-        "gap_note": {"type": "string"},
-        "exemption_applies": {"type": "boolean"},
+        "threshold_cr": {"type": "number", "nullable": True},
+        "fy_count": {"type": "integer", "nullable": True},
+        "fy_labels": {"type": "array", "items": {"type": "string"}},
+        "min_count": {"type": "integer", "nullable": True},
+        "years_window": {"type": "integer", "nullable": True},
+        "certification_name": {"type": "string", "nullable": True},
+        "registration_key": {
+            "type": "string",
+            "enum": ["udyam", "mse", "msme", "dpiit", "startup", "gst", "pan", "cin"],
+            "nullable": True,
+        },
+        "exemption_for": {
+            "type": "array",
+            "items": {"type": "string",
+                      "enum": ["mse", "msme", "udyam", "dpiit", "startup", "make_in_india"]},
+        },
         "exemption_clause": {"type": "string"},
+        "raw_text": {"type": "string"},
+        "confidence": {"type": "number"},
     },
-    "required": ["check_type", "model_verdict", "confidence", "rationale", "evidence_ids"],
+    "required": ["check", "raw_text", "confidence"],
 }
 
 # Drafter output — narrative sentences, each tagged for the deterministic cite-or-flag check.
@@ -239,12 +265,12 @@ ANSWER_PAIR_SCHEMA = {
 # Module H — free-text spec -> typed parameters. EXTRACTION ONLY.
 #
 # There is deliberately NO verdict field here, and that absence is the point. The older
-# CRITERION_EVAL_SCHEMA carries `model_verdict`, and app/analysis.py:53-66 still lets it decide
-# every non-numeric criterion behind a 0.75 confidence gate — a model deciding eligibility,
-# which PRD §2.4 forbids and which only survives because it predates the rule. Module H does not
-# repeat it: the model reads, `app/deterministic/spec_match.py` decides, and the two are
-# separated at the schema rather than at the router, where a future edit could quietly rejoin
-# them.
+# CRITERION_EVAL_SCHEMA carried `model_verdict`, `actual_value_cr` and `exemption_applies`,
+# and app/analysis.py let all three decide — a model deciding eligibility, which PRD §2.4
+# forbids. Module H never repeated it, and the eligibility path has now been rebuilt the same
+# way (ELIGIBILITY_REQUIREMENT_SCHEMA above): the model reads, `app/deterministic/` decides,
+# and the two are separated at the schema rather than at the router, where a future edit
+# could quietly rejoin them.
 #
 # `param_key` is an enum rendered from the registry — the G-6 allowlist. A hostile tender
 # document cannot invent a parameter name any more than it can invent a criterion category, and

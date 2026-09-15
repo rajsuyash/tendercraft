@@ -14,6 +14,7 @@ its sub-0.75 routing lives in the pipeline, this module only consumes final verd
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -54,6 +55,46 @@ def average_annual_turnover(
     return sum(values) / len(unique_fys)
 
 
+_FY = re.compile(r"(?:FY\s*)?(\d{4}|\d{2})\s*[-/]?\s*(\d{2,4})?", re.I)
+
+
+def normalise_fy(label: str) -> str | None:
+    """"2022-23", "F.Y. 2024-25", "FY 24-25" -> the profile's own label ("FY23", "FY25").
+
+    Indian financial years end on 31 March and are named for the CLOSING year, which is what
+    `profile_financials.fy_label` stores. A label that will not normalise returns None and is
+    simply absent from the window — `average_annual_turnover` then returns None and the gate
+    reads needs-review, which is honest by construction.
+    """
+    text = (label or "").strip().replace(".", "")
+    m = _FY.search(text)
+    if not m:
+        return None
+    first, second = m.group(1), m.group(2)
+    end = second or first
+    if len(end) == 4:
+        end = end[2:]
+    if len(first) == 4 and not second:
+        # A single four-digit year names itself.
+        end = first[2:]
+    return f"FY{int(end):02d}" if end.isdigit() else None
+
+
+def recent_fys(bid_date: date, count: int) -> tuple[str, ...]:
+    """The last `count` COMPLETED Indian financial years, oldest first.
+
+    A bid on 14 August 2026 sits in FY27, whose year is not over; the last completed one ends
+    31 March 2026 and the profile labels it FY26. Off by one here shifts the whole window a
+    year on a hard, non-overridable financial gate, which is why this is pinned by its own
+    test rather than inlined at the call site.
+    """
+    if count <= 0:
+        return ()
+    # Before April the current calendar year's FY has not closed either.
+    last_complete = bid_date.year if bid_date.month >= 4 else bid_date.year - 1
+    return tuple(f"FY{(last_complete - i) % 100:02d}" for i in range(count - 1, -1, -1))
+
+
 def is_valid_on(expiry: date, bid_date: date) -> bool:
     """A certificate is valid if it has not expired on the bid date (inclusive)."""
     return expiry >= bid_date
@@ -92,7 +133,11 @@ def recommend(outcomes: Sequence[CriterionOutcome]) -> Recommendation:
     """
     mandatory = [o for o in outcomes if o.requirement_level is RequirementLevel.MANDATORY]
     if not mandatory:
-        return Recommendation.NEEDS_REVIEW  # no gates to clear -> cannot confirm eligibility
+        # NOT needs-review. "Needs review" asks a human to go and resolve something; a tender
+        # that states no mandatory eligibility gate has nothing to resolve and disqualifies
+        # nobody. Reading it as needs-review is how a catalogue bid inside the bidder's own
+        # product line came back looking unresolved forever.
+        return Recommendation.NO_GATES
 
     effective = [o.effective_verdict() for o in mandatory]
     if any(v is Verdict.FAIL for v in effective):

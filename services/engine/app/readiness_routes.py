@@ -118,6 +118,7 @@ def set_decision(tender_id: str, criterion_id: str, body: DecisionIn, user: Curr
 
 
 def _prepare(workspace_id: str, tender_id: str) -> dict:
+    from .analyze_routes import _bid_date
     from .proposal_routes import do_generate
 
     criteria = db.get_criteria(tender_id, workspace_id)
@@ -129,7 +130,11 @@ def _prepare(workspace_id: str, tender_id: str) -> dict:
 
     # 2. Eligibility analysis (matches criteria against the structured profile).
     profile = db.get_profile_context(workspace_id)
-    db.save_analysis(workspace_id, tender_id, analysis.analyze(criteria, profile))
+    # The deadline decides which financial years "the last three years" means and whether a
+    # certificate was valid on the day. None is legal: the date-dependent checks then say
+    # needs-review rather than guessing a window.
+    bid_date = _bid_date(db.get_tender(tender_id, workspace_id) or {})
+    db.save_analysis(workspace_id, tender_id, analysis.analyze(criteria, profile, bid_date))
 
     # 3. Draft-match against the content library.
     do_generate(workspace_id, tender_id)

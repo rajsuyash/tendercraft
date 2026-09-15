@@ -26,9 +26,10 @@ def row(key, kind="numeric", **kw):
 # ── the structural guarantees ────────────────────────────────────────────────────────
 
 def test_the_schema_has_no_verdict_field_of_any_kind():
-    """The decisive structural test. CRITERION_EVAL_SCHEMA carries `model_verdict` and
-    app/analysis.py still lets it decide every non-numeric criterion. Module H must not
-    reacquire that shape by a well-meaning edit."""
+    """The decisive structural test. The old CRITERION_EVAL_SCHEMA carried `model_verdict`
+    and app/analysis.py let it decide every non-numeric criterion; both are gone. Module H
+    must not reacquire that shape by a well-meaning edit — see test_schema_discipline.py,
+    which pins the same rule across every schema in the file."""
     banned = ("verdict", "match", "decision", "passes", "eligible", "can_supply", "deviation")
     assert not [k for k in ITEM["properties"] if any(b in k for b in banned)]
 

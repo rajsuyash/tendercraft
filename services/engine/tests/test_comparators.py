@@ -10,6 +10,8 @@ from app.deterministic.eligibility import (
     compare_numeric,
     completed_within,
     is_valid_on,
+    normalise_fy,
+    recent_fys,
     recommend,
 )
 from app.deterministic.types import Recommendation, RequirementLevel, Verdict
@@ -161,14 +163,62 @@ def test_exemption_flips_fail_and_allows_bid():
     assert recommend(outcomes) is Recommendation.BID
 
 
-def test_no_mandatory_criteria_is_needs_review():
-    assert recommend([CriterionOutcome("a", DES, Verdict.PASS)]) is Recommendation.NEEDS_REVIEW
+def test_no_mandatory_criteria_is_not_needs_review():
+    """It is NO_GATES. Needs-review asks a human to resolve something; a tender stating no
+    mandatory eligibility condition has nothing to resolve and disqualifies nobody."""
+    assert recommend([CriterionOutcome("a", DES, Verdict.PASS)]) is Recommendation.NO_GATES
 
 
-def test_desirable_fail_without_mandatory_stays_needs_review():
-    # a desirable Fail must never leak into No-Bid — only mandatory criteria gate (C-FR5)
-    assert recommend([CriterionOutcome("a", DES, Verdict.FAIL)]) is Recommendation.NEEDS_REVIEW
+def test_desirable_fail_without_mandatory_never_leaks_into_no_bid():
+    # only mandatory criteria gate (C-FR5)
+    assert recommend([CriterionOutcome("a", DES, Verdict.FAIL)]) is Recommendation.NO_GATES
 
 
-def test_empty_outcomes_is_needs_review():
-    assert recommend([]) is Recommendation.NEEDS_REVIEW
+def test_empty_outcomes_is_no_gates():
+    assert recommend([]) is Recommendation.NO_GATES
+
+
+# ── the financial-year window ────────────────────────────────────────────────────────
+
+
+def test_a_bid_after_march_counts_back_from_the_year_that_just_closed():
+    """A bid on 14 August 2026 sits in FY27, whose year is not over. The last COMPLETED
+    financial year ends 31 March 2026 and the profile labels it FY26. Off by one here shifts
+    the whole window a year on a hard, non-overridable financial gate."""
+    assert recent_fys(date(2026, 8, 14), 3) == ("FY24", "FY25", "FY26")
+
+
+def test_a_bid_before_april_counts_back_one_further():
+    """1 February 2026 is inside FY26, which has not closed either."""
+    assert recent_fys(date(2026, 2, 1), 3) == ("FY23", "FY24", "FY25")
+
+
+def test_the_window_is_oldest_first_and_a_zero_count_is_empty():
+    assert recent_fys(date(2026, 8, 14), 1) == ("FY26",)
+    assert recent_fys(date(2026, 8, 14), 0) == ()
+    assert recent_fys(date(2026, 8, 14), -1) == ()
+
+
+def test_the_window_wraps_across_a_century():
+    assert recent_fys(date(2001, 6, 1), 3) == ("FY99", "FY00", "FY01")
+
+
+@pytest.mark.parametrize("label,expected", [
+    ("2022-23", "FY23"),
+    ("F.Y. 2024-25", "FY25"),
+    ("FY 24-25", "FY25"),
+    ("FY25", "FY25"),
+    ("2025", "FY25"),
+    ("2024-2025", "FY25"),
+])
+def test_a_tender_may_write_a_financial_year_any_way_it_likes(label, expected):
+    """Indian financial years end on 31 March and are named for the CLOSING year, which is
+    what `profile_financials.fy_label` stores."""
+    assert normalise_fy(label) == expected
+
+
+@pytest.mark.parametrize("label", ["", "the last three years", None])
+def test_a_label_that_will_not_normalise_is_absent_rather_than_guessed(label):
+    """It then drops out of the window, `average_annual_turnover` returns None, and the gate
+    reads needs-review — honest by construction."""
+    assert normalise_fy(label) is None
