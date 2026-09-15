@@ -31,8 +31,8 @@ def wired(monkeypatch):
         "opportunity_id": "o1", "state": "in_scope", "relevance_band": "high",
         "eligibility": "likely_eligible",
         "opportunities": {"portal_ref_no": "GEM/2026/B/1", "title": "Wire rope, IS 2266",
-                          "authority": "ONGC", "deadline": "2026-09-01T00:00:00Z",
-                          "value_display": "₹1.2 Cr"},
+                          "authority": "ONGC", "closing_at": "2026-09-01T00:00:00Z",
+                          "estimated_value": 12000000},
     }])
     monkeypatch.setattr(db, "get_notified_opportunity_ids",
                         lambda ws, r, k: state["already"])
@@ -90,6 +90,9 @@ def test_the_digest_sends_and_records_what_it_sent(client, wired):
     assert to == "ops@uml.test"
     assert "Usha Martin" in subject
     assert "GEM/2026/B/1" in body
+    # The urgency cues, read from the columns the corpus really has (closing_at, estimated_value).
+    assert "closes 2026-09-01" in body
+    assert "₹1.20 Cr" in body
     # The ledger is written AFTER the send, so a failed send is never marked delivered.
     assert wired["ledger"] == [
         {"opportunity_id": "o1", "recipient": "ops@uml.test", "kind": "digest"},

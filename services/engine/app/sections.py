@@ -208,10 +208,18 @@ def assemble_compliance_pq(
         "vendor_profiles:net_worth_cr" if legal.get("net_worth_cr") is not None else None)
 
     for c in certifications:
-        valid = bool(c.get("valid_to")) and str(c["valid_to"]) >= today
-        add(str(c.get("name") or "Certification"),
-            "Valid" if valid else f"EXPIRED ({c.get('valid_to') or 'no expiry recorded'})",
-            "Copy of certificate")
+        valid_to = c.get("valid_to")
+        # Three states, not two. A certificate with no expiry on file used to print "EXPIRED
+        # (no expiry recorded)" in a sheet that goes to a public buyer — a false statement
+        # about the bidder's own standing (seen live: four current ISO/API certs, all
+        # "EXPIRED"). Unknown is unknown; only a recorded past date is an expiry.
+        if not valid_to:
+            position = "Validity not recorded — add the expiry date to the vendor profile"
+        elif str(valid_to) >= today:
+            position = "Valid"
+        else:
+            position = f"EXPIRED ({valid_to})"
+        add(str(c.get("name") or "Certification"), position, "Copy of certificate")
 
     return AssembledSection(
         _table(["Requirement", "Bidder's position", "Evidence"], rows), tuple(sents)

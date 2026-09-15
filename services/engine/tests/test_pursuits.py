@@ -251,14 +251,16 @@ def test_ingest_backfills_the_reference_the_document_omitted(monkeypatch):
     captured: dict = {}
     monkeypatch.setattr(tenders.db, "get_pursuit", lambda ws, pid: _pursuit())
     monkeypatch.setattr(tenders.db, "set_tender_meta",
-                        lambda tid, ws, num, auth: captured.update({"num": num, "auth": auth}))
+                        lambda tid, ws, num, auth, deadline=None: captured.update(
+                            {"num": num, "auth": auth, "deadline": deadline}))
     linked: dict = {}
     monkeypatch.setattr(tenders.db, "link_pursuit_tender",
                         lambda ws, pid, tid: linked.update({"p": pid, "t": tid}))
 
     tenders._apply_pursuit_context("ws-1", "p-1", "t-1", tender_number="", authority="")
 
-    assert captured == {"num": "GEM/2026/B/7876746", "auth": "South Eastern Railway"}
+    assert captured == {"num": "GEM/2026/B/7876746", "auth": "South Eastern Railway",
+                        "deadline": None}
     assert linked == {"p": "p-1", "t": "t-1"}
 
 
@@ -267,13 +269,14 @@ def test_the_document_wins_over_the_portal(monkeypatch):
     captured: dict = {}
     monkeypatch.setattr(tenders.db, "get_pursuit", lambda ws, pid: _pursuit())
     monkeypatch.setattr(tenders.db, "set_tender_meta",
-                        lambda tid, ws, num, auth: captured.update({"num": num, "auth": auth}))
+                        lambda tid, ws, num, auth, deadline=None: captured.update(
+                            {"num": num, "auth": auth, "deadline": deadline}))
     monkeypatch.setattr(tenders.db, "link_pursuit_tender", lambda ws, pid, tid: None)
 
     tenders._apply_pursuit_context("ws-1", "p-1", "t-1",
                                    tender_number="DOC/REF/9", authority="Doc Authority")
 
-    assert captured == {"num": "DOC/REF/9", "auth": "Doc Authority"}
+    assert captured == {"num": "DOC/REF/9", "auth": "Doc Authority", "deadline": None}
 
 
 def test_a_missing_pursuit_does_not_fail_the_upload(monkeypatch):
@@ -344,3 +347,62 @@ def test_a_real_title_is_never_overwritten_by_the_same_backfill(monkeypatch):
 
     tenders._apply_pursuit_context("ws-1", "p-1", "t-1", tender_number="", authority="",
                                    current_title="Supply of Steel Wire Rope")
+
+
+def test_the_portal_closing_date_fills_a_deadline_the_document_did_not_state(monkeypatch):
+    """Six live tenders read "Deadline not recorded" while their feed rows carried closing_at."""
+    captured: dict = {}
+    monkeypatch.setattr(tenders.db, "get_pursuit",
+                        lambda ws, pid: _pursuit(closing_at="2026-09-30T14:30:00+00:00"))
+    monkeypatch.setattr(tenders.db, "set_tender_meta",
+                        lambda tid, ws, num, auth, deadline=None: captured.update(
+                            {"deadline": deadline}))
+    monkeypatch.setattr(tenders.db, "link_pursuit_tender", lambda ws, pid, tid: None)
+
+    tenders._apply_pursuit_context("ws-1", "p-1", "t-1", tender_number="X", authority="Y")
+    assert captured["deadline"] == "2026-09-30T14:30:00+00:00"
+
+
+def test_a_deadline_the_document_stated_is_not_overwritten_by_the_portal(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(tenders.db, "get_pursuit",
+                        lambda ws, pid: _pursuit(closing_at="2026-09-30T14:30:00+00:00"))
+    monkeypatch.setattr(tenders.db, "set_tender_meta",
+                        lambda tid, ws, num, auth, deadline=None: captured.update(
+                            {"deadline": deadline}))
+    monkeypatch.setattr(tenders.db, "link_pursuit_tender", lambda ws, pid, tid: None)
+
+    tenders._apply_pursuit_context("ws-1", "p-1", "t-1", tender_number="X", authority="Y",
+                                   deadline="2026-09-28T13:30:00+05:30")
+    assert captured["deadline"] is None
+
+
+def test_upload_title_and_pursuit_id_arrive_as_multipart_form_fields(monkeypatch):
+    """The upload page sends both as FORM fields. Declared as bare `str` defaults they bound as
+    query parameters and were empty on every upload that ever ran — a contract only a real
+    multipart request can check."""
+    from fastapi.testclient import TestClient
+
+    from app import tenders
+    from app.auth import AuthedUser, get_current_user
+    from app.main import create_app
+
+    seen: dict = {}
+    monkeypatch.setattr(tenders, "_process_ingest",
+                        lambda ws, docs, name, pursuit: seen.update(
+                            {"name": name, "pursuit": pursuit}) or {
+                            "tender_id": "t-9", "pages": 1, "illegible_pages": []})
+    monkeypatch.setattr(tenders, "_extract_quietly", lambda ws, t: None)
+    monkeypatch.setattr(tenders, "_ocr_quietly", lambda ws, t, docs: None)
+
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: AuthedUser(
+        user_id="u1", workspace_id="ws-9", role="admin",
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/tenders/ingest",
+                        files={"file": ("nit.pdf", b"%PDF-1.4")},
+                        data={"title": "Oil India wire rope NIT", "pursuit_id": "p-1"})
+
+    assert r.status_code == 200, r.text
+    assert seen == {"name": "Oil India wire rope NIT", "pursuit": "p-1"}

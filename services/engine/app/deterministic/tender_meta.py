@@ -15,6 +15,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+
+_IST = timezone(timedelta(hours=5, minutes=30))
 
 # "Tender No. MAHA/DMA/2026/0917", "NIT No: 42/2026-27", "RFP Reference: ABC-123"
 _NUMBER = re.compile(
@@ -62,6 +65,23 @@ _AUTHORITY = re.compile(
 
 _NOISE = re.compile(r"\s+")
 
+# Submission deadline. GeM bid documents print "/Bid End Date/Time" and the value on the next
+# line as "28-04-2026 19:00:00"; NITs write "Last date for submission of bid: 28.04.2026 up to
+# 15:00 hrs". Only a fully-formed date is accepted, and the time is optional — a deadline the
+# document does not state stays NULL rather than being guessed, because the dashboard's SLA
+# chip and every "closes in N days" label read this field (found: six live tenders, all
+# "Deadline not recorded", every one a GeM bid whose page one stated the end date).
+_DEADLINE = re.compile(
+    r"(?:/Bid End Date/Time"
+    r"|\blast\s+date\s+(?:and\s+time\s+)?(?:for|of)\s+(?:bid\s+|tender\s+)?submission"
+    r"|\bbid\s+submission\s+(?:end|closing|last)\s+date"
+    r"|\bdue\s+date\s+(?:for|of)\s+(?:bid\s+)?submission)"
+    r"[^0-9\n]{0,40}\n?\s*"
+    r"(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})"
+    r"(?:[ ,T]+(?:up\s*to\s+|at\s+|by\s+)?(\d{1,2})[:.](\d{2})(?::(\d{2}))?)?",
+    re.I,
+)
+
 #: A filename that is machine-generated noise rather than something a person chose: a long
 #: hex run, or an embedded export timestamp. Deliberately narrow — "Oil India wire rope
 #: NIT.pdf" is a real answer from a real person and must survive.
@@ -73,6 +93,9 @@ class TenderMeta:
     tender_number: str | None = None
     title: str | None = None
     authority: str | None = None
+    #: ISO 8601 with the +05:30 offset — Indian portals state deadlines in IST and a naive
+    #: timestamp would be read as UTC downstream (known-pitfalls: "15:00 IST ≠ 15:00 UTC").
+    deadline: str | None = None
 
 
 def _clean(v: str | None) -> str | None:
@@ -80,6 +103,19 @@ def _clean(v: str | None) -> str | None:
         return None
     v = _NOISE.sub(" ", v).strip(" .,:;-–—")
     return v or None
+
+
+def _deadline(head: str) -> str | None:
+    m = _DEADLINE.search(head)
+    if not m:
+        return None
+    day, month, year, hour, minute, second = m.groups()
+    try:
+        dt = datetime(int(year), int(month), int(day), int(hour or 0), int(minute or 0),
+                      int(second or 0), tzinfo=_IST)
+    except ValueError:
+        return None
+    return dt.isoformat()
 
 
 def extract_tender_meta(pages: list[str], max_pages: int = 3) -> TenderMeta:
@@ -105,7 +141,8 @@ def extract_tender_meta(pages: list[str], max_pages: int = 3) -> TenderMeta:
     # A "title" that merely repeats the number is not a title.
     if title and number and title.lower().strip() == number.lower().strip():
         title = None
-    return TenderMeta(tender_number=number, title=title, authority=authority)
+    return TenderMeta(tender_number=number, title=title, authority=authority,
+                      deadline=_deadline(head))
 
 
 def display_title(meta: TenderMeta, fallback: str) -> str:

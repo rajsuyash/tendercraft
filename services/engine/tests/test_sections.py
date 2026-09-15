@@ -158,6 +158,13 @@ def test_pq_sheet_marks_an_expired_certification():
     assert "| Valid |" in body
 
 
+def test_pq_sheet_never_calls_an_undated_certification_expired():
+    # "No expiry on file" is a gap in OUR record, not a claim about the certificate.
+    body = assemble_compliance_pq(PROFILE, [{"name": "API Spec 9A"}], TODAY).body_md
+    assert "EXPIRED" not in body
+    assert "Validity not recorded" in body
+
+
 def test_pq_sheet_survives_an_empty_profile():
     out = assemble_compliance_pq({}, [], TODAY)
     assert "—" in out.body_md

@@ -309,6 +309,16 @@ export function ReadinessHub({
         <p className="text-sm text-muted">
           Bid readiness — what your company already covers, and what&apos;s still needed.
         </p>
+        {/* Every other screen of this tender — analysis, matrix, schedule fit, clarifications,
+         * the locked requirements — hung off /tenders/[id], which nothing linked to for a live
+         * tender. Built and unreachable except by typing the URL. */}
+        <nav aria-label="Tender screens" data-tender-nav className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          <Link href={`/tenders/${tenderId}`} className="text-primary underline">Requirements</Link>
+          <Link href={`/tenders/${tenderId}/analysis`} className="text-primary underline">Eligibility analysis</Link>
+          <Link href={`/tenders/${tenderId}/matrix`} className="text-primary underline">Compliance matrix</Link>
+          <Link href={`/tenders/${tenderId}/schedule`} className="text-primary underline">Schedule fit</Link>
+          <Link href={`/tenders/${tenderId}/clarifications`} className="text-primary underline">Pre-bid clarifications</Link>
+        </nav>
         {(() => {
           const note = ocrNote(readiness);
           return note ? (

@@ -9,7 +9,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
@@ -133,6 +133,7 @@ def _rename_if_placeholder(
 def _apply_pursuit_context(
     workspace_id: str, pursuit_id: str, tender_id: str,
     tender_number: str, authority: str, current_title: str = "",
+    deadline: str | None = None,
 ) -> None:
     """Link the pursuit to the tender it produced, and fill in what the document did not state.
 
@@ -156,8 +157,11 @@ def _apply_pursuit_context(
         opp = pursuit.get("opportunities") or {}
         number = tender_number or opp.get("portal_ref_no") or ""
         auth = authority or opp.get("authority") or ""
-        if number or auth:
-            db.set_tender_meta(tender_id, workspace_id, number, auth)
+        # The portal's closing date is a published fact too; it fills the gap only when the
+        # document stated no deadline of its own (document first, same as number/authority).
+        portal_deadline = None if deadline else (opp.get("closing_at") or None)
+        if number or auth or portal_deadline:
+            db.set_tender_meta(tender_id, workspace_id, number, auth, deadline=portal_deadline)
             # display_title() ran BEFORE this backfill learned the opportunity's number and
             # authority, so a scanned package can be stamped "Untitled tender" and gain a
             # number a moment later — otherwise the readiness header keeps the placeholder
@@ -194,8 +198,9 @@ def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title
     # document states no title of its own.
     stored_title = display_title(meta, title)
     tender = db.create_tender(workspace_id, stored_title)
-    if meta.tender_number or meta.authority:
-        db.set_tender_meta(tender["id"], workspace_id, meta.tender_number, meta.authority)
+    if meta.tender_number or meta.authority or meta.deadline:
+        db.set_tender_meta(tender["id"], workspace_id, meta.tender_number, meta.authority,
+                           deadline=meta.deadline)
     # Keep the INSERTED rows: they carry the ids Module H binds a prose-derived line item
     # to. result["criteria_rows"] are pre-insert and have no id.
     inserted_criteria = (
@@ -222,7 +227,7 @@ def _process_ingest(workspace_id: str, documents: list[tuple[str, bytes]], title
         # actually usable, not one that may still fail mid-ingest.
         _apply_pursuit_context(workspace_id, pursuit_id, tender["id"],
                                meta.tender_number or "", meta.authority or "",
-                               current_title=stored_title)
+                               current_title=stored_title, deadline=meta.deadline)
     return {
         "tender_id": tender["id"],
         "title": stored_title,
@@ -410,7 +415,8 @@ def _persist_recovered(workspace_id: str, tender_id: str, pages: list[SourcePage
     if tender.get("title") != PLACEHOLDER_TITLE:
         return
     meta = extract_tender_meta([p.text for p in pages])
-    db.set_tender_meta(tender_id, workspace_id, meta.tender_number, meta.authority)
+    db.set_tender_meta(tender_id, workspace_id, meta.tender_number, meta.authority,
+                       deadline=meta.deadline)
     if renamed := _rename_if_placeholder(workspace_id, tender_id, meta, PLACEHOLDER_TITLE):
         log.info("tender %s named from OCR'd pages: %s", tender_id, renamed)
 
@@ -446,8 +452,15 @@ def _schedule_extraction(background: BackgroundTasks, workspace_id: str,
 @router.post("/api/tenders/ingest")
 async def ingest_tender(
     user: CurrentUser, background: BackgroundTasks,
-    file: Annotated[list[UploadFile], File()], title: str = "",
-    pursuit_id: str = "",
+    file: Annotated[list[UploadFile], File()],
+    # Multipart FORM fields, declared as such. As bare `str` defaults FastAPI bound these as
+    # QUERY parameters, so the title and pursuit id the upload page has always sent as form
+    # fields never arrived: every tender fell to its filename and the pursuit → tender link
+    # (reference, authority, closing date from the portal) never fired. Found by the 2026-09-15
+    # outside review; pinned by a multipart contract test because a unit test that calls this
+    # function directly cannot see how the framework binds it.
+    title: Annotated[str, Form()] = "",
+    pursuit_id: Annotated[str, Form()] = "",
 ) -> dict:
     """Ingest a tender PACKAGE — NIT, annexures and BOQ sheets — as one tender.
 

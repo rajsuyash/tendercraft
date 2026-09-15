@@ -668,3 +668,57 @@ high to low and the IS 2266 rope tender is in the feed at medium.
   wrong. The existing rules already cover this and must not be relaxed for OCR'd pages:
   financial and identity values transclude from structured profile data (B-FR3), never from
   prose in a retrieved chunk. OCR makes that rule more load-bearing, not less.
+
+## What an end-to-end product audit found that six weeks of feature work did not (2026-09-15)
+
+Two audits ran the same day — a walk of live production as the seeded user, and an outside
+code-only review (`docs/reviews/`). The defects below were each invisible to the tests, the
+types and the reviews that shipped the features they live in.
+
+- **A bare `str` default on a FastAPI handler binds as a QUERY parameter, and a multipart form
+  field with that name is silently dropped.** `ingest_tender(… title: str = "", pursuit_id:
+  str = "")` had been reading nothing since the day it was written: the upload page sends both
+  as form fields, so every tender ever uploaded fell to its filename and `_apply_pursuit_context`
+  — the whole discovery → pursuit → tender link, with the portal's reference, authority and
+  closing date — never executed once. The tell is the shape of the downstream work: a previous
+  session hardened `display_title`, added `_NOISY_FILENAME`, a rename affordance and a backfill
+  migration, all to improve a fallback, and **nobody asked why the first branch was never
+  taken**. A fallback that fires 100% of the time is a bug report about its predecessor. Declare
+  form fields `Annotated[str, Form()]`, and pin it with a test that posts real multipart — a
+  unit test calling the function directly cannot see how the framework binds it.
+- **`bool(x) and x >= today` collapses "unknown" into "expired".** Four current ISO/API
+  certificates rendered `EXPIRED (no expiry recorded)` in a pre-qualification sheet that goes to
+  a public buyer: a false statement about the bidder's own standing, produced by a one-line
+  truthiness idiom. Validity has THREE states — valid, expired, and not recorded — and the third
+  is a gap in our record, never a claim about the certificate. Any field that can be absent needs
+  the third branch spelled out; `or` and `and` will otherwise pick one of the other two for you.
+- **A column that never existed reads as a plain fallback forever.** `tender.get("bidder_name")
+  or "Bidder"` put *Submitted by: Bidder* on the cover of every exported proposal, while
+  `legal_name` sat two lines above it in the same function. `.get()` on a dict of database
+  columns cannot fail, so a typo'd or removed column degrades to the fallback with no error
+  anywhere. When the fallback is user-visible, assert the real path in a test rather than
+  trusting that a name will be there.
+- **A stub that mirrors the wrong row shape makes a whole feature's tests agree with themselves.**
+  `notify_service._flatten` read `opp["deadline"]` and `opp["value_display"]`; the corpus
+  carries `closing_at` and a numeric `estimated_value`. Every digest line had silently lost its
+  two urgency cues — and the route test passed, because its `get_feed` stub had been written
+  against the selector's expectation rather than the table. Same family as the
+  `get_criterion_in_tender` entry above: **when a test stubs a database function, the stub's
+  keys are an assumption about a schema in another file.** Copy them from the migration.
+- **A screen nothing links to is a screen that does not exist.** Eligibility analysis, the
+  compliance matrix, schedule fit, pre-bid clarifications and the locked TOM all hung off
+  `/tenders/[id]`, which was linked only for tenders whose status was already `exported` — so
+  for every live tender, five built screens were reachable only by typing the URL. Route
+  coverage is not navigation coverage; after adding a screen, grep for a `<Link>` to it from a
+  page a user is actually on.
+- **Copy is a claim, and it outruns the product silently.** The login page promised "Data stays
+  in India" (the stack is EU-hosted) and "Start free — 3 analyses/month" (there is no signup and
+  no free tier) — both written when they were aspirations, both still rendering months later.
+  `PRODUCT.md` already forbids exactly this on the marketing surface; the rule has to cover the
+  product surface too, because a login page is the first claim a customer reads.
+- **The signature that replaces a machine check needs the same permission as the work.**
+  `approve_section` — the human sign-off that stands in for cite-or-flag on narrative prose
+  (B-FR4) — had no `authz.check` at all, thirty lines below an `edit_section` that opens with
+  one. A `viewer`, the role defined as "must never touch a draft", could sign every section and
+  clear the export watermark. When a control exists to substitute for an automated guarantee,
+  audit its authorization at the same time as the guarantee itself.

@@ -331,6 +331,10 @@ def approve_section(proposal_id: str, key: str, user: CurrentUser) -> dict:
     This is the control that replaces cite-or-flag for AI-authored approach prose: nothing
     exists to cite a forward commitment against, so a person signs it instead (B-FR4).
     """
+    # The signature IS the guarantee, so it needs the same gate as writing the prose. Without
+    # this a `viewer` — a role defined as "must never touch a draft" — could approve every
+    # section and clear the export watermark (found by the 2026-09-15 outside review).
+    authz.check(user, authz.DRAFT)
     # Not exploitable today (the PATCH filters by workspace, so a foreign id no-ops) — but a
     # silent success on a failed authorization is still wrong. 404 instead.
     if not db.get_proposal(proposal_id, user.workspace_id):
@@ -388,7 +392,8 @@ def export_docx(tender_id: str, user: CurrentUser, override: bool = False) -> Re
 
     blob = docx_export.render({
         "tender": tender,
-        "bidder": {"name": tender.get("bidder_name") or "Bidder",
+        # `tenders.bidder_name` never existed; every export said "Submitted by: Bidder".
+        "bidder": {"name": legal.get("legal_name") or "Bidder",
                    "cin": legal.get("cin"), "gst": legal.get("gst")},
         "generated_on": datetime.now(UTC).date().isoformat(),
         "approved": fully_approved,

@@ -22,6 +22,7 @@ import os
 from datetime import UTC, datetime
 
 from . import db
+from .deterministic.discovery import _inr
 from .deterministic.notify import Alertable, render_assignment, render_digest, select_for_digest
 from .mailer import MailNotConfigured, is_configured, send
 
@@ -45,8 +46,14 @@ def _flatten(match: dict) -> dict:
         "portal_ref_no": opp.get("portal_ref_no"),
         "title": opp.get("title"),
         "authority": opp.get("authority"),
-        "deadline": opp.get("deadline"),
-        "value_display": opp.get("value_display"),
+        # `opportunities` carries `closing_at` and a numeric `estimated_value`; the selector's
+        # shape predates the corpus schema. Reading `deadline`/`value_display` here meant every
+        # digest line silently lost its "closes …" and value — the two urgency cues.
+        "deadline": opp.get("closing_at") or opp.get("deadline"),
+        "value_display": (
+            opp.get("value_display")
+            or (_inr(opp["estimated_value"]) if opp.get("estimated_value") else None)
+        ),
     }
 
 

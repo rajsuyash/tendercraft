@@ -57,7 +57,7 @@ def _capture(monkeypatch, *, title=tenders.PLACEHOLDER_TITLE):
     monkeypatch.setattr(tenders.db, "set_tender_title",
                         lambda t, w, new: seen["title"].append(new))
     monkeypatch.setattr(tenders.db, "set_tender_meta",
-                        lambda t, w, num, auth: seen["meta"].append((num, auth)))
+                        lambda t, w, num, auth, deadline=None: seen["meta"].append((num, auth)))
     return seen
 
 

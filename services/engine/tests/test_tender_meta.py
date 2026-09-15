@@ -189,3 +189,40 @@ class TestAFilenameIsTheLastResort:
         # gave us a real answer and we should not throw it away.
         assert display_title(TenderMeta(), "Oil India wire rope NIT.pdf") == \
             "Oil India wire rope NIT"
+
+
+GEM_BID = """\
+बड
+/Bid Number/बड सं या
+GEM/2026/B/7422159
+/Bid End Date/Time
+28-04-2026 19:00:00
+/Bid Opening
+28-04-2026 19:30:00
+/Ministry/State Name
+Ministry Of Steel
+"""
+
+
+def test_reads_the_gem_bid_end_date_as_an_ist_timestamp():
+    # pypdf hands us the label and the value on consecutive lines; the portal states IST.
+    assert extract_tender_meta([GEM_BID]).deadline == "2026-04-28T19:00:00+05:30"
+
+
+def test_reads_a_nit_last_date_for_submission_with_dotted_date_and_time():
+    text = "Last date for submission of bid: 28.04.2026 up to 15:00 hrs\n"
+    assert extract_tender_meta([text]).deadline == "2026-04-28T15:00:00+05:30"
+
+
+def test_a_date_only_deadline_is_midnight_ist_never_utc():
+    assert extract_tender_meta(["Due date for submission: 05/05/2026"]).deadline == (
+        "2026-05-05T00:00:00+05:30"
+    )
+
+
+def test_an_impossible_date_yields_no_deadline_rather_than_a_guess():
+    assert extract_tender_meta(["/Bid End Date/Time\n31-02-2026 10:00:00"]).deadline is None
+
+
+def test_no_deadline_label_means_none():
+    assert extract_tender_meta([REAL]).deadline is None

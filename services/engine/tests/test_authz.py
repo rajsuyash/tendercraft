@@ -130,3 +130,27 @@ def test_org_admin_is_independent_of_workspace_role():
 
 def test_workspace_admin_is_not_automatically_an_org_admin():
     assert _u("admin").is_org_admin is False
+
+
+def test_a_viewer_cannot_approve_a_section(monkeypatch):
+    """Section approval is the human signature that replaces cite-or-flag (B-FR4); a role
+    defined as never touching a draft must not be able to produce it."""
+    from fastapi.testclient import TestClient
+
+    from app import proposal_routes
+    from app.auth import AuthedUser, get_current_user
+    from app.main import create_app
+
+    monkeypatch.setattr(proposal_routes.db, "get_proposal", lambda pid, ws: {"id": pid})
+    monkeypatch.setattr(proposal_routes.db, "approve_section",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not write")))
+
+    app = create_app()
+    app.dependency_overrides[get_current_user] = lambda: AuthedUser(
+        user_id="u1", workspace_id="ws-9", role="viewer",
+    )
+    with TestClient(app) as client:
+        r = client.post("/api/proposals/p-1/sections/approach/approve")
+
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "FORBIDDEN"

@@ -40,7 +40,7 @@ export default function LoginPage() {
           <ul className="mt-6 space-y-2 text-sm text-on-primary/80">
             <li>Every claim cited to your documents</li>
             <li>Deterministic compliance gates</li>
-            <li>Data stays in India</li>
+            <li>Nothing leaves without human approval</li>
           </ul>
         </div>
         <span className="text-xs text-on-primary/60">Outputs are decision support, not legal advice.</span>
@@ -96,7 +96,7 @@ export default function LoginPage() {
           </button>
 
           <p className="mt-5 text-center text-sm text-muted">
-            New here? Start free — 3 analyses/month
+            Access is by invitation from your workspace admin.
           </p>
         </form>
       </section>
