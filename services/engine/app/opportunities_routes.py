@@ -53,6 +53,11 @@ async def list_opportunities(
     user: CurrentUser,
     state: Literal["in_scope", "excluded"] = "in_scope",
     limit: int = Query(default=50, ge=1, le=200),
+    include_closed: bool = Query(
+        default=False,
+        description="Include tenders whose deadline has passed. Off by default: closed rows "
+                    "sort by band like any other and would otherwise consume the page.",
+    ),
 ) -> dict:
     """The feed. Always returns BOTH counts, whichever bucket was asked for."""
 
@@ -60,7 +65,14 @@ async def list_opportunities(
         # One scope, read once and passed to every query below. Deriving it separately in each
         # would let the list and its own counters disagree the first time one of them changed.
         markets = db.get_workspace_markets(user.workspace_id)
-        rows = db.get_feed(user.workspace_id, state, limit=limit, markets=markets)
+        # Closed rows are dropped by the DATABASE, before the limit. The browser used to do
+        # it after, so an open tender sitting past the page boundary was unreachable — and
+        # the excluded bucket keeps its history deliberately, so the filter applies to the
+        # in-scope list only.
+        rows = db.get_feed(
+            user.workspace_id, state, limit=limit, markets=markets,
+            open_only=(state == "in_scope" and not include_closed),
+        )
         return {
             "state": state,
             "items": rows,
@@ -77,6 +89,9 @@ async def list_opportunities(
                 # The denominator for the one above. Without it a zero reads as an all-clear
                 # when it may mean nothing was measurable at all.
                 "states_a_turnover_bar": db.count_comparable(user.workspace_id, markets),
+                # What "Hide closed" is hiding, counted over the whole bucket rather than
+                # over the rows this page happens to hold.
+                "closed": db.count_feed_closed(user.workspace_id, markets),
             },
             "markets": markets,
             # When the CORPUS was last swept, per market. The header used to infer this from

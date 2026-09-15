@@ -462,3 +462,36 @@ def test_capability_only_reads_active_categories(monkeypatch):
     monkeypatch.setattr(ing.db, "list_workspace_categories", cats)
     assert ing._capability("ws-1") == ("", [])
     assert seen["active_only"] is True
+
+
+# --- the closed filter runs in the database, before the limit ------------------------------
+
+
+def test_get_feed_asks_the_database_to_drop_closed_tenders(monkeypatch):
+    """The limit is applied by the database and this filter used to be applied by the browser,
+    so a workspace with more closed high-band matches than the page size could never see an
+    open tender: 100 rows came back best-fit-first, the client hid the closed ones, and any
+    open tender past the boundary was unreachable. Same family as the 1000-row recompute
+    window — filter to what the feature can act on, before the limit."""
+    seen: dict = {}
+
+    def _capture(method, table, params=None, **kw):
+        seen.update(params or {})
+        return []
+
+    monkeypatch.setattr(db, "_rest", _capture)
+    db.get_feed("ws-1", "in_scope", limit=100, markets=["IN"], open_only=True)
+
+    # `closing_at is null` is KEPT: no stated deadline is unknown, not closed.
+    assert seen["opportunities.or"] == "(closing_at.is.null,closing_at.gte.now())"
+    # `!inner`, or the filter merely NULLs the embedded row and it still eats a slot.
+    assert "opportunities!inner" in seen["select"]
+
+
+def test_get_feed_leaves_closed_tenders_in_when_asked_for_them(monkeypatch):
+    """The control: the toggle has to be able to bring them back, or this is a silent
+    exclusion rather than a filter (G-9)."""
+    seen: dict = {}
+    monkeypatch.setattr(db, "_rest", lambda m, t, params=None, **kw: seen.update(params or {}) or [])
+    db.get_feed("ws-1", "in_scope", limit=100, markets=["IN"], open_only=False)
+    assert "opportunities.or" not in seen

@@ -1451,14 +1451,33 @@ def _market_scope(markets: list[str] | None) -> dict[str, str]:
 
 
 def get_feed(
-    workspace_id: str, state: str, limit: int = 100, markets: list[str] | None = None
+    workspace_id: str, state: str, limit: int = 100, markets: list[str] | None = None,
+    open_only: bool = False,
 ) -> list[dict]:
     """Feed rows with their shared-corpus opportunity embedded.
 
     One query, not N+1: a 50-row feed that lazily loaded each opportunity would be 51 round
     trips, and at the app-to-database latency this codebase has already been bitten by, that is
     the difference between a fast page and a broken-feeling one.
+
+    `open_only` is the same trap `get_opportunities` documents at length, one level up. The
+    LIMIT is applied by the database and the closed filter was applied by the BROWSER, so a
+    workspace with more closed high-band matches than the page size could never see an open
+    tender at all: the server handed back 100 rows sorted best-fit-first, the client hid the
+    closed ones, and whatever open rows sat at position 101 were unreachable by any means the
+    UI offers — no pagination, no search. Filtering before the limit is the only ordering that
+    cannot hide work.
+
+    `closing_at is null` is kept, deliberately and for the same reason as the corpus query: a
+    tender with no stated deadline is unknown, not closed, and dropping it would be the same
+    silent miss arriving through the fix.
     """
+    scope = _market_scope(markets)
+    if open_only:
+        # `!inner` or the filter merely NULLs the embedded object instead of dropping the row —
+        # the row would still occupy a slot in the limit, which is the whole defect.
+        scope = {**scope, "select": "*,opportunities!inner(*)",
+                 "opportunities.or": "(closing_at.is.null,closing_at.gte.now())"}
     return (
         _rest(
             "GET",
@@ -1466,7 +1485,7 @@ def get_feed(
             params={
                 "workspace_id": f"eq.{workspace_id}",
                 "state": f"eq.{state}",
-                **_market_scope(markets),
+                **scope,
                 # Best fit first, then the deadline that forces the decision. `nullsfirst` is
                 # wrong here: an unbanded row is not the best match, it is an unknown one.
                 "order": "relevance_band.asc.nullslast,computed_at.desc",
@@ -1500,8 +1519,13 @@ def _count_matches(
                 **filters,
                 **{k: v for k, v in scope.items() if k != "select"},
                 # The join has to survive into the count, or the filter on the embedded
-                # resource silently counts rows it was supposed to exclude.
-                "select": "id,opportunities!inner(id)" if markets else "id",
+                # resource silently counts rows it was supposed to exclude. Any filter on
+                # `opportunities.*` needs it too, not just the market scope.
+                "select": (
+                    "id,opportunities!inner(id)"
+                    if markets or any(k.startswith("opportunities.") for k in filters)
+                    else "id"
+                ),
             },
             timeout=15,
         )
@@ -1516,6 +1540,21 @@ def count_feed(workspace_id: str, state: str, markets: list[str] | None = None) 
     "142 hidden by 3 of your rules" is the affordance that stops the feed feeling like a
     black box, so it cannot be approximated or omitted."""
     return _count_matches(workspace_id, {"state": f"eq.{state}"}, markets)
+
+
+def count_feed_closed(workspace_id: str, markets: list[str] | None = None) -> int:
+    """In-scope matches whose tender has already closed.
+
+    The number behind "Hide closed". It used to be counted in the browser over the rows the
+    page happened to receive, so it could only ever report closed rows within the first
+    hundred — the same window that was hiding open tenders behind them. Counted here it
+    describes the bucket rather than the page.
+    """
+    return _count_matches(
+        workspace_id,
+        {"state": "eq.in_scope", "opportunities.closing_at": "lt.now()"},
+        markets,
+    )
 
 
 def list_workspaces_for_sweep() -> list[dict]:

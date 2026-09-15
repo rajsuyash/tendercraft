@@ -91,6 +91,8 @@ type FeedData = {
     likely_eligible: number;
     below_turnover_bar?: number;
     states_a_turnover_bar?: number;
+    /** In-scope matches whose tender has already closed, counted over the whole bucket. */
+    closed?: number;
   };
   /** The countries this workspace watches, from the server. NOT inferred from the rendered
    *  rows: an inferred scope described the page instead of the choice, so the coverage strip
@@ -398,11 +400,15 @@ export function OpportunityFeed({
   state,
   nowIso,
   locale = "en",
+  includeClosed = false,
 }: {
   data: FeedData;
   state: string;
   nowIso: string;
   locale?: Locale;
+  /** Whether the SERVER was asked for closed tenders. The filter is no longer applied here —
+   *  see the note beside the toggle. */
+  includeClosed?: boolean;
 }) {
   const now = new Date(nowIso).getTime();
   const t = translator(locale);
@@ -464,20 +470,18 @@ export function OpportunityFeed({
   // or undo, and a feed that silently dropped rows would be the same black box the Excluded
   // count exists to prevent.
   //
-  // Default ON because the alternative was the state this shipped in: three in-scope tenders,
-  // all closed weeks ago, on a feed whose whole promise is "what should we bid on".
-  const [hideClosed, setHideClosed] = useState(true);
-  const closedCount = useMemo(
-    () => items.filter((m) => hasClosed(m.opportunities?.closing_at ?? null, now)).length,
-    [items, now],
-  );
-  const visibleItems = useMemo(
-    () =>
-      hideClosed
-        ? items.filter((m) => !hasClosed(m.opportunities?.closing_at ?? null, now))
-        : items,
-    [items, hideClosed, now],
-  );
+  // THE FILTER MOVED TO THE SERVER, and this is the whole reason: the limit is applied by the
+  // database and this filter used to be applied by the browser, so a workspace with more
+  // closed high-band matches than the page size could never see an open tender at all. The
+  // server returned 100 rows best-fit-first, this line hid the closed ones, and any open
+  // tender at position 101 was unreachable — no pagination, no search, no error. Same family
+  // as the 1000-row recompute window in known-pitfalls: filter to what the feature can act
+  // on, before the limit, never after.
+  //
+  // The count comes from the server too, for the same reason: counted here it could only ever
+  // describe the rows this page happened to receive.
+  const closedCount = data.counts.closed ?? 0;
+  const visibleItems = items;
 
   // Workspace-wide, from the server. Counting the rows on THIS page made the figure read 21 on
   // the In-scope tab and 0 on the Excluded tab — the same object described by two disagreeing
@@ -782,18 +786,30 @@ export function OpportunityFeed({
             filter is doing work it is not. The count is inside the label rather than beside
             it: "Hide closed" alone is a setting, "Hide closed (3)" is an explanation of why
             the list is shorter than the bucket tab above says. */}
-        {closedCount > 0 && (
-          <label className="ml-3 flex items-center gap-2 text-sm text-muted">
-            <input
-              type="checkbox"
-              data-hide-closed
-              data-closed-count={closedCount}
-              checked={hideClosed}
-              onChange={(e) => setHideClosed(e.target.checked)}
-              className="h-4 w-4 rounded border-hairline accent-[color:var(--color-primary)]"
-            />
+        {closedCount > 0 && state === "in_scope" && (
+          // An anchor, not a checkbox: the filter runs in the database now, so toggling it is
+          // a new query. Same idiom as the bucket tabs above.
+          <a
+            href={`/opportunities?state=in_scope${includeClosed ? "" : "&closed=1"}`}
+            data-hide-closed
+            data-closed-count={closedCount}
+            // A link performs an action; it does not hold a pressed state. The label says
+            // what the click does, and the tick says what is true now.
+            aria-label={includeClosed ? "Hide closed tenders" : "Show closed tenders"}
+            className="ml-3 flex items-center gap-2 text-sm text-muted hover:text-ink"
+          >
+            <span
+              aria-hidden
+              className={`grid h-4 w-4 place-items-center rounded border text-[10px] ${
+                includeClosed
+                  ? "border-hairline bg-surface"
+                  : "border-primary bg-primary text-white"
+              }`}
+            >
+              {includeClosed ? "" : "\u2713"}
+            </span>
             {t("Hide closed")} <span className="tabular-nums opacity-75">{closedCount}</span>
-          </label>
+          </a>
         )}
 
         {items.length > 0 && (
@@ -830,7 +846,11 @@ export function OpportunityFeed({
           the data. Reporting it as "no opportunities yet" would be a statement about the
           market when the truth is a checkbox this user can untick — the same class of lie as
           telling a workspace whose rules hid everything to go and sweep again. */}
-      {visibleItems.length === 0 && items.length > 0 ? (
+      {/* Nothing open, but there ARE closed matches. Under the old browser-side filter this
+          was `visibleItems.length === 0 && items.length > 0`; with the filter in the database
+          the server simply returns no rows, and the closed count is what distinguishes "your
+          matches have all closed" from "nothing matched at all". */}
+      {items.length === 0 && closedCount > 0 && !includeClosed ? (
         <div
           data-empty-state
           data-all-closed
@@ -842,15 +862,14 @@ export function OpportunityFeed({
           <p className="mt-2 max-w-prose text-sm text-muted">
             {t(
               "All {n} matched tenders passed their deadline. Widen your capability keywords, or show them anyway.",
-            ).replace("{n}", String(items.length))}
+            ).replace("{n}", String(closedCount))}
           </p>
-          <button
-            type="button"
-            onClick={() => setHideClosed(false)}
-            className="mt-4 rounded-control border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-alt"
+          <a
+            href="/opportunities?state=in_scope&closed=1"
+            className="mt-4 inline-block rounded-control border border-hairline px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-alt"
           >
             {t("Show closed tenders")}
-          </button>
+          </a>
         </div>
       ) : items.length === 0 ? (
         <div

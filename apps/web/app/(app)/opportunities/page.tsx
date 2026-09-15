@@ -23,13 +23,18 @@ export const dynamic = "force-dynamic";
 export default async function OpportunitiesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string }>;
+  searchParams: Promise<{ state?: string; closed?: string }>;
 }) {
   const [params, locale] = await Promise.all([searchParams, getLocale()]);
   const t = translator(locale);
   const state = params.state === "excluded" ? "excluded" : "in_scope";
+  // Closed tenders are filtered by the DATABASE, before the row limit — see get_feed. The
+  // browser used to do it afterwards, which could hide every open tender behind them.
+  const includeClosed = params.closed === "1";
 
-  const res = await engineFetch(`/api/opportunities?state=${state}&limit=100`);
+  const res = await engineFetch(
+    `/api/opportunities?state=${state}&limit=100${includeClosed ? "&include_closed=true" : ""}`,
+  );
   const body = await res.json().catch(() => null);
 
   if (!res.ok || !body?.ok) {
@@ -64,6 +69,7 @@ export default async function OpportunitiesPage({
       state={state}
       nowIso={new Date().toISOString()}
       locale={locale}
+      includeClosed={includeClosed}
     />
   );
 }
