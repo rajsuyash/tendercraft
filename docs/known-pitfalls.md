@@ -819,3 +819,48 @@ types and the reviews that shipped the features they live in.
   test asserting "a narrowed rubric can still reach 100" failed at 97.3, and the defect was the
   TEST: ten thousand words against a hundred-word target scores 0.9, the anti-padding rule
   working correctly. Acting on that number would have meant changing behaviour that was right.
+
+## Auditing your own fixes (2026-09-16)
+
+A re-read of both audits against the shipped code found four defects, **three of them made
+by the fixes themselves**. That ratio is the lesson: the dangerous moment is not writing the
+fix, it is the week after, when the fix's own assumptions have spread.
+
+- **A new cross-cutting classification reaches the loud consumer and misses the quiet ones.**
+  Requirement kind was added so only pre-bid gates vote, and it was wired into the verdict
+  (loud, on the card) and the readiness hub (loud, in the plan). It did not reach
+  `deterministic/matrix.py`, which had zero references to it and went on partitioning coverage
+  on `requirement_level` alone — so a mandatory quoting instruction sat in the denominator as
+  an outstanding requirement no response could ever satisfy. **When you add a dimension that
+  changes what a row MEANS, grep for every module that partitions rows on the dimension it is
+  replacing**, not just the ones the plan named.
+- **A second door into a fallthrough you already closed.** P2 knew that
+  `readiness._classify` falls through to "no verdict → blocking P0" and added a non-gate
+  branch for it. P3 then created a *different* class of verdict-less criterion — a gate the
+  extractor declined to score — which the classifier still calls a gate, so it walked straight
+  past the new branch into the old fallthrough. Five items on the live tender became blockers
+  reading "Run analysis to check eligibility" on a tender whose analysis had run, and
+  `ready_to_generate` went false, replacing the Generate button with a dead "Clear the
+  blocking items first". **A guarded fallthrough is only guarded against the cases that
+  existed when you wrote the guard.** Whenever a change makes a field optional in a NEW way,
+  re-read every consumer that branches on its absence.
+- **The guard that separates the two cases has to be something only one of them carries.**
+  Here it is the checklist entry's `note`: a demoted gate has one, a criterion whose analysis
+  was never run has no checklist entry at all. Both directions need a test, and the second one
+  matters more — a guard broad enough to swallow "analysis never ran" would hide real
+  blockers, which is worse than the defect.
+- **A ceiling note outlives the fix that removes it, and it is believed because it is good.**
+  `analysis.py` said the remedy for the verdict instability would be a caching idiom "which
+  this file does not yet use", ninety lines below the function that does exactly that — the
+  note was written in one commit and the cache shipped in the next. It carried six measured
+  runs, a model version and a date, which is precisely what makes a stale claim survive
+  review. Same family as the "~800 records, so 70% is never fetched" figure that went into a
+  commit message before it was checked. **When you implement something a comment calls
+  future work, the comment is part of the diff.**
+- **Removing a verdict from the engine does not stop the product claiming it.** The rubric's
+  disqualification gates were deleted and the card was relabelled, and `/guide` — linked from
+  every sidebar — went on teaching customers that 65% overall and 45% per dimension decide
+  technical qualification, with a hardcoded mirror of the engine's weights beside it. The
+  UI-array-mirrors-a-server-enum pitfall was already in this file; it caught the enum case and
+  not the *copy* case. **Grep the user-facing strings, not only the code, when you remove a
+  behaviour** — and say at both ends when one is a mirror of the other.
