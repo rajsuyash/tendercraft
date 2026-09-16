@@ -298,7 +298,7 @@ export function ProposalDocument({
             data-open-score
             className="rounded border border-border px-3 py-2 text-sm text-ink hover:border-primary"
           >
-            Technical score
+            Document completeness
           </Link>
           <Link
             href={`/proposals/${tenderId}/export`}

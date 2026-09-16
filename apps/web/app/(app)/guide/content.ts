@@ -164,7 +164,7 @@ export const JOURNEY: Stage[] = [
     ],
     gate:
       "Any narrative section with AI-authored sentences and no human approval is a blocker. This is the control that replaces cite-or-flag for prose that has nothing to cite.",
-    where: "Proposal · Technical score",
+    where: "Proposal · Document completeness",
   },
   {
     id: "signoff",
@@ -213,7 +213,7 @@ export const PRIORITIES: { label: string; chip: string; means: string; blocks: s
   {
     label: "Optional",
     chip: "bg-info-bg text-info",
-    means: "Not mandatory. Addressing it improves your technical score.",
+    means: "Not mandatory. Addressing it improves document completeness.",
     blocks: "No",
   },
   {
@@ -382,7 +382,7 @@ export const FEATURES: { name: string; href?: string; what: string; detail?: str
       "AI Draft and Your edit badges tell you the provenance of every section at a glance. Regenerate re-drafts from current evidence.",
   },
   {
-    name: "Technical score",
+    name: "Document completeness",
     what: "How an evaluation committee would likely mark the proposal you have right now.",
     detail:
       "Reads the actual document rather than predicting from your profile, so improving a section moves the number. Each suggestion is labelled with the marks it should add.",

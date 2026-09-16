@@ -24,4 +24,24 @@ describe("the readiness meter's links", () => {
   test("both open together as soon as a proposal is drafted", () => {
     expect(readinessDestinations("t1", { drafted: true }).every((l) => l.enabled)).toBe(true);
   });
+
+  test("identifies the score destination by key, not by its label", () => {
+    // The `data-open-score-meter` hook used to be selected with
+    // `link.label === "Technical score"`. Renaming that button is exactly what happened when
+    // the qualification verdict was removed, and a copy change would have silently dropped a
+    // hook a design AC asserts on. The key is the identity; the label is copy.
+    const [proposal, score] = readinessDestinations("t1", { drafted: true });
+    expect(proposal.key).toBe("proposal");
+    expect(score.key).toBe("score");
+    expect(score.href).toBe("/proposals/t1/score");
+  });
+
+  test("no longer names the completeness measure a score", () => {
+    // The engine stopped rendering a qualification verdict; the nav label pointing at the
+    // same concept kept saying "Technical score" until the guide's own copy was fixed and
+    // this one was found one file behind it.
+    const labels = readinessDestinations("t1", { drafted: true }).map((l) => l.label);
+    expect(labels).not.toContain("Technical score");
+    expect(labels).toContain("Document completeness");
+  });
 });

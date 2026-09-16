@@ -1,7 +1,17 @@
 import Link from "next/link";
 
 export type Blocker = { stage: string; label: string; detail: string };
-export type NavLink = { label: string; href: string; enabled: boolean; reason?: string };
+export type NavLink = {
+  /** Stable identity, independent of the copy. The score destination used to be selected by
+   *  comparing `label === "Technical score"`, so renaming the button — which is exactly what
+   *  happened when the verdict language was removed — would have silently dropped the
+   *  `data-open-score-meter` hook the design AC asserts on. */
+  key: "proposal" | "score";
+  label: string;
+  href: string;
+  enabled: boolean;
+  reason?: string;
+};
 
 /** Exactly the two destinations this screen can send you to, in this fixed order — and why
  * each cannot be reached yet.
@@ -26,9 +36,18 @@ export function readinessDestinations(
 ): [proposal: NavLink, score: NavLink] {
   const reason = state.drafted ? {} : { reason: "Nothing drafted yet" };
   return [
-    { label: "Proposal", href: `/proposals/${tenderId}`, enabled: state.drafted, ...reason },
     {
-      label: "Technical score",
+      key: "proposal",
+      label: "Proposal",
+      href: `/proposals/${tenderId}`,
+      enabled: state.drafted,
+      ...reason,
+    },
+    {
+      key: "score",
+      // Named for what it measures. It was "Technical score" while the engine rendered a
+      // qualification verdict; that verdict is gone, and a nav label is copy like any other.
+      label: "Document completeness",
       href: `/proposals/${tenderId}/score`,
       enabled: state.drafted,
       ...reason,
@@ -112,7 +131,7 @@ export function SubmissionMeter({
             <Link
               key={link.href}
               href={link.href}
-              data-open-score-meter={link.label === "Technical score" ? true : undefined}
+              data-open-score-meter={link.key === "score" ? true : undefined}
               className="rounded border border-border px-3 py-1.5 text-xs text-ink hover:border-primary"
             >
               {link.label}
@@ -123,7 +142,7 @@ export function SubmissionMeter({
             <span
               key={link.href}
               title={link.reason}
-              data-open-score-meter={link.label === "Technical score" ? true : undefined}
+              data-open-score-meter={link.key === "score" ? true : undefined}
               className="cursor-not-allowed rounded border border-border px-3 py-1.5 text-xs text-muted"
             >
               {link.label}
