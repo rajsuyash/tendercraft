@@ -255,3 +255,56 @@ def test_adding_an_anchor_via_import_is_a_conflict():
 def test_unmapped_resolution_values_are_stable():
     # The UI mirrors this set; if it changes, both ends change together (known-pitfalls).
     assert [r.value for r in UnmappedResolution] == ["open", "not_a_requirement", "mapped"]
+
+
+# --- the classification reaches the coverage denominator ----------------------------------------
+
+
+def test_a_mandatory_instruction_is_not_an_outstanding_requirement():
+    """A quoting instruction tells the bidder HOW to bid. There is nothing to answer, so no
+    response can ever resolve it — and counting it left "Bidders to quote Rate / No." sitting
+    in the mandatory denominator forever. The classification reached the verdict and the
+    readiness hub when it shipped and did not reach this screen."""
+    from app.deterministic.matrix import MatrixRow, MatrixRowStatus, coverage_of_rows
+    from app.deterministic.types import RequirementKind, RequirementLevel
+
+    rows = [
+        MatrixRow("gate", "Average annual turnover of Rs 10 Crore", RequirementLevel.MANDATORY,
+                  status=MatrixRowStatus.APPROVED),
+        MatrixRow("instr", "Bidders to quote Rate / No.", RequirementLevel.MANDATORY),
+    ]
+    kinds = {"gate": RequirementKind.GATE, "instr": RequirementKind.INSTRUCTION}
+
+    cov = coverage_of_rows(rows, kinds)
+
+    assert cov.mandatory_total == 1
+    assert cov.mandatory_resolved == 1
+    assert cov.mandatory_fraction == 1.0
+
+
+def test_a_form_or_an_obligation_stays_in_the_denominator():
+    """A form must be attached and an obligation must be planned for. Both are work a row can
+    record, so excluding them would hide real outstanding items — the opposite error."""
+    from app.deterministic.matrix import MatrixRow, coverage_of_rows
+    from app.deterministic.types import RequirementKind, RequirementLevel
+
+    rows = [
+        MatrixRow("form", "Make in India certificate as per format enclosed",
+                  RequirementLevel.MANDATORY),
+        MatrixRow("duty", "Load test shall be witnessed at pre-despatch inspection",
+                  RequirementLevel.MANDATORY),
+    ]
+    kinds = {"form": RequirementKind.FORM, "duty": RequirementKind.OBLIGATION}
+
+    assert coverage_of_rows(rows, kinds).mandatory_total == 2
+
+
+def test_without_kinds_the_denominator_is_unchanged():
+    """Every caller with no criteria in hand keeps today's arithmetic exactly."""
+    from app.deterministic.matrix import MatrixRow, coverage_of_rows
+    from app.deterministic.types import RequirementLevel
+
+    rows = [MatrixRow("a", "x", RequirementLevel.MANDATORY),
+            MatrixRow("b", "y", RequirementLevel.MANDATORY)]
+    assert coverage_of_rows(rows).mandatory_total == 2
+    assert coverage_of_rows(rows, {}).mandatory_total == 2

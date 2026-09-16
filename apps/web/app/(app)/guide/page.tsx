@@ -205,22 +205,24 @@ export default function GuidePage() {
 
       {/* ---- scoring ---- */}
       <h2 className="mb-2 mt-10 font-heading text-xl font-semibold text-ink">
-        How the technical score works
+        How document completeness works
       </h2>
       <p className="mb-4 text-sm text-muted">
-        The score reads the proposal you actually have — not a prediction — across nine weighted
-        dimensions totalling 100 marks. To be technically qualified you need{" "}
-        <span className="text-ink">65 overall</span> and at least{" "}
-        <span className="text-ink">45% on every single dimension</span>: one weak section can
-        disqualify an otherwise strong bid, which is exactly how real evaluation committees work.
-        Each suggestion carries the marks it is expected to add.
+        This measures the proposal you actually have: is each section present, long enough,
+        structured, cited, and approved. Every input is a row in your workspace, so the number
+        is reproducible.{" "}
+        <span className="text-ink">It is not an evaluation verdict and there is no pass mark.</span>{" "}
+        Whether a committee accepts your solution is not something word counts and approval
+        states can measure, and this product does not claim to know it. The emphasis below is
+        relative, and it is renormalised to the sections your tender actually asks for, so a
+        supply bid is never marked down for missing a team section it never needed.
       </p>
       <div className="overflow-x-auto rounded-card border border-border bg-surface">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-border text-xs uppercase tracking-wide text-muted">
               <th className="px-card py-3 font-medium">Dimension</th>
-              <th className="px-card py-3 text-right font-medium">Marks</th>
+              <th className="px-card py-3 text-right font-medium">Relative emphasis</th>
             </tr>
           </thead>
           <tbody>
@@ -233,6 +235,10 @@ export default function GuidePage() {
           </tbody>
         </table>
       </div>
+      <p className="mt-2 text-xs text-muted">
+        Shown at full weight. On any given tender these are rescaled across the sections that
+        tender selected, so they always total 100 over the document you are actually writing.
+      </p>
 
       {/* ---- features ---- */}
       <h2 className="mb-2 mt-10 font-heading text-xl font-semibold text-ink">Feature reference</h2>

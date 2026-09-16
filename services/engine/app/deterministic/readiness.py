@@ -63,9 +63,17 @@ _NON_GATE_STATUS = {
 }
 
 
+#: What a criterion the CLASSIFIER called a gate and the READING found nothing checkable in
+#: says. It is not an eligibility question, so it must not block, and the wording matches the
+#: analysis screen's own note rather than inventing a second vocabulary for the same row.
+_UNSCORED_GATE = (
+    "Reads like eligibility, but states nothing checkable against your profile", "review",
+)
+
+
 def _classify(
     level: RequirementLevel, verdict: str | None, draft_status: str | None, exempted: bool,
-    kind: RequirementKind = RequirementKind.GATE,
+    kind: RequirementKind = RequirementKind.GATE, scored: bool = True,
 ) -> tuple[str, str, str]:
     """Return (priority, status, action) for one already-confirmed criterion.
 
@@ -78,6 +86,19 @@ def _classify(
     if kind is not RequirementKind.GATE:
         status, action = _NON_GATE_STATUS[kind]
         return "p2", status, action
+    if not scored:
+        # A gate `analyze` declined to score. The classifier reads the sentence's vocabulary
+        # and the extractor read the whole clause; when they disagree the extractor wins, and
+        # the row moves to the analysis checklist with no verdict.
+        #
+        # Without this branch it falls through to the mandatory no-verdict case below and
+        # becomes a blocking P0 reading "Run analysis to check eligibility" — on a criterion
+        # the analysis HAS run against and will never produce a verdict for. Measured live on
+        # the Oil India bid: five such rows, so `ready_to_generate` was false and the Generate
+        # button was replaced by "Clear the blocking items first", pointing at five items no
+        # user could ever clear. That is the same dead end the non-gate branch above exists to
+        # prevent, arriving through a second door.
+        return "p2", *_UNSCORED_GATE
 
     undrafted = draft_status in _UNDRAFTED
     is_mandatory = level is RequirementLevel.MANDATORY
@@ -118,6 +139,11 @@ def compute_readiness(
     shown, styled as overridden). `ready_to_generate` gates on the *blocking* P0 count only.
     """
     verdict_by = {v["criterion_id"]: v for v in (analysis or {}).get("verdicts", [])}
+    # Which gates `analyze` declined to score. A checklist entry carrying a `note` is a
+    # DEMOTED gate; entries without one were never gates and are covered by their kind.
+    unscored = {
+        c["criterion_id"] for c in (analysis or {}).get("checklist", []) if c.get("note")
+    }
     status_by = {r["criterion_id"]: r.get("draft_status") for r in responses}
     decision_by = {d["criterion_id"]: d for d in decisions}
 
@@ -148,6 +174,7 @@ def compute_readiness(
             status_by.get(cid),
             bool((v or {}).get("exemption_granted", False)),
             effective_kind(c),
+            cid not in unscored,
         )
         items.append(ReadinessItem(
             cid, c["verbatim_text"], level.value, anchor, priority, status, action,

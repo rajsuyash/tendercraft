@@ -263,6 +263,14 @@ export const SECTION_GROUPS: {
   },
 ];
 
+/** Mirrors `DIMENSIONS` in `services/engine/app/deterministic/rubric.py`. Say so at both ends:
+ *  a UI array mirroring a server list WILL drift, and this one already did — it carried the
+ *  45%/65% qualification thresholds for weeks after the engine stopped applying them, which
+ *  left the guide teaching a disqualification rule the product no longer had.
+ *
+ *  These are shown at full weight. The engine renormalises them per tender over the sections
+ *  the tender actually selected, so a rope supply bid is not marked down for a team section it
+ *  never needed. Nothing here is a pass mark. */
 export const RUBRIC_DIMENSIONS: { label: string; weight: number }[] = [
   { label: "Proposed solution & technology", weight: 20 },
   { label: "Approach, methodology & work plan", weight: 15 },

@@ -79,6 +79,11 @@ class Dimension:
 
 # Weights sum to 100, and are a relative emphasis over the sections this product generates
 # — NOT the tender's evaluation table. See the module docstring.
+#
+# MIRRORED in `apps/web/app/(app)/guide/content.ts::RUBRIC_DIMENSIONS`, which renders them to
+# the customer. Said at both ends because a UI array mirroring a server list WILL drift, and
+# this pair already did: the guide went on teaching a 65%/45% qualification rule for weeks
+# after the gates were removed here. Change one, change the other.
 DIMENSIONS: tuple[Dimension, ...] = (
     Dimension("scope_understanding", "Understanding of scope", 10, ("understanding",),
               {"presence": 0.3, "depth": 0.4, "citation_integrity": 0.1, "approved": 0.2}),

@@ -27,6 +27,7 @@ from .deterministic.matrix import (
     generate_rows,
     plan_import,
 )
+from .deterministic.requirement_kind import effective_kind
 from .deterministic.types import RequirementLevel, SourceAnchor
 from .envelope import ApiError, ok
 
@@ -110,7 +111,13 @@ def _load(tender_id: str, user: AuthedUser) -> dict:
     unmapped = db.get_unmapped(tender_id, user.workspace_id)
     rows = [_to_row(r) for r in stored]
     open_unmapped = [u for u in unmapped if u["resolution"] == UnmappedResolution.OPEN.value]
-    cov = coverage_of_rows(rows)
+    # How the requirement classification reaches this screen. Computed at read time from the
+    # criteria rows (migration 0042 stores only the override), so improving a rule reclassifies
+    # an existing matrix on the next load rather than needing the rows rebuilt.
+    kind_by = {
+        c["id"]: effective_kind(c) for c in db.get_criteria(tender_id, user.workspace_id)
+    }
+    cov = coverage_of_rows(rows, kind_by)
     gate = evaluate_matrix_complete(rows, len(open_unmapped))
 
     return {

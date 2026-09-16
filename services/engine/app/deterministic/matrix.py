@@ -23,11 +23,11 @@ Three things live here for reasons worth stating:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
-from .types import GateResult, RequirementLevel, SourceAnchor
+from .types import GateResult, RequirementKind, RequirementLevel, SourceAnchor
 
 
 class MatrixRowStatus(StrEnum):
@@ -130,9 +130,33 @@ def coverage(items: Sequence[tuple[RequirementLevel, bool]]) -> Coverage:
     )
 
 
-def coverage_of_rows(rows: Sequence[MatrixRow]) -> Coverage:
-    """Coverage over matrix rows — the workflow-status view."""
-    return coverage([(r.requirement_level, r.is_resolved) for r in rows])
+#: Kinds that cannot be "resolved" by writing a response, so they do not belong in a coverage
+#: DENOMINATOR even when the tender marks them mandatory. An instruction tells the bidder how
+#: to bid; there is nothing to answer, and counting it made "Bidders to quote Rate / No."
+#: read as an outstanding mandatory requirement forever.
+#:
+#: Forms, obligations and specs stay in: a form must be attached, an obligation must be
+#: planned for, a spec must be met, and each of those is work a row can record.
+_UNANSWERABLE_KINDS = frozenset({RequirementKind.INSTRUCTION})
+
+
+def coverage_of_rows(
+    rows: Sequence[MatrixRow], kind_by: Mapping[str, RequirementKind] | None = None
+) -> Coverage:
+    """Coverage over matrix rows — the workflow-status view.
+
+    `kind_by` is how the requirement classification reaches this screen. It was added with
+    the verdict and the readiness hub and did not reach here, so the matrix kept partitioning
+    on `requirement_level` alone: a mandatory quoting instruction sat in the denominator as an
+    unresolved requirement that no response could ever satisfy. `None` preserves the old
+    behaviour exactly, which is what every caller that has no criteria in hand wants.
+    """
+    kinds = kind_by or {}
+    scored = [
+        r for r in rows
+        if kinds.get(r.criterion_id, RequirementKind.GATE) not in _UNANSWERABLE_KINDS
+    ]
+    return coverage([(r.requirement_level, r.is_resolved) for r in scored])
 
 
 def generate_rows(criteria: Sequence[CriterionSpec]) -> tuple[MatrixRow, ...]:

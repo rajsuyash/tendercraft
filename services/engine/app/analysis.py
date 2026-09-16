@@ -281,11 +281,14 @@ def analyze(
     # between NEEDS REVIEW and NO_GATES with no change to the input.
     #
     # What is NOT at risk is the expensive direction: the row is displayed either way, and
-    # neither reading can produce a FAIL. Stabilising it means caching the extraction
-    # against a hash of the criterion text — the `discovery/relevance.py::input_hash` idiom,
-    # which this file does not yet use — and that trades re-running the analysis for
-    # picking up a better prompt. Do not "fix" it by widening the confidence floor: the
-    # measurement above says the floor cannot see this.
+    # neither reading can produce a FAIL.
+    #
+    # STABILISED by `_readings` above, which stores each reading against a hash of the
+    # criterion text plus the prompt file's digest — the `discovery/relevance.py::input_hash`
+    # idiom. Three consecutive production runs are byte-identical where two in a row were
+    # not. The measurement is kept because it is the reason the cache exists and the reason
+    # this branch cannot be tuned: do not "fix" a future instance by widening the confidence
+    # floor, because the floor cannot see a model that is confident on both sides.
     scored, demoted = [], []
     for row, req in zip(gates, reqs, strict=True):
         target = (demoted if req.check is CheckType.NONE

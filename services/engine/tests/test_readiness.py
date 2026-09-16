@@ -250,3 +250,67 @@ def test_a_low_confidence_non_gate_is_still_confirmed_first():
     row = _crit("x", conf=0.6, confirmed=False, kind="obligation")
 
     assert _priority(compute_readiness([row], None, [], []), "x") == "confirm"
+
+
+# --- a gate the analysis declined to score ------------------------------------------------------
+
+
+def _demoted(cid: str, *verdicts) -> dict:
+    """What `analyze` stores when the classifier says gate and the reading finds nothing."""
+    return {
+        "verdicts": list(verdicts),
+        "checklist": [{
+            "criterion_id": cid, "verbatim_text": "x", "kind": "gate",
+            "requirement_level": "mandatory", "source_anchor": "p.5",
+            "note": "This reads like an eligibility condition, but the clause states nothing "
+                    "that can be checked against your profile, so it is not scored.",
+        }],
+    }
+
+
+def _status(result, cid):
+    return next(i["status"] for i in result["items"] if i["criterion_id"] == cid)
+
+
+def test_a_gate_the_analysis_declined_to_score_does_not_block():
+    """The regression this test exists for, measured live on the Oil India bid before it was
+    fixed: five criteria classified as gates, none of them scored, each filed as a blocking
+    P0 reading "Run analysis to check eligibility" — on a tender whose analysis HAD run and
+    would never produce a verdict for them. `ready_to_generate` went false and the Generate
+    button became "Clear the blocking items first", pointing at five items no user could ever
+    clear. The same dead end the non-gate branch prevents, arriving through a second door."""
+    r = compute_readiness([_crit("a")], _demoted("a"), [])
+
+    assert _priority(r, "a") == "p2"
+    assert "nothing checkable" in _status(r, "a")
+    assert r["summary"]["p0_blocking"] == 0
+    assert r["summary"]["ready_to_generate"] is True
+
+
+def test_a_gate_with_no_analysis_at_all_still_blocks():
+    """The guard must not be so broad that it swallows the real case. A criterion with no
+    verdict because analysis was never RUN is a genuine blocker, and the checklist is the only
+    thing that separates the two."""
+    r = compute_readiness([_crit("a")], None, [])
+    assert _priority(r, "a") == "p0"
+    assert r["summary"]["ready_to_generate"] is False
+
+
+def test_a_scored_gate_is_unaffected_by_another_row_s_demotion():
+    r = compute_readiness(
+        [_crit("a"), _crit("b")],
+        _demoted("b", _v("a", "fail", gap="short")),
+        [_resp("a", "placeholder")],
+    )
+    assert _priority(r, "a") == "p0"   # a real eligibility gap still blocks
+    assert _priority(r, "b") == "p2"
+
+
+def test_a_checklist_entry_without_a_note_is_not_a_demoted_gate():
+    """Ordinary non-gates reach the checklist too, carrying no note. They are already handled
+    by their kind, and reading them as demoted gates would give them the wrong status line."""
+    analysis = {"verdicts": [], "checklist": [{"criterion_id": "a", "kind": "obligation",
+                                               "note": ""}]}
+    r = compute_readiness([_crit("a", kind="obligation")], analysis, [])
+    assert _priority(r, "a") == "p2"
+    assert "Post-award duty" in _status(r, "a")
