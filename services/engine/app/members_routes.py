@@ -72,6 +72,10 @@ class RoleIn(BaseModel):
     role: Role
 
 
+class DiscoveryIn(BaseModel):
+    enabled: bool
+
+
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
@@ -133,6 +137,27 @@ def switch_workspace(workspace_id: str, user: CurrentUser) -> dict:
     db.write_audit(workspace_id, user.user_id, "workspace_switch", "profile", user.user_id,
                    after={"workspace_id": workspace_id})
     return ok({"active_workspace_id": workspace_id})
+
+
+@router.put("/api/workspace/discovery")
+def set_discovery(body: DiscoveryIn, user: CurrentUser) -> dict:
+    """Turn the scheduled opportunity sweep on or off for THIS workspace. Admin only.
+
+    The workspace comes from the validated session, never from the body (ET-6) — this endpoint
+    takes no workspace id at all, so there is nothing for a caller to substitute.
+
+    Admin rather than writer: switching it off stops new tenders arriving for everyone in the
+    workspace, and a missed tender is the one failure in this product with no natural feedback
+    signal (ET-7). That makes it a workspace-governance act, which is what MANAGE_MEMBERS
+    marks. Audited for the same reason — the question "why did the feed stop?" must have an
+    answer with a name and a timestamp on it.
+    """
+    authz.check(user, authz.MANAGE_MEMBERS)
+    saved = db.set_workspace_discovery(user.workspace_id, body.enabled)
+    db.write_audit(user.workspace_id, user.user_id, "discovery_enabled_changed",
+                   "workspace", user.workspace_id,
+                   after={"discovery_enabled": saved.get("discovery_enabled")})
+    return ok({"enabled": bool(saved.get("discovery_enabled"))})
 
 
 @router.get("/api/workspaces/{workspace_id}/members")

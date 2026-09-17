@@ -1,4 +1,5 @@
 import { AlertSettings, type NotificationSettings } from "@/components/AlertSettings";
+import { DiscoverySettings } from "@/components/DiscoverySettings";
 import { MembersPanel, type Invitation, type Member } from "@/components/MembersPanel";
 import { engineFetch } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
@@ -74,7 +75,7 @@ export default async function SettingsPage() {
     me?.workspace_id ? engineFetch(`/api/workspaces/${me.workspace_id}/members`) : null,
     supabase
       .from("workspaces")
-      .select("name")
+      .select("name,discovery_enabled")
       .eq("id", me?.workspace_id ?? "")
       .maybeSingle(),
     engineFetch("/api/notifications/settings"),
@@ -134,6 +135,18 @@ export default async function SettingsPage() {
 
       <div className="mb-8">
         <AlertSettings initial={alerts} />
+      </div>
+
+      <div className="mb-8">
+        {/* Defaults to ON when the row or the column cannot be read, because that is what the
+            sweep does — the screen must never say a feed is off while it is still running.
+            `discovery_enabled` is named rather than covered by a `select("*")`, so migration
+            0047 must land before this deploy: without it PostgREST rejects the whole select
+            and the workspace name above degrades to "—" until the column exists. */}
+        <DiscoverySettings
+          initial={workspace?.discovery_enabled ?? true}
+          canManage={me?.role === "admin"}
+        />
       </div>
 
       <section className="mb-8">
