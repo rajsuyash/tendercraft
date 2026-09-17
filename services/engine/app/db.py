@@ -1772,6 +1772,52 @@ def _configured_workspace_ids() -> set[str]:
     return ids
 
 
+def discovery_disabled_workspace_ids() -> set[str] | None:
+    """Workspaces a human switched the scheduled feed OFF for. `None` means the read failed.
+
+    Asked as "who is disabled?" rather than "who is enabled?" for two reasons that point the
+    same way. It is the smaller answer — a handful of rows instead of every workspace, on a
+    query added specifically to cut egress — and, more importantly, absence from it means
+    ENABLED, so every way this read can come back short (the row limit, a workspace created
+    since, migration 0047 not yet applied) lands on sweeping rather than skipping.
+
+    `None` is the fail-open signal and it is not the same as an empty set. This set FILTERS the
+    fan-out, so a helper query that hiccups must not be able to stop every workspace's feed at
+    once — the same distinction, for the same reason, as `_workspaces_with_members` above.
+    Before migration 0047 lands, PostgREST answers this with a 400 for the unknown column,
+    which arrives here as an ApiError and resolves to `None`: a deploy that runs ahead of its
+    migration sweeps exactly as it did before.
+    """
+    try:
+        rows = _rest(
+            "GET", "workspaces",
+            params={"select": "id", "discovery_enabled": "is.false",
+                    "limit": str(_CRON_FANOUT_LIMIT)},
+        )
+    except Exception:  # noqa: BLE001 — a failed read must never empty the fan-out
+        log.warning("sweep fan-out: could not read workspaces.discovery_enabled")
+        return None
+    if rows is None:
+        return None
+    return {r["id"] for r in rows if r.get("id")}
+
+
+def set_workspace_discovery(workspace_id: str, enabled: bool) -> dict:
+    """Flip the scheduled-sweep switch for one workspace. Caller has already checked the role.
+
+    Returns the stored row so the caller can audit the value the database actually holds
+    rather than the one it sent.
+    """
+    rows = _rest(
+        "PATCH", "workspaces",
+        params={"id": f"eq.{workspace_id}", "select": "id,discovery_enabled"},
+        json={"discovery_enabled": enabled},
+    )
+    if not rows:
+        raise ApiError(404, "WORKSPACE_NOT_FOUND", "workspace not found")
+    return rows[0]
+
+
 def last_swept_at(markets: list[str] | None = None) -> dict[str, str]:
     """When each watched market was last successfully swept, newest row per market.
 

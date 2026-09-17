@@ -56,6 +56,34 @@ def _sweep(workspace_ids: list[str], run: object, job: str) -> dict:
             "results": results, "failures": failures}
 
 
+def _chosen_for_discovery(workspaces: list[dict]) -> list[dict]:
+    """Drop the workspaces whose admin switched the scheduled feed off (migration 0047).
+
+    Five of the six workspaces that have a member are demo fixtures, and each one costs a full
+    corpus read three times a day — the reads that put this project 12.89 GB into a 5.5 GB
+    egress quota. "Has a member" is as far as the product's own access rule can narrow the
+    fan-out; past that it is a human's decision, so it is a switch rather than a heuristic.
+
+    **A set that filters must fail open.** If the flag cannot be read, every member workspace is
+    swept and the failure is logged by name: filtering on a set that came back empty for the
+    wrong reason would stop every feed in the product at once, which is the ET-7 failure this
+    job exists to prevent. `_workspaces_with_members` already draws this distinction one layer
+    down, and `db.discovery_disabled_workspace_ids` returns `None` rather than an empty set for
+    exactly this reason.
+    """
+    disabled = db.discovery_disabled_workspace_ids()
+    if disabled is None:
+        log.warning(
+            "sweep fan-out: discovery_enabled read failed; sweeping every member workspace"
+        )
+        return workspaces
+    kept = [w for w in workspaces if w["id"] not in disabled]
+    if len(kept) != len(workspaces):
+        log.info("sweep fan-out: %d of %d workspaces have discovery enabled",
+                 len(kept), len(workspaces))
+    return kept
+
+
 @router.post("/internal/cron/digest")
 async def cron_digest(authorization: str | None = Header(default=None)) -> dict:
     """Email every opted-in workspace the relevant tenders nobody has been told about yet.
@@ -114,6 +142,12 @@ async def cron_sweep(authorization: str | None = Header(default=None)) -> dict:
 
         workspaces = db.list_workspaces_for_sweep()
         # Deduplicated: two workspaces watching India must not sweep GeM twice.
+        #
+        # Markets come from EVERY member workspace, including the ones whose feed is switched
+        # off. The corpus is shared and cheap per market; narrowing it to the kept workspaces
+        # would mean turning off the last French demo also stops the French corpus, which the
+        # price screen and the freshness header read. The toggle buys back the per-workspace
+        # recompute, which is where the measured bytes are, and nothing else.
         markets = sorted({m for w in workspaces for m in w["markets"]})
         swept = ingest.refresh_markets(markets, query="") if markets else {"markets": [],
                                                                            "failed": []}
@@ -129,7 +163,7 @@ async def cron_sweep(authorization: str | None = Header(default=None)) -> dict:
             awards = {"stored": 0, "error": str(exc)}
 
         rematched = _sweep(
-            [w["id"] for w in workspaces],
+            [w["id"] for w in _chosen_for_discovery(workspaces)],
             ingest.recompute_matches,
             "recompute",
         )
