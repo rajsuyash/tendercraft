@@ -38,7 +38,7 @@ def corpus(monkeypatch):
         "bid_name": "NIC 2025 bid", "authority": "NIC",
         "submitted_on": "2025-04-01", "outcome": "won",
     }])
-    monkeypatch.setattr(db, "get_valid_library_docs", lambda ws, today: [
+    monkeypatch.setattr(db, "get_valid_library_docs", lambda ws, today, **k: [
         {"id": "d1", "name": "ISO 9001:2015 Certificate",
          "text_content": "Quality management system certified to ISO 9001:2015, audited annually."},
     ])
@@ -197,7 +197,7 @@ def test_maturity_reports_the_three_numbers_and_tells_bid_origins_apart(client, 
          "original_md": None, "body_md": "anything"},
     ])
     monkeypatch.setattr(db, "list_tenders", lambda ws, **kw: [{"id": "t9", "title": "NIC ERP"}])
-    monkeypatch.setattr(db, "get_criteria", lambda t, ws: [
+    monkeypatch.setattr(db, "get_criteria", lambda t, ws, **k: [
         {"verbatim_text": "quality management certification"},
         {"verbatim_text": "bank guarantee validity period"},
     ])

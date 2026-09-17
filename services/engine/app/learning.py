@@ -45,7 +45,9 @@ def harvest_proposal(workspace_id: str, proposal_id: str, actor: str | None) -> 
     from `answers`, so a delete-and-rebuild would destroy the G-AC6 acceptance receipts —
     which are exactly the record that proves no suggestion entered a draft unaccepted.
     """
-    sections = db.get_sections(proposal_id, workspace_id)
+    # `harvestable` reads kind, status, edited_by, approved_by, body_md, heading and key.
+    sections = db.get_sections(proposal_id, workspace_id,
+                               select=db.SECTIONS_WITHOUT_ORIGINAL)
     pairs = harvestable(sections)
     if not pairs:
         # Not an error. A proposal exported with nothing individually approved has nothing to

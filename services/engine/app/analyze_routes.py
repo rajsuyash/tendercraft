@@ -113,12 +113,11 @@ async def keyword_suggestions(body: KeywordSuggestIn, user: CurrentUser) -> dict
     report_text = ""
     report_id = identity.get("annual_report_document_id")
     if report_id:
-        doc = next(
-            (d for d in db.get_valid_library_docs(user.workspace_id, "0001-01-01")
-             if d["id"] == report_id),
-            None,
-        )
-        report_text = (doc or {}).get("text_content") or ""
+        # By id, not by scanning the library: this read wanted ONE document and was
+        # pulling every valid document's full 20,000-character text to find it —
+        # 402,899 bytes measured, for 20 documents, to read one.
+        rows = db.get_valid_library_docs(user.workspace_id, "0001-01-01", doc_id=report_id)
+        report_text = (rows[0] if rows else {}).get("text_content") or ""
 
     site_text, site_error, pages_read = "", None, []
     if url:
@@ -242,6 +241,9 @@ def run_analysis(tender_id: str, user: CurrentUser) -> dict:
     if tender.get("status") != "locked":
         # A-FR5: only a locked TOM is a stable basis for deterministic compliance
         raise ApiError(409, "TOM_NOT_LOCKED", "lock the TOM before running eligibility analysis")
+    # The full row on purpose: `analysis._cached` reads `requirement` + `requirement_hash`,
+    # the per-criterion extraction cache (migration 0045). This is the only caller that
+    # does, which is why every other one now passes CRITERIA_WITHOUT_REQUIREMENT.
     criteria = db.get_criteria(tender_id, user.workspace_id)
     profile = db.get_profile_context(user.workspace_id)
     # The submission deadline decides which financial years "the last three years" means and
@@ -264,14 +266,17 @@ def _rubric_for(tender_id: str, user: CurrentUser):
     proposal = db.get_proposal_by_tender(tender_id, user.workspace_id)
     if not proposal:
         raise ApiError(404, "NO_PROPOSAL", "generate a proposal first")
-    doc_sections = db.get_sections(proposal["id"], user.workspace_id)
+    doc_sections = db.get_sections(proposal["id"], user.workspace_id,
+                                   select=db.SECTIONS_WITHOUT_ORIGINAL)
     if not doc_sections:
         raise ApiError(409, "NO_SECTIONS", "generate the proposal document first")
     return proposal, rubric_service.compute(
         doc_sections,
-        db.get_criteria(tender_id, user.workspace_id),
+        db.get_criteria(tender_id, user.workspace_id, select=db.CRITERIA_WITHOUT_REQUIREMENT),
         db.get_profile_context(user.workspace_id),
-        db.get_valid_library_docs(user.workspace_id, datetime.now(UTC).date().isoformat()),
+        # `compute` counts CVs by doc_type and never opens a document.
+        db.get_valid_library_docs(user.workspace_id, datetime.now(UTC).date().isoformat(),
+                                  select=db.LIBRARY_WITHOUT_TEXT),
         proposal.get("outline"),
     )
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db
+from app import db, spec_routes
 from app.auth import AuthedUser, get_current_user
 from app.discovery.ingest import capability_terms
 from app.main import create_app
@@ -79,6 +79,19 @@ def test_the_gate_and_the_display_use_the_same_list(monkeypatch):
 
 
 # ── the route ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _clear_corpus_cache():
+    """`spec_routes._open_corpus` is a process-global lru_cache keyed on (markets, time bucket).
+
+    Without this, the second test in this file reads the first test's corpus and its
+    monkeypatched `get_opportunities` is never called — which is the cache working exactly as
+    designed, and exactly why a test that shares a process with another must clear it.
+    """
+    spec_routes._open_corpus.cache_clear()
+    yield
+    spec_routes._open_corpus.cache_clear()
+
 
 @pytest.fixture
 def client():
@@ -198,3 +211,93 @@ def test_vocabulary_route_reflects_a_disabled_gate(client, monkeypatch):
     assert body["ok"] is True
     assert body["data"]["gate_enabled"] is False
     assert body["data"]["terms"] == []
+
+
+# ── the corpus memo ────────────────────────────────────────────────────────────────────────
+#
+# `/capability` is force-dynamic with no cache, so every render re-pulled the whole open
+# corpus. The projection was already minimal; the repetition was not. Measured 2026-09-17
+# against a 1,251-row open Indian corpus: 242,218 bytes per render, identical on the second.
+
+
+def _vocabulary_stubs(monkeypatch, corpus):
+    monkeypatch.setattr(db, "get_profile_context", lambda ws: {"legal_identity": {
+        "capability_keywords": ["wire rope"]}})
+    monkeypatch.setattr(db, "list_workspace_categories", lambda ws, *, active_only: [])
+    monkeypatch.setattr(db, "get_capability_specs", lambda ws: [])
+    monkeypatch.setattr(db, "get_discovery_rules", lambda ws: [])
+    reads: list[dict] = []
+
+    def fake(**kw):
+        reads.append(kw)
+        return corpus if kw.get("offset", 0) == 0 else []
+
+    monkeypatch.setattr(db, "get_opportunities", fake)
+    return reads
+
+
+def test_a_second_render_in_the_same_window_re_reads_nothing(client, monkeypatch):
+    monkeypatch.setattr(db, "get_workspace_markets", lambda ws: ["IN"])
+    reads = _vocabulary_stubs(monkeypatch, [
+        {"id": "o1", "title": "Supply of wire rope", "category_codes": [], "authority": ""},
+    ])
+
+    first = client.get("/api/capability/vocabulary").json()["data"]
+    after_first = len(reads)
+    second = client.get("/api/capability/vocabulary").json()["data"]
+
+    assert after_first > 0, "the first render must actually read the corpus"
+    assert len(reads) == after_first, "the second render must not re-read the corpus"
+    assert second == first
+
+
+def test_a_new_time_bucket_re_reads_the_corpus(client, monkeypatch):
+    """The expiry half. A cache that never misses is a stale corpus, not a fast one — so the
+    bucket has to actually change the key, in the direction that costs bytes."""
+    monkeypatch.setattr(db, "get_workspace_markets", lambda ws: ["IN"])
+    reads = _vocabulary_stubs(monkeypatch, [])
+
+    now = [1_000_000]
+    monkeypatch.setattr(spec_routes.time, "time", lambda: now[0])
+
+    client.get("/api/capability/vocabulary")
+    after_first = len(reads)
+    now[0] += spec_routes._CORPUS_TTL_SECONDS + 1
+    client.get("/api/capability/vocabulary")
+
+    assert len(reads) > after_first, "a render past the TTL must read the corpus again"
+
+
+def test_a_different_market_does_not_serve_another_markets_corpus(client, monkeypatch):
+    """The key has to carry the markets. Serving France's corpus to an Indian workspace would
+    report reach against tenders that workspace cannot see."""
+    markets = ["IN"]
+    monkeypatch.setattr(db, "get_workspace_markets", lambda ws: list(markets))
+    reads = _vocabulary_stubs(monkeypatch, [])
+
+    client.get("/api/capability/vocabulary")
+    after_first = len(reads)
+    markets[:] = ["FR"]
+    client.get("/api/capability/vocabulary")
+
+    assert len(reads) > after_first, "a different market must not hit the cached corpus"
+    assert reads[-1]["markets"] == ["FR"], "the market must reach the query, not just the key"
+
+
+def test_terms_are_not_cached_so_an_edit_shows_immediately(client, monkeypatch):
+    """The corpus is memoised; reach is not. A user editing their keywords is the entire point
+    of this screen, and a cached answer there would make the feature look broken."""
+    monkeypatch.setattr(db, "get_workspace_markets", lambda ws: ["IN"])
+    _vocabulary_stubs(monkeypatch, [
+        {"id": "o1", "title": "Supply of wire rope", "category_codes": [], "authority": ""},
+    ])
+
+    first = client.get("/api/capability/vocabulary").json()["data"]
+    assert [t["term"] for t in first["terms"]] == ["wire rope"]
+
+    monkeypatch.setattr(db, "get_profile_context", lambda ws: {"legal_identity": {
+        "capability_keywords": ["left-handed spanner"]}})
+    second = client.get("/api/capability/vocabulary").json()["data"]
+
+    assert [t["term"] for t in second["terms"]] == ["left-handed spanner"]
+    assert second["terms"][0]["reach"] == 0
