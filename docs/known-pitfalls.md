@@ -864,3 +864,38 @@ fix, it is the week after, when the fix's own assumptions have spread.
   UI-array-mirrors-a-server-enum pitfall was already in this file; it caught the enum case and
   not the *copy* case. **Grep the user-facing strings, not only the code, when you remove a
   behaviour** — and say at both ends when one is a mirror of the other.
+
+## Orchestrating subagents against a live outage (2026-09-17)
+
+- **Appending `--help` to "validate" a CLI command tests nothing.** `gcloud scheduler jobs
+  update http ... --bogus-flag=1 --help` exits 0 and prints help, because `--help`
+  short-circuits argument parsing before the flags are looked at. The discriminating check is
+  the real verb against a target that cannot exist (`zzz-parse-check-nonexistent`): correct
+  flags reach the API and fail with `NOT_FOUND`, a bad flag fails earlier with `unrecognized
+  arguments`, and neither can mutate anything. Found by the subagent that was told to use the
+  `--help` method; the instruction was the defect.
+- **Raising the root log level switches on every library's INFO too.** Configuring the root
+  logger to INFO so the engine's own lines would ship also turned on `httpx`'s per-request
+  line, which spells out the full Supabase query string (workspace ids, filters) and landed
+  every egress ledger entry twice. The unit tests passed throughout: they asserted on the
+  handler that was added, and the duplicate came from a library nothing was watching. Pin
+  noisy libraries to WARNING in the same change, and run the real request path once as a
+  positive control before quoting a log shape.
+- **`git merge <branch> | tail` reports tail's exit code, and a conflicted merge is exit 1
+  that `&&` never sees.** The chain went on to push and deploy with conflict markers sitting
+  in the working tree. Nothing bad shipped, because the push sends the committed HEAD and the
+  conflict was outside the deployed directory, but that was luck rather than design. This
+  file already records the same defect for `gcloud ... | tail`; the rule is the command, not
+  the tool: never pipe a command whose exit status gates the next step.
+- **A migration must land before the web deploy that selects its column, and the code must
+  fail open if it does not.** The settings page named `discovery_enabled` in its select, so
+  a web deploy ahead of migration 0047 would have had PostgREST reject the whole row and the
+  workspace name degrade to "—". The engine side reads the same column through a function
+  that returns `None` on any failure and sweeps everything, so a deploy ahead of the migration
+  costs one logged warning per sweep rather than a stopped feed. Design every new-column read
+  for the window in which the column does not exist yet, because that window is real on
+  every deploy.
+- **Wave-1 subagents branched from HEAD before the plan was committed**, so every one of
+  their branches showed the plan file as a 227-line deletion in `git diff base..branch`. It
+  is not a deletion; it is a file the branch never had, and a merge keeps it. Read a diff
+  against the merge base, not against the current tip, before deciding what a branch removes.
