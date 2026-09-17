@@ -899,3 +899,44 @@ fix, it is the week after, when the fix's own assumptions have spread.
   their branches showed the plan file as a 227-line deletion in `git diff base..branch`. It
   is not a deletion; it is a file the branch never had, and a merge keeps it. Read a diff
   against the merge base, not against the current tip, before deciding what a branch removes.
+
+## What an egress audit of the write path found (Workstream D, 2026-09-17)
+
+- **A wrapper whose default differs from the wrapped API's default is a policy nobody chose.**
+  PostgREST's documented default for every write is `return=minimal`. `db._rest` defaulted to
+  `return=representation`, so every one of 83 write call sites that named no `prefer`
+  silently asked for its rows back, and 26 of them threw the answer away. The one that mattered
+  was the corpus upsert: ~1.9 kB per row × 1,200 bids per sweep × 3 sweeps a day, echoed to a
+  caller that read only `len()`. When a wrapper sets a default, write down what the underlying
+  API would have done and why this differs, or the difference becomes invisible policy.
+- **A test stub's signature is an untested assumption about the callee, and it can be wrong in
+  a way that hides a total failure.** `create_pursuit` and `link_pursuit_tender` called
+  `_rest(..., headers={"Prefer": ...})`. `_rest` has no `headers` parameter, so both raised
+  `TypeError` on every call since they were written; the caller swallows exceptions into a log
+  line, so the discovery → pursuit → tender link never once worked. Every unit test was green:
+  the stubs took `headers=` too. This is the "stub returns more than the real query" pitfall
+  one level down — wrong *signature*, not wrong *return shape* — and it compounds the `Form()`
+  binding defect from the 2026-09-15 audit, which meant the argument never arrived at the
+  endpoint that would have raised. Pin a stub to the real callable's signature
+  (`inspect.signature`, or call the real function once with the transport patched).
+- **Do not fake a return value to preserve a signature.** When a write stops asking for its
+  rows back, the honest return is a count from the payload or `None`, never the rows that were
+  *sent* dressed up as the rows that were *stored* — server defaults (`id`, `created_at`) would
+  be silently absent, which is the stub-agrees-with-itself shape again, in production code.
+- **An AST invariant catches the next instance; a table of today's call sites does not.** The
+  test that any `_rest` write in statement position must carry a `prefer` without
+  `return=representation` is guarded by a population check (≥80 calls found), because a rename
+  that makes the walker find nothing would otherwise pass vacuously. Same rule as the scan
+  proving no caller indexes a now-minimal result: it ships with a positive control that the scan
+  fires on all three shapes, since an empty result looks identical whether the scan is right or
+  broken.
+- **A response whose answer is in a HEADER cannot go through a wrapper that returns
+  `r.json()`.** `_count_matches` reads `Content-Range`; it bypasses `_rest` by necessity, and
+  therefore bypassed the egress ledger by accident. The fix is one explicit `note_egress` beside
+  the bypass, with the reason. Grep for every `http.client.request` outside `_rest` when a
+  cross-cutting instrument is added to `_rest`; the quiet callers are the ones that skipped it
+  for a reason.
+- **`$VAR:path` in zsh is a history modifier, not a colon.** `git show $D:services/engine/...`
+  mangled the path to `...96988ngine/...` because `:s` was read as a substitution modifier on
+  `$D`. Use `${D}:path` or quote it. Cost one wasted probe here; would cost a wrong "file
+  missing" conclusion somewhere less obvious.
