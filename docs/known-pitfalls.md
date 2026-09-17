@@ -940,3 +940,34 @@ fix, it is the week after, when the fix's own assumptions have spread.
   mangled the path to `...96988ngine/...` because `:s` was read as a substitution modifier on
   `$D`. Use `${D}:path` or quote it. Cost one wasted probe here; would cost a wrong "file
   missing" conclusion somewhere less obvious.
+
+## Measuring the interactive paths (Workstream E, 2026-09-17)
+
+- **A column nobody reads can be a third of every response.** `get_sections` selected `*`,
+  and `original_md` was 37% of the bytes; no consumer of that function has ever read it, the
+  two readers that need it run their own narrow queries. `get_valid_library_docs` carried
+  `text_content` (20,000 characters per document) to an endpoint nothing in the repo calls:
+  `GET /api/library` returned 402 kB per request to nobody, because the library page reads
+  Supabase directly. Before narrowing a select, measure which column the bytes are in; the
+  answer is usually one column and one caller, and the fix is a `select` argument with the
+  wide read kept as the default so every other caller is untouched.
+- **A test harness that patches `module.name` misses `from module import name` bindings.**
+  The measurement harness stubbed the Gemini client on its source module and printed a
+  plausible table while a real model call went out through a name that had been imported
+  directly. Found by a positive control on `httpx.post`, which is the only reason the table
+  was believed. Patch at the point of use, or assert the transport was never reached.
+- **A partial query shim that ignores `offset` turns an exhaustion loop infinite.** The
+  recompute pages with `offset` until a short page; a PostgREST-to-SQL shim that dropped
+  `offset` returned the first page forever. Six hundred seconds were spent suspecting the
+  endpoint. When a shim stands in for a server, it has to implement every parameter the
+  code under test sends, or refuse the ones it does not, never silently ignore them.
+- **A time-bucketed `lru_cache` is a cache whose entries expire only when evicted.** The key
+  `(markets, time() // TTL)` makes a new bucket a miss, so staleness is bounded by TTL, but
+  the old buckets sit in the cache until `maxsize` pushes them out. Set `maxsize` to the
+  number of live keys you expect, not the default 128, and add an autouse `cache_clear`
+  fixture: without it two existing tests in that file read each other's corpus, which is
+  the cache working exactly as designed.
+- **Pin what must NOT change when narrowing a read.** The export approval binds to a
+  `content_hash` over section bodies. A narrowed `get_sections` that dropped or reordered
+  anything that hash reads would silently invalidate every stored approval in every
+  workspace. The narrowing test asserts the hash is byte-identical under both selects.

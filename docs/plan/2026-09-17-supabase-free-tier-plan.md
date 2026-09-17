@@ -34,6 +34,43 @@ The 2026-09-14 predicate was "has a member"; a seeded demo account satisfies it.
 The other Free limit is database size, 500 MB. It was 55 MB after the 2026-09-14 vacuum.
 Confirm, and watch it.
 
+## 0b. Execution log — Waves 1 and 2, shipped 2026-09-17
+
+All five code workstreams merged, gated on the merged tree each time, and deployed. Engine
+revision `tendercraft-engine-eu-00075-cxq`, web `tendercraft-web-eu-00074-fpc`. Migration
+0047 applied to production and confirmed via `information_schema` (PostgREST is still 402,
+so "served" is not yet provable). Final gate: 1,662 engine tests, 100% branch coverage on
+`app/deterministic/`, ruff clean; web typecheck, lint, 80 tests, build clean.
+
+| Workstream | Landed | What it measured or found |
+|---|---|---|
+| A. Instrument | logging config, egress ledger, `/health/deep`, `cron/health` accumulator | Raising the root level also switched on httpx's per-request INFO and doubled every ledger line; pinned. `/health/deep` reports the live block as `DB_UNHEALTHY: supabase returned 402` |
+| B. Opt-in sweep | migration 0047, fail-open fan-out, admin toggle | Migration replayed 0001→0047 on a throwaway Postgres when Docker was broken; backfill true for all 6 member workspaces confirmed in production |
+| F. Scheduler | digest paused; all five jobs capped at 1 retry, 60 s backoff | Baseline showed the digest at 2 retries (three calls per trigger, the observed symptom) and both keepalives at 3 |
+| C. Narrow the sweep read | ten pinned columns at the recompute call site | Grep said seven; reading the consumers found ten, three reached only via document enrichment. Estimated ~50% of a serialised row, below the hoped 60–80% because title, document URLs and parsed eligibility must stay |
+| D. Write echoes | 26 writes to `return=minimal`, 5 return types changed, `_count_matches` on the ledger, shared `tests/conftest.py` | PostgREST's own default is `return=minimal`; the wrapper's `representation` default was unchosen policy across 83 sites. Found `create_pursuit`/`link_pursuit_tender` passing a `headers=` kwarg `_rest` never accepted: `TypeError` on every call since written, swallowed by the caller |
+| E. Interactive paths | `get_sections`, `get_criteria`, `get_valid_library_docs` narrowed per caller; vocabulary endpoint memoised | Measured with the real ledger over a local Postgres. `GET /api/library` had no caller and returned 402 kB per request; `original_md` was 37% of every sections read and unread by any consumer |
+
+E's before/after, real response bytes per request, the production counter over a seeded
+local database (both web pages measured by SQL proxy and found already narrow):
+
+| request | before | after | Δ |
+|---|---:|---:|---:|
+| GET /api/library | 402,899 | 2,539 | −99% |
+| POST /profile/keyword-suggestions | 408,366 | 25,606 | −94% |
+| GET /capability/vocabulary (warm) | 247,701 | 5,483 | −98% |
+| GET /readiness | 63,819 | 36,665 | −43% |
+| GET /submission | 407,106 | 250,304 | −39% |
+| GET /compliance-matrix | 343,141 | 213,493 | −38% |
+| POST /sections/generate | 832,213 | 702,570 | −16% |
+| POST /prepare | 687,212 | 605,756 | −12% |
+| POST /analyze | 93,826 | 93,820 | wide on purpose |
+
+**Not yet done, and why.** Live verification of every item above against production: blocked
+by the 402 until the org is upgraded. The five demo workspaces are still swept: the toggle
+exists, the decision is the owner's (§5 step 2). Workstream G, the runbook, is written with
+the decision figures left as placeholders to be filled from the ledger around 2026-10-20.
+
 ## 1. The bar for downgrading
 
 On or about 2026-10-20, the ledger from workstream A must show, for the trailing 21 days:
