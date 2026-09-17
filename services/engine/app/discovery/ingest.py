@@ -58,6 +58,43 @@ DEFAULT_DOC_BUDGET = int(os.environ.get("GEM_DOC_BUDGET", "25"))
 #: Paging the gate is free; the model spend is still bounded, by relevance.DEFAULT_BUDGET.
 RECOMPUTE_WINDOW = int(os.environ.get("RECOMPUTE_WINDOW", "1000"))
 
+#: Exactly the columns the recompute reads from an opportunity row — nothing else.
+#:
+#: The recompute pages the whole open corpus three times a day per workspace, and `select=*`
+#: ships every column of every row to compute a gate verdict that touches ten of them. Measured
+#: 2026-09-17: open rows average 1,637 bytes on disk (IN) and 899 (FR) — 1.16 MB and 4.66 MB
+#: per workspace per sweep. What the ten columns below leave behind is `source_fields` (the raw
+#: portal record, retained for audit and read by nothing in this path), `raw_snapshot_ref`, and
+#: eight timestamp/identifier columns no consumer here opens.
+#:
+#: **The saving is an estimate until the egress ledger measures it.** On a representative
+#: GeM-shaped row the projection is ~50% of the serialized row, not the 60-80% the plan hoped
+#: for, because three of the columns that must stay — `title`, `document_urls` and a parsed
+#: `eligibility` — are themselves among the largest. Rows from an aggregated feed, whose
+#: `source_fields` carries a whole vendor record, should save more. Note also that the byte
+#: figures above are ON DISK and PostgREST bills serialized JSON: related quantities, not the
+#: same one. Only the ledger counts what actually crosses the wire.
+#:
+#: Every column below is here because a named function reads it. The list was derived by
+#: reading those functions, not by grepping: a grep found seven, and the three the recompute
+#: reaches only through `_enrich_documents` and the currency guard were invisible to it.
+#: Dropping any one of them is a silent failure, not a crash — `.get()` on a missing column
+#: returns None, which the gate reads as "no value published" and declines to exclude on
+#: (known-pitfalls: a column that never existed reads as a plain fallback forever). That is why
+#: `tests/test_recompute_select.py` pins this list to its consumers from both directions.
+RECOMPUTE_COLUMNS = (
+    "id",               # match row's opportunity_id; bands_for cache key; eligibility write-back
+    "title",            # keyword_match_required; keyword_relevance; input_hash; model prompt
+    "category_codes",   # category_prefix_in/_not_in; keyword_relevance; input_hash; model prompt
+    "authority",        # authority_contains/_not_contains; keyword_relevance; model prompt
+    "closing_at",       # min_days_to_close; bands_for budget order; _enrich_documents order
+    "estimated_value",  # value_between
+    "eligibility",      # evaluate_eligibility (Depth-1); _enrich_documents "already parsed?"
+    "market",           # same_currency guard — a euro bar is not comparable to a rupee profile
+    "document_urls",    # _enrich_documents: the bid document to send the connector
+    "source_id",        # _enrich_documents: SOURCES_WITH_ELIGIBILITY routing (only GeM parses)
+)
+
 #: Per-source page budgets, because a page is not the same size at every source.
 #:
 #: `DEFAULT_PAGES` is 12 and was sized against GeM, which returns 100 rows a page. BidAssist's
@@ -407,6 +444,10 @@ def recompute_matches(workspace_id: str, doc_budget: int = DEFAULT_DOC_BUDGET) -
     while True:
         page = db.get_opportunities(
             limit=RECOMPUTE_WINDOW, markets=watched, open_only=True, offset=offset,
+            # Only what the gate, the bands and the eligibility parse actually open. See
+            # RECOMPUTE_COLUMNS: this is the whole open corpus, per workspace, three times a
+            # day, and most of a row is a raw portal snapshot nothing in this loop reads.
+            select=",".join(RECOMPUTE_COLUMNS),
         )
         opportunities.extend(page)
         if len(page) < RECOMPUTE_WINDOW:

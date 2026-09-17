@@ -280,8 +280,9 @@ class TestClosedTendersCannotStarveTheWindow:
 
         seen: dict = {}
 
-        def fake_get(limit, markets=None, open_only=False, offset=0):
-            seen.update({"limit": limit, "open_only": open_only, "offset": offset})
+        def fake_get(limit, markets=None, open_only=False, offset=0, select="*"):
+            seen.update({"limit": limit, "open_only": open_only, "offset": offset,
+                         "select": select})
             return []
 
         monkeypatch.setattr(ingest.db, "get_opportunities", fake_get)
@@ -296,6 +297,9 @@ class TestClosedTendersCannotStarveTheWindow:
             "recompute stopped asking for the open window — closed tenders will retake the "
             "1000 slots and the feed will freeze again with no error anywhere"
         )
+        # And it asks for the projection, not the row. `select=*` here is not a bug that
+        # errors; it is a silent 3x-a-day egress bill (see RECOMPUTE_COLUMNS).
+        assert seen["select"] == ",".join(ingest.RECOMPUTE_COLUMNS)
 
 
 class TestAPageBudgetBelongsToItsSource:
@@ -339,8 +343,9 @@ def _stub_recompute(monkeypatch, ing, corpus: list[dict]):
                                                     "excluded_by_rule": "test"})())
     calls: list[dict] = []
 
-    def fake_get(*, limit, markets, open_only, offset=0):
-        calls.append({"limit": limit, "offset": offset, "open_only": open_only})
+    def fake_get(*, limit, markets, open_only, offset=0, select="*"):
+        calls.append({"limit": limit, "offset": offset, "open_only": open_only,
+                      "select": select})
         return corpus[offset:offset + limit]
 
     monkeypatch.setattr(ing.db, "get_opportunities", fake_get)
