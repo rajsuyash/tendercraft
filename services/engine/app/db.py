@@ -43,6 +43,10 @@ def _rest(
             json=json,
             timeout=15,
         )
+        # Counted BEFORE raise_for_status: a 402 body is still egress, and a quota block is
+        # exactly the run whose bytes you want on the ledger. Measurement only — no query, no
+        # select list and no Prefer header is decided here.
+        http.note_egress(method, path, len(r.content))
         r.raise_for_status()
     except httpx.HTTPError as exc:
         raise ApiError(502, "DB_ERROR", f"database request failed: {exc}") from exc
