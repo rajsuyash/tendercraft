@@ -40,7 +40,7 @@ def test_decision_audits_override_before_write(client, monkeypatch):
     monkeypatch.setattr(db, "write_audit", lambda *a, **k: order.append("audit"))
     monkeypatch.setattr(db, "upsert_readiness_decision", lambda *a, **k: order.append("write") or {})
     # a decision-aware payload is returned; stub its reads
-    monkeypatch.setattr(db, "get_criteria", lambda t, ten: [])
+    monkeypatch.setattr(db, "get_criteria", lambda t, ten, **k: [])
     monkeypatch.setattr(db, "get_analysis", lambda t, ten: None)
     monkeypatch.setattr(db, "get_proposal_by_tender", lambda t, ten: None)
     monkeypatch.setattr(db, "get_readiness_decisions", lambda t, ten: [])
@@ -54,7 +54,7 @@ def test_decision_resolve_is_not_audited(client, monkeypatch):
     audited: list = []
     monkeypatch.setattr(db, "write_audit", lambda *a, **k: audited.append(1))
     monkeypatch.setattr(db, "upsert_readiness_decision", lambda *a, **k: {})
-    monkeypatch.setattr(db, "get_criteria", lambda t, ten: [])
+    monkeypatch.setattr(db, "get_criteria", lambda t, ten, **k: [])
     monkeypatch.setattr(db, "get_analysis", lambda t, ten: None)
     monkeypatch.setattr(db, "get_proposal_by_tender", lambda t, ten: None)
     monkeypatch.setattr(db, "get_readiness_decisions", lambda t, ten: [])

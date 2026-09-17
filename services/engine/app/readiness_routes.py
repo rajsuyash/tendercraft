@@ -66,7 +66,7 @@ def _readiness_and_proposal(workspace_id: str, tender_id: str) -> tuple[dict, di
     re-running this entire function) — the two endpoints read the same rows.
     """
     criteria, analysis_result, proposal, decisions = _gather(
-        lambda: db.get_criteria(tender_id, workspace_id),
+        lambda: db.get_criteria(tender_id, workspace_id, select=db.CRITERIA_WITHOUT_REQUIREMENT),
         lambda: db.get_analysis(tender_id, workspace_id),
         lambda: db.get_proposal_by_tender(tender_id, workspace_id),
         lambda: db.get_readiness_decisions(tender_id, workspace_id),
@@ -121,7 +121,7 @@ def _prepare(workspace_id: str, tender_id: str) -> dict:
     from .analyze_routes import _bid_date
     from .proposal_routes import do_generate
 
-    criteria = db.get_criteria(tender_id, workspace_id)
+    criteria = db.get_criteria(tender_id, workspace_id, select=db.CRITERIA_WITHOUT_REQUIREMENT)
     # 1. Lock the TOM (human confirmation of low-confidence items is enforced by the gate).
     lock = evaluate_lock([_to_domain(c) for c in criteria])
     if not lock.ok:
@@ -163,7 +163,8 @@ def submission_state(tender_id: str, user: CurrentUser) -> dict:
     required = 2
     if proposal:
         doc_sections, approvals = _gather(
-            lambda: db.get_sections(proposal["id"], user.workspace_id),
+            lambda: db.get_sections(proposal["id"], user.workspace_id,
+                                    select=db.SECTIONS_WITHOUT_ORIGINAL),
             lambda: db.get_approvals(proposal["id"], user.workspace_id),
         )
         required = proposal.get("approvals_required", 2)
@@ -181,7 +182,7 @@ def submission_state(tender_id: str, user: CurrentUser) -> dict:
     mandatory_unanswered = 0
     if proposal:
         decision, rows = export_service.evaluate(
-            db.get_criteria(tender_id, user.workspace_id),
+            db.get_criteria(tender_id, user.workspace_id, select=db.CRITERIA_WITHOUT_REQUIREMENT),
             db.get_responses(proposal["id"], user.workspace_id),
             approvals_required=required,
             approvals_done=len(approvals),

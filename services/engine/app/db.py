@@ -71,14 +71,32 @@ def insert_criteria(workspace_id: str, tender_id: str, criteria: list[dict]) -> 
     return _rest("POST", "criteria", json=payload) or []
 
 
-def get_criteria(tender_id: str, workspace_id: str) -> list[dict]:
+#: Every criteria column except the requirement cache (migration 0045) and `created_at`.
+#:
+#: Measured 2026-09-17 on a 35-criterion tender with a populated cache: the row set is 63,121
+#: bytes under `select=*`, of which `requirement` alone is 24,987 — 40%, carried to every
+#: caller on every request, when exactly ONE consumer reads it (`analysis.py::_cached`, which
+#: needs `requirement` + `requirement_hash` together). Callers that only gate, count, draft or
+#: render pass this and pay 35,967 — measured after the change, not subtracted from before it.
+#:
+#: The wide read stays the DEFAULT on purpose. A caller reading a key the select omitted gets
+#: a KeyError in production, not at review, so narrowing is opt-in per call site and every
+#: opted-in site is pinned by `tests/test_select_narrowing.py`.
+CRITERIA_WITHOUT_REQUIREMENT = (
+    "id,tender_id,workspace_id,verbatim_text,category,requirement_level,evidence_required,"
+    "evaluation_weight,confidence,confirmed,anchor_page,anchor_clause,anchor_document,"
+    "kind_override"
+)
+
+
+def get_criteria(tender_id: str, workspace_id: str, *, select: str = "*") -> list[dict]:
     return (
         _rest(
             "GET", "criteria",
             params={
                 "tender_id": f"eq.{tender_id}",
                 "workspace_id": f"eq.{workspace_id}",
-                "select": "*",
+                "select": select,
             },
         )
         or []
@@ -253,15 +271,31 @@ def insert_library_document(workspace_id: str, doc: dict, uploaded_by: str | Non
     return rows[0]
 
 
-def get_valid_library_docs(workspace_id: str, today_iso: str) -> list[dict]:
-    """Retrieval with the validity HARD-filter: expired docs are excluded (never a model choice)."""
-    docs = _rest(
-        "GET", "library_documents",
-        params={
-            "workspace_id": f"eq.{workspace_id}",
-            "select": "id,name,doc_type,text_content,valid_to",
-        },
-    ) or []
+#: The same rows without the extracted full text. `text_content` is capped at 20,000
+#: characters per document and is 99.3% of this table's wire size — measured 2026-09-17:
+#: 402,899 bytes for 20 documents, of which 400,000 is text. A caller listing documents, or
+#: looking one up by id, is paying four hundred kilobytes for a name and a date.
+LIBRARY_WITHOUT_TEXT = "id,name,doc_type,valid_to"
+
+#: What the drafting paths need: the text IS the evidence they chunk and cite.
+LIBRARY_WITH_TEXT = "id,name,doc_type,text_content,valid_to"
+
+
+def get_valid_library_docs(
+    workspace_id: str, today_iso: str, *,
+    select: str = LIBRARY_WITH_TEXT, doc_id: str | None = None,
+) -> list[dict]:
+    """Retrieval with the validity HARD-filter: expired docs are excluded (never a model choice).
+
+    `select` narrows the read for callers that do not need the extracted text; `doc_id` narrows
+    it to one document, for the callers that were fetching the whole library to find one row.
+    Both default to the previous behaviour — a caller reading a key the select omitted fails in
+    production rather than at review, so narrowing is opt-in and pinned per call site.
+    """
+    params = {"workspace_id": f"eq.{workspace_id}", "select": select}
+    if doc_id:
+        params["id"] = f"eq.{doc_id}"
+    docs = _rest("GET", "library_documents", params=params) or []
     return [d for d in docs if not d.get("valid_to") or d["valid_to"] >= today_iso]
 
 
@@ -365,8 +399,25 @@ def set_section_included(
     )
 
 
+#: Every proposal_sections column except `original_md`.
+#:
+#: `original_md` is the drafter's untouched first version, sealed on a section's first human
+#: edit (migration 0031). It exists to measure how much a human rewrote — and the only two
+#: readers of it are `get_edit_rows` and `upsert_section`'s sealing read, both of which run
+#: their OWN narrow query. No consumer of `get_sections` has ever read it, and it is a second
+#: full copy of `body_md`: measured 2026-09-17 on a 14-section proposal averaging 7.3 kB of
+#: body, `select=*` is 279,746 bytes and this is 177,246 — 37% off every readiness,
+#: submission, export-gate, matrix and section read, measured both ways rather than one.
+SECTIONS_WITHOUT_ORIGINAL = (
+    "id,workspace_id,proposal_id,key,parent_key,heading,order_index,kind,body_md,sentences,"
+    "status,confidence,flags,word_count,approved_by,approved_at,created_at,edited_by,"
+    "edited_at,included"
+)
+
+
 def get_sections(
-    proposal_id: str, workspace_id: str, include_dropped: bool = False
+    proposal_id: str, workspace_id: str, include_dropped: bool = False, *,
+    select: str = "*",
 ) -> list[dict]:
     """The proposal's sections, in document order.
 
@@ -380,7 +431,7 @@ def get_sections(
     """
     params = {
         "proposal_id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
-        "select": "*", "order": "order_index.asc",
+        "select": select, "order": "order_index.asc",
     }
     if not include_dropped:
         params["included"] = "is.true"

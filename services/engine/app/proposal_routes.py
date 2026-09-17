@@ -27,15 +27,22 @@ CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
 @router.get("/api/library")
 def list_library(user: CurrentUser) -> dict:
     today = datetime.now(UTC).date().isoformat()
-    docs = db.get_valid_library_docs(user.workspace_id, today)
+    # A listing, not a corpus: this returned every document's full 20,000-character text
+    # to the client on every call. `apps/web`'s library page reads Supabase directly with
+    # its own narrow select and never called this.
+    docs = db.get_valid_library_docs(user.workspace_id, today,
+                                     select=db.LIBRARY_WITHOUT_TEXT)
     return ok({"documents": docs, "count": len(docs)})
 
 
 def do_generate(workspace_id: str, tender_id: str) -> dict:
     """Draft every criterion from the library and persist responses. Caller ensures the TOM
     is locked. Reused by both /generate and the readiness /prepare orchestration."""
-    criteria = db.get_criteria(tender_id, workspace_id)
+    criteria = db.get_criteria(tender_id, workspace_id, select=db.CRITERIA_WITHOUT_REQUIREMENT)
     today = datetime.now(UTC).date().isoformat()
+    # The full text stays here and is the largest single read in the product (402,899
+    # bytes for 20 documents, measured 2026-09-17). It is not waste: these ARE the chunks
+    # the drafter cites from, and cite-or-flag has nothing to resolve without them.
     evidence = db.get_valid_library_docs(workspace_id, today)
     chunks = chunk_docs(
         [{"id": d["id"], "name": d["name"], "text": d.get("text_content", "")} for d in evidence]
@@ -120,7 +127,7 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
         raise ApiError(404, "NO_PROPOSAL", "generate the per-criterion responses first")
 
     tender = db.get_tender(tender_id, workspace_id) or {}
-    criteria = db.get_criteria(tender_id, workspace_id)
+    criteria = db.get_criteria(tender_id, workspace_id, select=db.CRITERIA_WITHOUT_REQUIREMENT)
     responses = db.get_responses(proposal["id"], workspace_id)
     # What a human has already put their hands on. Regeneration used to overwrite all of it
     # while leaving `approved_at` in place — so an approved section came back as new AI prose
@@ -128,7 +135,8 @@ def do_generate_sections(workspace_id: str, tender_id: str) -> dict:
     # and a rewritten section came back as the model's words still badged "Your edit".
     # Dropped rows included: this is the one caller that has to know a key EXISTS before
     # deciding whether to re-include it or leave a human's words alone.
-    section_rows = db.get_sections(proposal["id"], workspace_id, include_dropped=True)
+    section_rows = db.get_sections(proposal["id"], workspace_id, include_dropped=True,
+                                   select=db.SECTIONS_WITHOUT_ORIGINAL)
     existing = {s["key"] for s in section_rows}
     protected = {
         s["key"] for s in section_rows if s.get("edited_by")
@@ -303,7 +311,8 @@ def get_sections(tender_id: str, user: CurrentUser) -> dict:
     proposal = db.get_proposal_by_tender(tender_id, user.workspace_id)
     if not proposal:
         raise ApiError(404, "NO_PROPOSAL", "generate a proposal first")
-    rows = db.get_sections(proposal["id"], user.workspace_id)
+    rows = db.get_sections(proposal["id"], user.workspace_id,
+                           select=db.SECTIONS_WITHOUT_ORIGINAL)
     return ok({
         "proposal_id": proposal["id"],
         "sections": rows,
@@ -336,10 +345,11 @@ def _load_export_context(tender_id: str, user: CurrentUser):
     proposal = db.get_proposal_by_tender(tender_id, user.workspace_id)
     if not proposal:
         raise ApiError(404, "NO_PROPOSAL", "generate a proposal first")
-    criteria = db.get_criteria(tender_id, user.workspace_id)
+    criteria = db.get_criteria(tender_id, user.workspace_id, select=db.CRITERIA_WITHOUT_REQUIREMENT)
     responses = db.get_responses(proposal["id"], user.workspace_id)
     approvals = db.get_approvals(proposal["id"], user.workspace_id)
-    doc_sections = db.get_sections(proposal["id"], user.workspace_id)
+    doc_sections = db.get_sections(proposal["id"], user.workspace_id,
+                                   select=db.SECTIONS_WITHOUT_ORIGINAL)
     return export_service, proposal, criteria, responses, approvals, doc_sections
 
 
@@ -400,7 +410,9 @@ def approve(
     # a section clears that section's own approval, but the proposal-level chain survived
     # untouched. `export_service.evaluate` ignores an approval whose hash no longer matches,
     # so the stage becomes incomplete again and asks for a fresh one.
-    signed = export_gate.content_hash(db.get_sections(proposal_id, user.workspace_id))
+    signed = export_gate.content_hash(
+        db.get_sections(proposal_id, user.workspace_id,
+                        select=db.SECTIONS_WITHOUT_ORIGINAL))
     db.add_approval(user.workspace_id, proposal_id, stage, user.user_id, content_hash=signed)
     db.write_audit(user.workspace_id, user.user_id, "approval", "proposal", proposal_id,
                    after={"stage": stage, "content_hash": signed})

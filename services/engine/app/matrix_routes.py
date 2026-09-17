@@ -115,7 +115,9 @@ def _load(tender_id: str, user: AuthedUser) -> dict:
     # criteria rows (migration 0042 stores only the override), so improving a rule reclassifies
     # an existing matrix on the next load rather than needing the rows rebuilt.
     kind_by = {
-        c["id"]: effective_kind(c) for c in db.get_criteria(tender_id, user.workspace_id)
+        c["id"]: effective_kind(c)
+        for c in db.get_criteria(tender_id, user.workspace_id,
+                                 select=db.CRITERIA_WITHOUT_REQUIREMENT)
     }
     cov = coverage_of_rows(rows, kind_by)
     gate = evaluate_matrix_complete(rows, len(open_unmapped))
@@ -172,7 +174,8 @@ def generate(tender_id: str, user: CurrentUser) -> dict:
             "text from it, and an unlocked model can still change",
         )
 
-    criteria = db.get_criteria(tender_id, user.workspace_id)
+    criteria = db.get_criteria(tender_id, user.workspace_id,
+                               select=db.CRITERIA_WITHOUT_REQUIREMENT)
     if not criteria:
         raise ApiError(409, "NO_CRITERIA", "this tender has no criteria to build a matrix from")
 

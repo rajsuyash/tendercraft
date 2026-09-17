@@ -37,9 +37,9 @@ def wired(monkeypatch):
 
     monkeypatch.setattr(db, "get_proposal_by_tender", lambda t, w: {"id": "p-1"})
     monkeypatch.setattr(db, "get_tender", lambda t, w: {"id": t, "title": "Rope supply"})
-    monkeypatch.setattr(db, "get_criteria", lambda t, w: [])
+    monkeypatch.setattr(db, "get_criteria", lambda t, w, **k: [])
     monkeypatch.setattr(db, "get_responses", lambda p, w: [])
-    monkeypatch.setattr(db, "get_valid_library_docs", lambda w, d: [])
+    monkeypatch.setattr(db, "get_valid_library_docs", lambda w, d, **k: [])
     monkeypatch.setattr(db, "get_profile_context", lambda w: {"legal_identity": {}})
     # The PQ sheet's FY window comes from the stored analysis (B9). No analysis means no
     # window, which is the honest state, not a reason to average whatever is on file.
@@ -52,7 +52,7 @@ def wired(monkeypatch):
                         lambda w, p, key, inc: state["dropped"].append(key))
     monkeypatch.setattr(db, "get_style_profile", lambda w: None)
     monkeypatch.setattr(db, "get_sections",
-                        lambda p, w, include_dropped=False: state["sections"])
+                        lambda p, w, include_dropped=False, **k: state["sections"])
     monkeypatch.setattr(db, "get_reuse_targets", lambda w, p: state["reuse"])
     monkeypatch.setattr(db, "upsert_section",
                         lambda w, p, key, row: state["written"].__setitem__(key, row))
@@ -118,11 +118,11 @@ def test_a_criterion_with_an_accepted_prior_answer_survives_re_match(monkeypatch
     readiness screen silently reverted every reused answer in the proposal."""
     db = proposal_routes.db
     written: list[str] = []
-    monkeypatch.setattr(db, "get_criteria", lambda t, w: [
+    monkeypatch.setattr(db, "get_criteria", lambda t, w, **k: [
         {"id": "c-1", "verbatim_text": "Turnover", "requirement_level": "mandatory"},
         {"id": "c-2", "verbatim_text": "ISO 9001", "requirement_level": "mandatory"},
     ])
-    monkeypatch.setattr(db, "get_valid_library_docs", lambda w, d: [])
+    monkeypatch.setattr(db, "get_valid_library_docs", lambda w, d, **k: [])
     monkeypatch.setattr(db, "get_readiness_decisions", lambda t, w: [])
     monkeypatch.setattr(db, "create_proposal", lambda w, t: {"id": "p-1"})
     monkeypatch.setattr(db, "get_reuse_targets", lambda w, p: {"criterion:c-2"})

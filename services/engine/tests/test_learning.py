@@ -122,7 +122,7 @@ def stub_db(monkeypatch):
 
 
 def test_harvest_stores_the_approved_sections_as_a_generated_past_bid(stub_db, monkeypatch):
-    monkeypatch.setattr(db, "get_sections", lambda pid, ws: [
+    monkeypatch.setattr(db, "get_sections", lambda pid, ws, **k: [
         _section(), _section(key="solution", heading="Form 7(a): Solution", approved_by=None,
                              edited_by=None),
     ])
@@ -141,7 +141,7 @@ def test_harvest_stores_the_approved_sections_as_a_generated_past_bid(stub_db, m
 
 def test_re_export_reuses_the_same_bid_instead_of_stacking_a_duplicate(stub_db, monkeypatch):
     stub_db["existing"] = {"id": "b1", "name": "Supply of Wire Rope"}
-    monkeypatch.setattr(db, "get_sections", lambda pid, ws: [_section()])
+    monkeypatch.setattr(db, "get_sections", lambda pid, ws, **k: [_section()])
 
     out = learning.harvest_proposal("t1", "p1", "u1")
 
@@ -154,7 +154,7 @@ def test_a_proposal_with_nothing_approved_teaches_nothing_and_is_not_an_error(
     stub_db, monkeypatch
 ):
     monkeypatch.setattr(db, "get_sections",
-                        lambda pid, ws: [_section(approved_by=None, edited_by=None)])
+                        lambda pid, ws, **k: [_section(approved_by=None, edited_by=None)])
     out = learning.harvest_proposal("t1", "p1", "u1")
 
     assert out["harvested"] == 0

@@ -8,7 +8,9 @@ still renders during a model outage — reporting `unknown`, which is the truth.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import UTC, datetime
+from functools import lru_cache
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends
@@ -294,6 +296,45 @@ async def extract_schedule(tender_id: str, user: CurrentUser, force: bool = Fals
     return ok(await run_in_threadpool(_run))
 
 
+#: How long one open-corpus snapshot serves the reach instrument.
+#:
+#: The corpus only changes when the sweep runs, three times a day, so five minutes is far
+#: fresher than the data itself — this does not make `corpus_open` a staler number than it was,
+#: it stops the same unchanged number being re-fetched on every render.
+_CORPUS_TTL_SECONDS = 300
+
+
+@lru_cache(maxsize=4)
+def _open_corpus(markets: tuple[str, ...], _bucket: int) -> tuple[dict, ...]:
+    """The open corpus for `markets`, paged to exhaustion, memoised for `_CORPUS_TTL_SECONDS`.
+
+    `_bucket` is `time() // TTL` — the whole expiry mechanism, and the reason this is an
+    `lru_cache` rather than a hand-rolled one: a new bucket is a cache miss, and `maxsize`
+    evicts the old snapshot. Keyed on markets rather than workspace, because the corpus is
+    shared: two workspaces in the same market read identical rows.
+
+    Terms are deliberately NOT part of the key. The corpus is cached; reach is recomputed on
+    every call, so a user editing their keywords sees the new reach immediately — which is the
+    entire purpose of this screen.
+
+    Measured 2026-09-17 against a 1,251-row open Indian corpus: 242,218 bytes per render, and
+    `/capability` is `force-dynamic` with no cache, so every render paid it again. The
+    projection is already minimal (`title,category_codes`); the repetition was what was left.
+    """
+    corpus: list[dict] = []
+    offset = 0
+    while True:
+        page = db.get_opportunities(
+            limit=RECOMPUTE_WINDOW, markets=list(markets), open_only=True, offset=offset,
+            select="title,category_codes",
+        )
+        corpus.extend(page)
+        if len(page) < RECOMPUTE_WINDOW:
+            break
+        offset += RECOMPUTE_WINDOW
+    return tuple(corpus)
+
+
 @router.get("/api/capability/vocabulary")
 async def capability_vocabulary(user: CurrentUser) -> dict:
     """The terms gating the feed, with where each came from and how far each reaches.
@@ -305,11 +346,12 @@ async def capability_vocabulary(user: CurrentUser) -> dict:
 
     Two things this endpoint deliberately does NOT do, both found live on this same branch:
 
-    - Cap the read at one page. `db.get_opportunities` pages to exhaustion here exactly as
+    - Cap the read at one page. `_open_corpus` pages to exhaustion exactly as
       `recompute_matches` does, reusing its `RECOMPUTE_WINDOW` page size — an uncapped-looking
       `limit=1000` silently truncated the India corpus to its closed-first slice until
       2026-09-14 (known-pitfalls), and an instrument built to catch a term matching nothing
-      must not itself be reading a truncated corpus.
+      must not itself be reading a truncated corpus. (The loop moved into `_open_corpus` on
+      2026-09-17 so it could be memoised; paging to exhaustion is unchanged.)
     - Re-tokenize per term. `keyword_relevance(o, [term])` in a loop over N terms re-parses the
       same title/category text N times; `keyword_reach` tokenizes each row once and checks
       every term against it. Measured on a synthetic 31-term × 1,000-row corpus with realistic
@@ -320,26 +362,20 @@ async def capability_vocabulary(user: CurrentUser) -> dict:
     - Pull every column. `keyword_reach` reads exactly `title` and `category_codes` — it
       deliberately does NOT read `authority` (a term matching only the buying authority's name
       is real evidence for `keyword_relevance`'s band but must not count as reach here; see its
-      docstring). This page is `force-dynamic` with no cache, so every render of `/capability`
-      re-pulls the corpus; at this project's measured row size a `select=*` over a few thousand
-      rows is megabytes of columns nothing here touches.
+      docstring). At this project's measured row size a `select=*` over a few thousand rows is
+      megabytes of columns nothing here touches.
+    - Re-read the corpus on every render. The page is still `force-dynamic` with no cache, so
+      it used to: measured 2026-09-17 against a 1,251-row open Indian corpus, 242,218 bytes
+      per render and byte-identical on the second. `_open_corpus` memoises the rows for five
+      minutes — the corpus changes three times a day — while reach stays uncached, so editing
+      a keyword still answers immediately.
     """
     def work() -> dict:
         terms = capability_terms(user.workspace_id)
         term_strings = [t.term for t in terms]
         markets = db.get_workspace_markets(user.workspace_id)
 
-        corpus: list[dict] = []
-        offset = 0
-        while True:
-            page = db.get_opportunities(
-                limit=RECOMPUTE_WINDOW, markets=markets, open_only=True, offset=offset,
-                select="title,category_codes",
-            )
-            corpus.extend(page)
-            if len(page) < RECOMPUTE_WINDOW:
-                break
-            offset += RECOMPUTE_WINDOW
+        corpus = _open_corpus(tuple(markets), int(time.time()) // _CORPUS_TTL_SECONDS)
 
         reach = dict.fromkeys(term_strings, 0)
         for opportunity in corpus:
