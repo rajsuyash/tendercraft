@@ -389,6 +389,210 @@ on or about 2026-10-20 over the trailing 21 days:
 Any one failing means stay on Pro, and the ledger says why. Either outcome is a success; the
 failure mode is deciding without it.
 
+## Downgrading Supabase to Free, and how to know whether to
+
+The org went to Pro for one billing cycle on 2026-09-17 so this decision could be made from a
+ledger instead of a feeling. Plan: `docs/plan/2026-09-17-supabase-free-tier-plan.md`. Every
+published fact below was read off Supabase's own pages on 2026-09-17 and is quoted; where a
+page does not answer the question, this says so rather than guessing. `$P` and `$E` are the
+project and engine URL from *Redeploy* above.
+
+### 1. When
+
+| Date | What |
+|---|---|
+| **on or about 2026-10-20** | Read §2, fill every row, decide. |
+| **2026-10-24** | The Pro cycle ends. Downgrading after this bills a second month. |
+
+Four days of slack, deliberately — enough to re-read a figure that looks wrong. The downgrade
+itself is self-serve and takes a minute, so the window buys thinking time and nothing else.
+
+### 2. What to read, exactly
+
+Four rows, four instruments. **A blank row is an undecided decision, not a pass.**
+
+| # | Measure | Bar (plan §1) | Measured | Verdict |
+|---|---|---|---|---|
+| 1 | Egress, projected per 30-day cycle | ≤ 3.5 GB | `[ledger: egress GB, 21-day trailing → fill 2026-10-20]` | ☐ pass ☐ fail |
+| 2 | Database size | ≤ 300 MB | `[ledger: database MB → fill 2026-10-20]` | ☐ pass ☐ fail |
+| 3 | Database growth | < 2 MB/day | `[ledger: database MB/day → fill 2026-10-20]` | ☐ pass ☐ fail |
+| 4 | Pro-only add-ons in use | none | `[ledger: add-ons in use → fill 2026-10-20]` | ☐ pass ☐ fail |
+
+**Engineering-session days count.** A number that only holds when nobody is working on the
+product is not a number.
+
+#### Row 1 — egress
+
+Both instruments are set out under *Reading the egress ledger* above: the log query totals the
+cycle across every instance, the accumulator reports today on one of them. Read both.
+
+```bash
+gcloud logging read \
+  'resource.labels.service_name="tendercraft-engine-eu" jsonPayload.message="supabase egress"' \
+  --project=$P --freshness=21d --format='value(jsonPayload.bytes)' | paste -sd+ | bc
+```
+
+Project it: `bytes × 30 / 21`. Cloud Logging's default retention is 30 days, so a 21-day window
+sits inside it — but if the oldest line returned is newer than 21 days, the base is shorter than
+you asked for and the projection has to say so.
+
+The by-table and by-route split, and the deep database probe in the same response, come from
+`GET /internal/cron/health` — the call is in *The in-process accumulator* above.
+
+#### Rows 2 and 3 — database size and growth
+
+One read over `pg_database_size`, through the Management API. That is the transport
+`tools/apply-migration.sh` uses, and both of its gotchas apply unchanged: the User-Agent header
+(Cloudflare 403s a default script UA) and the error **body**, which carries the Postgres message
+the status line does not.
+
+```bash
+set -a; . ./.env; set +a
+REF="$(printf '%s' "$NEXT_PUBLIC_SUPABASE_URL" | sed -E 's#https://([^.]+)\..*#\1#')"
+
+printf '%s' '{"query":"select pg_size_pretty(pg_database_size(current_database())) as db_size, pg_database_size(current_database()) as bytes;"}' \
+| curl -sS -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
+    -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" \
+    --data-binary @-
+```
+
+The dashboard SQL editor runs the same statement if you would rather not source `.env`.
+
+**Row 3 needs two readings, and nothing in this repo keeps a size history.** Take a baseline now
+and record it here, or 2026-10-20 has nothing to subtract from:
+
+- baseline `[ledger: database MB, baseline → fill on first reading]`,
+  taken `[ledger: baseline date → fill on first reading]`
+- 55 MB immediately after the 2026-09-14 vacuum, for reference (`docs/known-pitfalls.md`).
+
+#### Row 4 — Pro-only add-ons
+
+The org billing page lists every active add-on with its price and is the single authority:
+
+- <https://supabase.com/dashboard/org/_/billing>
+
+Confirm per project too, and **check both projects** — the wall (F13) means there are two:
+
+| Add-on | Page |
+|---|---|
+| Daily backups | <https://supabase.com/dashboard/project/_/database/backups/scheduled> |
+| Point-in-Time Recovery | <https://supabase.com/dashboard/project/_/database/backups/pitr> |
+| Compute size and disk | <https://supabase.com/dashboard/project/_/settings/infrastructure> |
+| Custom domain | <https://supabase.com/dashboard/project/_/settings/general> |
+
+### 3. What changes on Free, concretely
+
+Read off <https://supabase.com/pricing> and the docs pages it links, on 2026-09-17.
+
+| What | Free | Pro | What it means here |
+|---|---|---|---|
+| Egress | "5 GB egress" and "5 GB cached egress" | "250 GB egress (then $0.09 per GB)" | The vendor notice that started this quoted 5.5 GB; the published number is 5 GB. The 3.5 GB bar clears either. Egress counts "Database, Auth, Storage, Edge Functions, Realtime and Log Drains" — the ledger sees only PostgREST, so read it as a floor. |
+| Database size | "500 MB database size (Shared CPU • 500 MB RAM)" | "8 GB disk size per project included, then $0.125 per GB" | 55 MB after the 2026-09-14 vacuum. Row 2's bar is 300 MB. |
+| Compute | Nano, $0 | "Pro and Team plans include Micro compute in the base price" | **Confirm on the billing page.** The docs cover the upward direction only — "You cannot launch Nano instances on paid plans, only Micro and above - but you might have Nano instances after upgrading from Free Plan" — and say nothing about what a Micro becomes on the way down. |
+| Automatic backups | "Not included" | "7 days" | Free gets none. The docs tell free projects to "regularly export their data using the Supabase CLI `db dump` command". **Nothing in this repo does that today**; on Free it becomes ours to schedule. |
+| Point-in-Time Recovery | "Not included" | "$100 per month per 7 days retention" | An add-on on top of Pro, not part of it. Not in use — row 4 confirms. |
+| Supabase log retention | "1 day" | "7 days" | Does not touch the egress ledger, which lives in Cloud Logging. It does mean a Supabase-side incident older than a day cannot be reconstructed from their logs. |
+| Custom domain | "Not included" | "$10 per domain per month per project add on" | "Custom domains are available as a paid add-on for projects on a paid plan". Not in use. |
+| Inactivity pause | "Free projects are paused after 1 week of inactivity" | not paused | The operational change. See below. |
+| Active projects | "Limit of 2 active projects" | — | "You are entitled to two active free projects. **Paused projects do not count towards your quota.**" So the paused evaluate project costs neither money nor a slot — but resuming it takes the second of two, and there is no third. |
+
+#### The pause is the change that actually bites
+
+"A Free plan project is considered inactive if it does not receive sufficient user database
+activity over the past week", and "Typically a few user requests to the database each day over
+the previous week is enough to keep the project from being paused."
+
+That is what the two `supabase-keepalive` jobs are for (*Supabase keepalive (free tier)*,
+below). **That section says to delete both jobs when the projects move to Pro.** If that was
+done, they must be recreated *before* the downgrade — the inactivity clock starts when the plan
+changes, not when someone remembers.
+
+```bash
+gcloud scheduler jobs list --project=$P --location=europe-west1
+```
+
+Measured 2026-09-17: both still exist, since workstream F set a retry policy on all five jobs.
+Confirm anyway. It is one command, and what it catches is a paused production database.
+
+If one ever does pause: "Open the Supabase Dashboard" → "Select the organization, followed by
+the paused project" → "Click **Resume project** and confirm". How long a pause stays reversible
+is **not settled by the published pages**: the docs say "there is a 1-year window to restore the
+project on the platform from within Supabase Studio", while a 2024-06-24 changelog entry says
+paused Free projects are restorable for 90 days. Do not let it pause.
+
+### 4. How to downgrade
+
+1. Open <https://supabase.com/dashboard/org/_/billing>.
+2. Click **Change subscription plan**.
+3. Select the Free Plan.
+
+Published, verbatim:
+
+- "The cancellation is immediate."
+- "any prepaid subscription fee will be credited back to your organization for unused time in
+  the billing cycle. These credits do not expire and will be applied to future invoices"
+- "you will also be charged for any excessive usage in the billing cycle"
+
+That last line is why row 1 is read *before* clicking: a cycle that went over on egress is
+billed on the way out, and the downgrade does not forgive it.
+
+**Does the running project blip?** The published docs do not say. Nothing on the subscription,
+pricing, compute or pausing pages mentions downtime, a restart or a dropped connection during a
+plan change. Treat it as unknown — downgrade outside the customer's working hours, with §5 open.
+
+Before clicking:
+
+- [ ] Rows 1–4 filled in and passing, with the ledger output pasted into this file.
+- [ ] Both keepalive jobs present.
+- [ ] A dump taken and stored off-site. The last Pro daily backup is the last automatic backup
+      there will be.
+
+```bash
+supabase db dump --linked --file "backup-$(date -u +%Y%m%d).sql"
+```
+
+### 5. The morning after
+
+Four checks, in this order. Each fails differently, which is the point.
+
+1. **The database answers.** Not `/health` — that returns 200 through a quota block and a pause
+   alike.
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' "$E/health/deep"
+   ```
+
+   200 is healthy. 503 carries `DB_UNHEALTHY` and the upstream status in the envelope.
+
+2. **A scheduled sweep completed.** The accumulator must show bytes against `opportunities`; a
+   sweep that ran and read nothing is exactly what this catches.
+
+   ```bash
+   TOKEN=$(gcloud auth print-identity-token --audiences="$E")
+   curl -s -H "Authorization: Bearer $TOKEN" "$E/internal/cron/health" \
+     | jq '.data.egress.bytes, .data.egress.by_table'
+   ```
+
+3. **The customer can sign in.** Open the web service and complete a real sign-in. Auth is a
+   separate Supabase surface from PostgREST and returned its own 402 during the block, so check
+   1 passing does not cover it.
+
+4. **The first full day is under budget.** 3.5 GB over 30 days is **0.117 GB — about 117 MB — a
+   day**. Run row 1's query with `--freshness=24h` and compare. One day over is information, not
+   a verdict; three in a row is the ledger telling you to go back to Pro.
+
+### 6. When NOT to downgrade
+
+Staying on Pro is not a failure of this exercise. Plan §1 is explicit that either outcome is a
+success and that the only failure is deciding without the ledger — so if any row in §2 fails,
+stay, and write the failing number in it; that is the plan working, not a setback. There is also
+one reason to stay that no row measures: **a customer contract that requires daily backups or
+point-in-time recovery.** Free has neither, and a `db dump` on a cron is not the same commitment
+as a vendor's retention guarantee. If such a clause exists or is being negotiated, Pro is the
+answer whatever the egress says, and that is the owner's call rather than a number's.
+
 ## Inbound email (UML ask 4)
 
 `POST /api/inbound/email` accepts a forwarded GeM message, files it, and raises a `bid_action`
