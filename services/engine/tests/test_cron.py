@@ -11,7 +11,7 @@ import jwt
 import pytest
 from fastapi.testclient import TestClient
 
-from app import cron_auth, cron_routes, db, notify_service
+from app import cron_auth, cron_routes, db, main, notify_service
 from app.main import create_app
 
 AUDIENCE = "https://engine.test"
@@ -160,15 +160,26 @@ def test_watch_sweeps_watching_workspaces_under_the_portal_budget(client, google
     assert calls == [("w1", cron_routes._WATCH_LIMIT)]
 
 
-def test_health_reports_the_caller_without_doing_any_work(client, google, monkeypatch):
+def test_health_reports_the_caller_without_doing_the_jobs(client, google, monkeypatch):
+    """It reads one row and counts two opt-ins. It must never SEND or sweep anything.
+
+    Since 2026-09-17 it also carries the database probe and the egress ledger — a quota block
+    has to surface as a failing check, not as a vendor email two days later. That probe is one
+    `limit=1` read; the jobs themselves still only run on their own endpoints.
+    """
     monkeypatch.setattr(db, "list_notifying_workspaces", lambda: ["w1", "w2"])
     monkeypatch.setattr(db, "list_watching_workspaces", lambda: ["w1"])
     monkeypatch.setattr(notify_service, "dispatch_digest",
                         lambda ws: pytest.fail("health must not send anything"))
+    monkeypatch.setattr(main, "_probe_database",
+                        lambda: {"healthy": True, "status": 200, "detail": "ok"})
 
     body = client.get("/internal/cron/health", headers=_auth(google())).json()["data"]
 
-    assert body == {"caller": CALLER, "notifying_workspaces": 2, "watching_workspaces": 1}
+    assert body["caller"] == CALLER
+    assert (body["notifying_workspaces"], body["watching_workspaces"]) == (2, 1)
+    assert body["database"]["healthy"] is True
+    assert set(body["egress"]) == {"day", "calls", "bytes", "by_table", "by_route"}
 
 
 # ---------- the fan-out queries ----------

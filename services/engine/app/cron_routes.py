@@ -20,12 +20,12 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, Response
 from starlette.concurrency import run_in_threadpool
 
-from . import db, notify_service
+from . import db, http, notify_service
 from .cron_auth import verify_cron_caller
-from .envelope import ApiError, ok
+from .envelope import ok
 
 log = logging.getLogger(__name__)
 
@@ -142,16 +142,36 @@ async def cron_sweep(authorization: str | None = Header(default=None)) -> dict:
 
 
 @router.get("/internal/cron/health")
-async def cron_health(authorization: str | None = Header(default=None)) -> dict:
-    """Prove the scheduler's identity reaches this service, without doing any work.
+async def cron_health(response: Response,
+                      authorization: str | None = Header(default=None)) -> dict:
+    """Prove the scheduler's identity reaches this service — and report the two numbers that
+    otherwise only surface as an incident.
 
     Exists so a misconfigured `CRON_AUDIENCE` is a one-request diagnosis instead of being
-    discovered as an unexplained absence of emails a week later.
+    discovered as an unexplained absence of emails a week later. Since 2026-09-17 it also
+    carries the database probe and the egress ledger (`docs/deploy.md`, "Reading the egress
+    ledger"): Supabase blocked this project's API for two days and the first anyone knew was
+    a quota email, because nothing counted the bytes and nothing checked a query.
+
+    Unhealthy answers 503 so the scheduler's own failure count is the alarm — and still
+    returns the payload, because a check that fails without saying how much egress preceded
+    it makes you go looking in a second place.
     """
-    try:
-        caller = verify_cron_caller(authorization)
-    except ApiError:
-        raise
-    return ok({"caller": caller,
-               "notifying_workspaces": len(await run_in_threadpool(db.list_notifying_workspaces)),
-               "watching_workspaces": len(await run_in_threadpool(db.list_watching_workspaces))})
+    # Imported here, not at module scope: `main` imports this router, so a top-level import
+    # would be a cycle that only fails once the app is built.
+    from .main import _probe_database
+
+    caller = verify_cron_caller(authorization)
+    probe, notifying, watching = (
+        await run_in_threadpool(_probe_database),
+        len(await run_in_threadpool(db.list_notifying_workspaces)),
+        len(await run_in_threadpool(db.list_watching_workspaces)),
+    )
+    payload = {"caller": caller, "database": probe, "egress": http.egress_snapshot(),
+               "notifying_workspaces": notifying, "watching_workspaces": watching}
+    if not probe["healthy"]:
+        response.status_code = 503
+        # The envelope, with the diagnosis kept in `data` — see the docstring.
+        return {"ok": False, "data": payload,
+                "error": {"code": "DB_UNHEALTHY", "message": probe["detail"]}}
+    return ok(payload)

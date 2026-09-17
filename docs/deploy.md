@@ -209,6 +209,88 @@ Both endpoints exist so a schedule can call what a button already calls — the 
 threshold of its own. A scheduled run and a user pressing *Check watched bids* must produce
 the same outcome, or only one of the two paths is the one that gets tested.
 
+## Reading the egress ledger
+
+**Why this exists.** On 2026-09-17 the org hit **12.89 GB of Supabase egress against a 5.5 GB
+Free quota** and the API started answering 402 to every request. The first anyone knew was a
+vendor email, because nothing in the engine counted a byte and `/health` answers 200 whatever
+the database is doing. Both halves of that are fixed here.
+
+**Bytes RECEIVED is what Supabase bills.** Bytes sent are nearly free, so the ledger counts
+`len(resp.content)` on every PostgREST response and nothing else.
+
+### The per-call log line
+
+`app/db.py::_rest` logs one INFO per query through the `tendercraft.egress` logger, JSON-shaped
+so Cloud Logging parses it. Table names and byte counts only — never a row, never a header:
+
+```json
+{"severity":"INFO","message":"supabase egress","logger":"tendercraft.egress",
+ "method":"GET","table":"opportunities","route":"POST /internal/cron/sweep",
+ "bytes":1216544,"day_bytes":5980233,"day_calls":412}
+```
+
+`route` is the request path with identifying segments collapsed (`GET /api/tenders/{id}/analysis`),
+so the by-route table stays bounded however many tenders exist.
+
+**None of this shipped until `LOG_LEVEL` did.** The engine had no logging configuration, so the
+root logger sat at WARNING and no `logger.info` line in this codebase had ever reached Cloud
+Logging — seven days of logs held zero, checked against a positive control. `LOG_LEVEL` defaults
+to INFO; set it to WARNING to silence the ledger, and know that silences the cost line too.
+
+A day's total, across every instance:
+
+```bash
+gcloud logging read \
+  'resource.labels.service_name="tendercraft-engine-eu" jsonPayload.message="supabase egress"' \
+  --project=$P --freshness=24h --format='value(jsonPayload.bytes)' | paste -sd+ | bc
+```
+
+### The in-process accumulator
+
+`GET /internal/cron/health` (already OIDC-gated, same caller as the three jobs) returns today's
+ledger — bytes, calls, by table and by route, biggest first — alongside a **deep** database
+probe:
+
+```bash
+TOKEN=$(gcloud auth print-identity-token --audiences="$ENGINE_URL")
+curl -s -H "Authorization: Bearer $TOKEN" "$ENGINE_URL/internal/cron/health" | jq .data
+```
+
+Two things to know before reading the number:
+
+- **It is per container, and Cloud Run scales to zero.** The accumulator answers "today, on
+  this instance"; the log query above answers "this cycle, across all of them". Reconciling the
+  two is how you notice an instance you did not know about.
+- **It rolls over at UTC midnight**, not IST. The Supabase quota cycle is UTC too.
+
+### The health checks, and which is which
+
+| Endpoint | Touches the database | Point it at |
+|---|---|---|
+| `GET /health` | **No** — by design (EC-6: deterministic screens stay up when Supabase is down) | Cloud Run readiness, the post-deploy warm-up curl |
+| `GET /health/deep` | Yes — one `limit=1` row, reports the upstream status code | an uptime check you want to page on |
+| `GET /internal/cron/health` | Yes, plus the ledger | Cloud Scheduler |
+
+Anything but a 2xx from PostgREST is unhealthy and answers **503**, so a quota block shows up as
+a failing check the same hour instead of an email two days later. `cron/health` still returns
+its payload on the 503 — a check that fails without saying how much egress preceded it sends you
+looking in a second place.
+
+### The thresholds this is measured against
+
+From `docs/plan/2026-09-17-supabase-free-tier-plan.md` §1 — the bar for going back to Free, read
+on or about 2026-10-20 over the trailing 21 days:
+
+| Measure | Bar | Note |
+|---|---|---|
+| Egress | **≤ 3.5 GB** projected per 30-day cycle | 35% margin under the 5.5 GB Free quota, **with engineering-session days included**. A number that only holds when nobody is working on the product is not a number. |
+| Database size | **≤ 300 MB**, growing < 2 MB/day | Free's limit is 500 MB. It was 55 MB after the 2026-09-14 vacuum. |
+| Pro-only features | none in use | PITR, extended backups, larger compute, custom domain. |
+
+Any one failing means stay on Pro, and the ledger says why. Either outcome is a success; the
+failure mode is deciding without it.
+
 ## Inbound email (UML ask 4)
 
 `POST /api/inbound/email` accepts a forwarded GeM message, files it, and raises a `bid_action`
@@ -283,6 +365,8 @@ no users since July, while the bidder project stayed warm on connector traffic. 
 recognise, because it does not look like a pause — DNS resolves normally and Cloudflare
 answers, so you get **502 on `/auth/v1/*` and 521 on `/rest/v1/*`**, and both Cloud Run
 services still return 200 on `/health` because that handler never touches the database.
+(`GET /health/deep` is the one that does — see *Reading the egress ledger* above. It was added
+after a quota block produced exactly this symptom for two days.)
 Resume is a dashboard click; a keepalive prevents the pause but cannot undo one.
 
 **Delete both jobs when the projects move to Pro.** Pro does not pause, and a keepalive
