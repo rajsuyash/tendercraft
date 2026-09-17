@@ -209,6 +209,104 @@ Both endpoints exist so a schedule can call what a button already calls — the 
 threshold of its own. A scheduled run and a user pressing *Check watched bids* must produce
 the same outcome, or only one of the two paths is the one that gets tested.
 
+### Pausing and un-pausing the digest
+
+Pause `tendercraft-alert-digest` while it has nothing to do: it fires eleven times a day and,
+as of 2026-09-17, no workspace has alerts switched on and the engine service carries no mail
+key — so every run selects zero workspaces and sends zero mail.
+
+```bash
+gcloud scheduler jobs pause tendercraft-alert-digest \
+  --project=resonant-tube-280016 --location=europe-west1
+```
+
+**Both** of the following must hold before resuming. Either one alone still produces a no-op.
+
+1. **At least one workspace has alerts on.** `db.list_alerting_workspaces` reads
+   `notification_settings` where `enabled is true`; an empty result is the whole digest.
+
+   ```bash
+   supabase db query --linked \
+     "select workspace_id from public.notification_settings where enabled;"
+   ```
+
+2. **The engine can send.** `app/mailer.py` reads `RESEND_API_KEY` and `RESEND_FROM`. With the
+   key unset the digest reports "this deployment cannot send"; with `RESEND_FROM` unset it
+   falls back to `onboarding@resend.dev`, a Resend test address and not a sender a customer
+   digest may use. Read the service's environment:
+
+   ```bash
+   gcloud run services describe tendercraft-engine-eu \
+     --project=resonant-tube-280016 --region=europe-north1 \
+     --format='value(spec.template.spec.containers[0].env[].name)'
+   ```
+
+   Measured 2026-09-17: neither name is present. Add them with `--update-env-vars`, never
+   `--set-env-vars`, which replaces the whole environment (`docs/known-pitfalls.md`); the key
+   belongs in Secret Manager beside the other two.
+
+```bash
+gcloud scheduler jobs resume tendercraft-alert-digest \
+  --project=resonant-tube-280016 --location=europe-west1
+```
+
+### Retry policy
+
+Baseline, read off the live jobs on 2026-09-17:
+
+```bash
+for J in tendercraft-sweep tendercraft-alert-digest tendercraft-stage-watch; do
+  printf '%s ' "$J"
+  gcloud scheduler jobs describe "$J" \
+    --project=resonant-tube-280016 --location=europe-west1 \
+    --format='value(retryConfig)'
+done
+```
+
+| Job | retryCount | minBackoff | maxBackoff | maxDoublings | maxRetryDuration |
+|---|---:|---|---|---:|---|
+| `tendercraft-sweep` | 1 | 5s | 3600s | 5 | 0s |
+| `tendercraft-alert-digest` | **2** | 5s | 3600s | 5 | 0s |
+| `tendercraft-stage-watch` | 1 | 5s | 3600s | 5 | 0s |
+
+`retryCount` counts retries, not attempts, so the digest makes three calls per trigger — which
+is the three `POST /internal/cron/digest` inside one minute that the engine log shows at
+12:00 UTC on 2026-09-17, under the quota block. The other two already retry once; the commands
+below make the policy explicit on all three and widen the backoff.
+
+```bash
+for J in tendercraft-sweep tendercraft-alert-digest tendercraft-stage-watch; do
+  gcloud scheduler jobs update http "$J" \
+    --project=resonant-tube-280016 --location=europe-west1 \
+    --max-retry-attempts=1 --min-backoff=60s --max-backoff=60s
+done
+```
+
+Every failure these jobs actually have is one a second attempt cannot fix: a quota block lasts
+until someone pays or the cycle rolls over, a database outage lasts minutes, a bad deploy lasts
+until the next deploy. A 502 thirty seconds after a 502 carries no new information and costs a
+scheduler log line, and under a quota block those lines are most of what the log contains —
+which is the expensive part, because the real signal is in there with them. One retry covers
+the only case retrying helps: a dropped connection or a cold instance. Setting the policy on a
+paused job is harmless and does not resume it.
+
+### What a quota block looks like from the engine
+
+Recorded 2026-09-17, when the Supabase org exceeded its Free egress quota and the API was
+blocked:
+
+- `GET /health` returns **200**. It touches nothing but the process.
+- PostgREST and Auth return **402** to every request.
+- Every `POST /internal/cron/*` returns **502**: the handler's first read raises.
+- Cloud Run monitoring stays green throughout. The container is healthy; what is behind it is
+  not. Nothing goes red, no alert fires, and the first notification is a vendor email.
+
+The shallow `/health` is why this was invisible — it answers a question nobody was asking.
+`/health/deep` is being added for exactly this case (workstream A of
+`docs/plan/2026-09-17-supabase-free-tier-plan.md`): a check that fails when the database is
+unreachable, so a quota block surfaces on the schedule instead of two days later by email.
+Cloud Run's readiness probe stays on the shallow one.
+
 ## Inbound email (UML ask 4)
 
 `POST /api/inbound/email` accepts a forwarded GeM message, files it, and raises a `bid_action`
