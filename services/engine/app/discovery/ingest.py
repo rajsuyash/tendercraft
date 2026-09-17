@@ -191,13 +191,15 @@ def refresh_corpus(
                 params["market"] = market
         data = _connector("/opportunities", params, base=source.connector_url)
         rows = [_to_row(r) for r in data.get("records", []) if r.get("portal_ref_no")]
+        # A count, not the rows: the upsert asks PostgREST for `return=minimal` so a sweep
+        # does not pay ~2 MB of egress to echo back a corpus nobody reads here.
         stored = db.upsert_opportunities(rows)
         total = data.get("portal_total_ongoing") or total
         pages += data.get("pages_fetched", 0)
-        upserted += len(stored)
+        upserted += stored
         log.info(
             "discovery[%s/%s]: swept %d pages, upserted %d rows",
-            market, source.source_id, data.get("pages_fetched", 0), len(stored),
+            market, source.source_id, data.get("pages_fetched", 0), stored,
         )
     return {"market": market, "portal_total_ongoing": total,
             "pages_fetched": pages, "upserted": upserted}

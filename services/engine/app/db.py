@@ -29,6 +29,22 @@ def _headers() -> dict[str, str]:
     return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
 
+# --- The `prefer` contract, for every write below ------------------------------------------
+#
+# PostgREST's OWN default for a write is `return=minimal` — "With `Prefer: return=minimal`, no
+# response body will be returned. This is the default mode for all write requests."
+# (https://docs.postgrest.org/en/v13/references/api/preferences.html). `_rest` overrides that
+# with `return=representation`, so a POST/PATCH/DELETE that passes no `prefer` echoes every
+# written row back, and Supabase bills those bytes.
+#
+# Two consequences a reader needs before editing anything here:
+#
+#   * A call passing `prefer="resolution=merge-duplicates"` alone names no `return=`, so it
+#     gets PostgREST's minimal — correct today and NOT an oversight. Leave it.
+#   * The default is NOT flipped, deliberately. A write that silently starts answering `[]` to
+#     a caller reading `rows[0]["id"]` is a production 500 that ships green, so each call site
+#     opts in instead: `prefer="return=minimal"` where the result is discarded, and a comment
+#     naming the consumer where it is kept. `tests/test_write_prefer.py` pins both halves.
 def _rest(
     method: str, path: str, *, params: dict | None = None, json: Any = None,
     prefer: str = "return=representation",
@@ -67,6 +83,9 @@ def get_tender(tender_id: str, workspace_id: str) -> dict | None:
 
 
 def insert_criteria(workspace_id: str, tender_id: str, criteria: list[dict]) -> list[dict]:
+    # Representation kept: `tenders.add_criteria` returns the created rows (the caller needs
+    # the server-assigned ids), and `_process_ingest` feeds them to `spec_service`. Two of the
+    # three call sites discard it, so narrowing this means splitting the function, not a header.
     payload = [{**c, "workspace_id": workspace_id, "tender_id": tender_id} for c in criteria]
     return _rest("POST", "criteria", json=payload) or []
 
@@ -86,6 +105,8 @@ def get_criteria(tender_id: str, workspace_id: str) -> list[dict]:
 
 
 def confirm_criterion(criterion_id: str, workspace_id: str) -> list[dict]:
+    # Representation kept: `tenders.confirm_criterion` 404s on an empty result — the echo is
+    # how a criterion belonging to another workspace is told apart from one that was patched.
     return _rest(
         "PATCH", "criteria",
         params={"id": f"eq.{criterion_id}", "workspace_id": f"eq.{workspace_id}"},
@@ -99,6 +120,9 @@ def set_criterion_kind(criterion_id: str, workspace_id: str, kind: str | None) -
     Sent as an explicit null rather than omitted, because clearing an override is the whole
     point of being able to set one — the `{k: v for ... if v is not None}` filter that would
     strip it is a defect this repo has already shipped once (PATCH /api/opportunities/{id}).
+
+    Representation kept: `tenders.set_kind` 404s on an empty result, so the echo is the
+    workspace check's answer, not a convenience.
     """
     return _rest(
         "PATCH", "criteria",
@@ -121,6 +145,7 @@ def save_criterion_requirements(workspace_id: str, readings: list[dict]) -> None
             "PATCH", "criteria",
             params={"id": f"eq.{r['id']}", "workspace_id": f"eq.{workspace_id}"},
             json={"requirement": r["requirement"], "requirement_hash": r["requirement_hash"]},
+            prefer="return=minimal",
         )
 
 
@@ -168,6 +193,7 @@ def set_illegible_pages(tender_id: str, workspace_id: str, labels: list[str]) ->
         "PATCH", "tenders",
         params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"illegible_pages": labels},
+        prefer="return=minimal",
     )
 
 
@@ -200,6 +226,7 @@ def set_tender_locked(tender_id: str, workspace_id: str, locked_at: str) -> None
         "PATCH", "tenders",
         params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"status": "locked", "locked_at": locked_at},
+        prefer="return=minimal",
     )
 
 
@@ -345,6 +372,7 @@ def save_proposal_outline(workspace_id: str, proposal_id: str, outline: dict) ->
         "PATCH", "proposals",
         params={"id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"outline": outline},
+        prefer="return=minimal",
     )
 
 
@@ -362,6 +390,7 @@ def set_section_included(
         params={"proposal_id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}",
                 "key": f"eq.{key}"},
         json={"included": included},
+        prefer="return=minimal",
     )
 
 
@@ -398,6 +427,7 @@ def approve_section(
             "key": f"eq.{key}",
         },
         json={"approved_by": approver, "approved_at": when_iso},
+        prefer="return=minimal",
     )
 
 
@@ -406,6 +436,7 @@ def set_proposal_status(proposal_id: str, workspace_id: str, status: str) -> Non
         "PATCH", "proposals",
         params={"id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"status": status},
+        prefer="return=minimal",
     )
 
 
@@ -484,6 +515,7 @@ def mark_exported(proposal_id: str, workspace_id: str, when_iso: str) -> None:
         "PATCH", "proposals",
         params={"id": f"eq.{proposal_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"status": "exported", "exported_at": when_iso},
+        prefer="return=minimal",
     )
 
 
@@ -634,6 +666,7 @@ def set_member_role(user_id: str, workspace_id: str, role: str) -> None:
         "PATCH", "workspace_members",
         params={"user_id": f"eq.{user_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"role": role},
+        prefer="return=minimal",
     )
 
 
@@ -641,6 +674,7 @@ def remove_workspace_member(user_id: str, workspace_id: str) -> None:
     _rest(
         "DELETE", "workspace_members",
         params={"user_id": f"eq.{user_id}", "workspace_id": f"eq.{workspace_id}"},
+        prefer="return=minimal",
     )
 
 
@@ -649,6 +683,7 @@ def set_active_workspace(user_id: str, workspace_id: str) -> None:
         "PATCH", "profiles",
         params={"user_id": f"eq.{user_id}"},
         json={"active_workspace_id": workspace_id},
+        prefer="return=minimal",
     )
 
 
@@ -659,6 +694,7 @@ def clear_active_workspace(user_id: str, workspace_id: str) -> None:
         "PATCH", "profiles",
         params={"user_id": f"eq.{user_id}", "active_workspace_id": f"eq.{workspace_id}"},
         json={"active_workspace_id": None},
+        prefer="return=minimal",
     )
 
 
@@ -706,11 +742,13 @@ def create_invitation(workspace_id: str, email: str, role: str, invited_by: str,
         "DELETE", "workspace_invitations",
         params={"workspace_id": f"eq.{workspace_id}", "email": f"eq.{email}",
                 "accepted_at": "is.null"},
+        prefer="return=minimal",
     )
     _rest(
         "POST", "workspace_invitations",
         json={"workspace_id": workspace_id, "email": email, "role": role,
               "invited_by": invited_by, "token_hash": token_hash},
+        prefer="return=minimal",
     )
 
 
@@ -740,6 +778,7 @@ def mark_invitation_accepted(invitation_id: str, user_id: str, when_iso: str) ->
         "PATCH", "workspace_invitations",
         params={"id": f"eq.{invitation_id}"},
         json={"accepted_at": when_iso, "accepted_by": user_id},
+        prefer="return=minimal",
     )
 
 
@@ -768,6 +807,7 @@ def update_project(project_id: str, workspace_id: str, patch: dict) -> None:
         "PATCH", "projects",
         params={"id": f"eq.{project_id}", "workspace_id": f"eq.{workspace_id}"},
         json=patch,
+        prefer="return=minimal",
     )
 
 
@@ -833,6 +873,7 @@ def set_tender_project(tender_id: str, workspace_id: str, project_id: str | None
         "PATCH", "tenders",
         params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"project_id": project_id},
+        prefer="return=minimal",
     )
 
 
@@ -903,6 +944,7 @@ def set_past_bid_outcome(past_bid_id: str, workspace_id: str, outcome: str) -> N
         "PATCH", "past_bids",
         params={"id": f"eq.{past_bid_id}", "workspace_id": f"eq.{workspace_id}"},
         json={"outcome": outcome},
+        prefer="return=minimal",
     )
 
 
@@ -965,7 +1007,11 @@ def get_answer(answer_id: str, workspace_id: str) -> dict | None:
 def record_answer_usage(
     workspace_id: str, answer_id: str, proposal_id: str | None, target: str, actor: str | None,
 ) -> dict:
-    """The G-AC6 receipt. Written by the accept path and by nothing else."""
+    """The G-AC6 receipt. Written by the accept path and by nothing else.
+
+    Representation kept: `reuse_routes.accept` returns the receipt's id to the caller — the
+    proof that no suggestion entered a draft unaccepted has to name the row it wrote.
+    """
     rows = _rest(
         "POST", "answer_usages",
         json={"workspace_id": workspace_id, "answer_id": answer_id,
@@ -1071,6 +1117,7 @@ def set_tender_meta(tender_id: str, workspace_id: str, tender_number: str | None
         "PATCH", "tenders",
         params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
         json=patch,
+        prefer="return=minimal",
     )
 
 
@@ -1089,6 +1136,7 @@ def update_tender(tender_id: str, workspace_id: str, patch: dict) -> None:
         "PATCH", "tenders",
         params={"id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
         json=patch,
+        prefer="return=minimal",
     )
 
 
@@ -1109,9 +1157,10 @@ def replace_profile_collection(workspace_id: str, table: str, rows: list[dict]) 
     a diff-based API would need stable client-side ids for rows the user just typed. The
     delete is workspace-scoped, so it can never reach another workspace's rows.
     """
-    _rest("DELETE", table, params={"workspace_id": f"eq.{workspace_id}"})
+    _rest("DELETE", table, params={"workspace_id": f"eq.{workspace_id}"}, prefer="return=minimal")
     if rows:
-        _rest("POST", table, json=[{**r, "workspace_id": workspace_id} for r in rows])
+        _rest("POST", table, json=[{**r, "workspace_id": workspace_id} for r in rows],
+              prefer="return=minimal")
 
 
 def edit_section(workspace_id: str, proposal_id: str, key: str, body_md: str,
@@ -1164,6 +1213,7 @@ def edit_section(workspace_id: str, proposal_id: str, key: str, body_md: str,
             "approved_by": None,
             "approved_at": None,
         },
+        prefer="return=minimal",
     )
 
 
@@ -1203,14 +1253,20 @@ def append_reused_section_text(
             "approved_by": None,
             "approved_at": None,
         },
+        prefer="return=minimal",
     )
 
 
 # --- Module G: compliance matrix + the unmapped-requirement denominator ------------------
 
 
-def insert_unmapped(workspace_id: str, tender_id: str, rows: list[dict]) -> list[dict]:
+def insert_unmapped(workspace_id: str, tender_id: str, rows: list[dict]) -> None:
     """Persist the ingest-time requirement backlog (G-FR2).
+
+    `return=minimal`: both callers (`tenders._process_ingest` and `tenders._ocr_quietly`)
+    discard the result, and these rows carry the full `sentence` text — on a 300-page package
+    that is the whole obligation backlog echoed back for nothing. The backlog is read later
+    through `get_unmapped`, which is the query that exists for it.
 
     on_conflict names workspace_id alongside the natural key: the engine writes with the
     service role, which bypasses RLS, so a conflict target that omits the scope column can
@@ -1224,14 +1280,11 @@ def insert_unmapped(workspace_id: str, tender_id: str, rows: list[dict]) -> list
          "tender_id": tender_id}
         for r in rows
     ]
-    return (
-        _rest(
-            "POST", "matrix_unmapped",
-            params={"on_conflict": "workspace_id,tender_id,document,page,sentence"},
-            json=payload,
-            prefer="return=representation,resolution=merge-duplicates",
-        )
-        or []
+    _rest(
+        "POST", "matrix_unmapped",
+        params={"on_conflict": "workspace_id,tender_id,document,page,sentence"},
+        json=payload,
+        prefer="return=minimal,resolution=merge-duplicates",
     )
 
 
@@ -1250,6 +1303,8 @@ def get_unmapped(tender_id: str, workspace_id: str, only_open: bool = False) -> 
 def resolve_unmapped(
     unmapped_id: str, workspace_id: str, resolution: str, actor: str, when_iso: str
 ) -> list[dict]:
+    # Representation kept: `matrix_routes.resolve` 404s on an empty result and returns the
+    # patched row to the screen.
     return (
         _rest(
             "PATCH", "matrix_unmapped",
@@ -1260,21 +1315,22 @@ def resolve_unmapped(
     )
 
 
-def upsert_matrix_rows(workspace_id: str, tender_id: str, rows: list[dict]) -> list[dict]:
+def upsert_matrix_rows(workspace_id: str, tender_id: str, rows: list[dict]) -> None:
     """Generate-or-refresh matrix rows. Existing human edits survive a regeneration.
 
     merge-duplicates on (workspace_id, tender_id, criterion_id) means re-running generation
     after a corrigendum refreshes the requirement text without wiping owners and statuses.
+
+    `return=minimal`: the sole caller (`matrix_routes.generate_matrix`) discards the result
+    and re-reads through `get_matrix_rows` — which is the correct read anyway, since the echo
+    would omit rows this upsert did not touch.
     """
     payload = [{**r, "workspace_id": workspace_id, "tender_id": tender_id} for r in rows]
-    return (
-        _rest(
-            "POST", "matrix_rows",
-            params={"on_conflict": "workspace_id,tender_id,criterion_id"},
-            json=payload,
-            prefer="return=representation,resolution=merge-duplicates",
-        )
-        or []
+    _rest(
+        "POST", "matrix_rows",
+        params={"on_conflict": "workspace_id,tender_id,criterion_id"},
+        json=payload,
+        prefer="return=minimal,resolution=merge-duplicates",
     )
 
 
@@ -1299,6 +1355,9 @@ def update_matrix_row(row_id: str, tender_id: str, workspace_id: str, patch: dic
     tender_id is in the filter as well as the id: the id arrives from the caller, and a write
     that binds a caller-supplied id without proving it belongs to this tender AND workspace is
     the cross-workspace write this codebase has already been bitten by.
+
+    Representation kept: `matrix_routes.update_row` 404s on an empty result and returns the
+    patched row; one row, and it is also this guard's answer.
     """
     return (
         _rest(
@@ -1319,25 +1378,35 @@ def update_matrix_row(row_id: str, tender_id: str, workspace_id: str, patch: dic
 # decision lives in opportunity_matches, which is RLS'd like everything else.
 
 
-def upsert_opportunities(records: list[dict]) -> list[dict]:
-    """Insert or refresh shared-corpus rows.
+def upsert_opportunities(records: list[dict]) -> int:
+    """Insert or refresh shared-corpus rows. Returns how many were written.
 
     `on_conflict` names BOTH columns of the unique constraint. Omitting one lets a service-role
     merge (which bypasses RLS) rewrite the wrong row — the upsert trap already documented in
     known-pitfalls, and here it would silently rewrite one tender with another's data.
+
+    `return=minimal`, and a COUNT rather than the rows: the sole caller
+    (`discovery/ingest.refresh_corpus`) only ever took `len()` of the result, and a corpus row
+    averages ~1.9 kB — so a 1200-bid GeM sweep was paying ~2 MB of egress three times a day to
+    echo back rows nobody reads. Supabase bills bytes leaving the database.
+
+    The count is `len(records)`, not a number the server reported, and that is exact rather
+    than an estimate: the write is one transaction and `merge-duplicates` inserts or updates
+    every row, so anything short of all of them raises instead of returning. Returning `int`
+    rather than a fabricated list is deliberate — a stand-in list of "stored rows" that is
+    really the rows we SENT is the stub-that-agrees-with-itself pitfall, and the server's
+    defaults (`id`, `created_at`) would be silently missing from it.
     """
     if not records:
-        return []
-    return (
-        _rest(
-            "POST",
-            "opportunities",
-            params={"on_conflict": "source_id,portal_ref_no"},
-            json=records,
-            prefer="resolution=merge-duplicates,return=representation",
-        )
-        or []
+        return 0
+    _rest(
+        "POST",
+        "opportunities",
+        params={"on_conflict": "source_id,portal_ref_no"},
+        json=records,
+        prefer="resolution=merge-duplicates,return=minimal",
     )
+    return len(records)
 
 
 def get_opportunities(
@@ -1426,7 +1495,11 @@ def get_workspace_markets(workspace_id: str) -> list[str]:
 
 
 def set_workspace_markets(workspace_id: str, markets: list[str]) -> list[str]:
-    """Replace the watched set. The caller validates membership and the values."""
+    """Replace the watched set. The caller validates membership and the values.
+
+    Representation kept: `opportunities_routes` returns the STORED markets, not the ones it
+    sent — the point is to report what the database holds. One row.
+    """
     rows = _rest(
         "PATCH",
         "workspaces",
@@ -1626,6 +1699,14 @@ def _count_matches(
             },
             timeout=15,
         )
+        # This is the one PostgREST call in this module that cannot go through `_rest`: the
+        # answer lives in the `Content-Range` HEADER, and `_rest` returns `r.json()` and drops
+        # the response object. So the ledger has to be fed by hand here, or a counter that
+        # runs on every coverage strip spends bytes nothing measures — a quiet consumer is
+        # exactly what the 2026-09-14 quota incident was made of. `Range: 0-0` keeps the body
+        # to at most one row, so the number is small; the point is that it is not zero and
+        # not invisible.
+        http.note_egress("GET", "opportunity_matches", len(r.content))
         r.raise_for_status()
     except httpx.HTTPError as exc:
         raise ApiError(502, "DB_ERROR", f"database request failed: {exc}") from exc
@@ -1907,6 +1988,8 @@ def count_eligible(
 def set_match_flags(
     workspace_id: str, opportunity_id: str, patch: dict
 ) -> list[dict]:
+    # Representation kept: `opportunities_routes.patch_match` 404s on an empty result and
+    # returns the patched row to the feed. One row.
     return (
         _rest(
             "PATCH",
@@ -1997,6 +2080,11 @@ def replace_line_items(workspace_id: str, tender_id: str, rows: list[dict]) -> l
     Scoped DELETE first for the same reason as above: a corrigendum that REMOVES a line must
     remove it here, and an upsert alone would leave a phantom item on the fit screen that no
     document supports.
+
+    Representation kept on the insert, deliberately though no caller reads it today: the
+    result travels out through `spec_service.persist_schedule`, whose signature two modules
+    depend on. Narrowing it is a signature change in files this pass does not own, for a
+    schedule that is a few dozen rows once per ingest — recorded rather than done.
     """
     _rest("DELETE", "tender_line_items",
           params={"tender_id": f"eq.{tender_id}", "workspace_id": f"eq.{workspace_id}"},
@@ -2260,16 +2348,20 @@ def record_notifications(workspace_id: str, rows: list[dict]) -> int:
     Order matters and is the opposite of the intuitive one: recording first would mean a
     failed send is permanently marked as delivered, and the tender nobody heard about is
     exactly the failure this feature exists to prevent (ET-7).
+
+    `return=minimal`: the only consumer is `len()`, and with `merge-duplicates` every row sent
+    is written — insert or update — in one transaction, so `len(rows)` IS the count the echo
+    would have carried. Same reasoning as `upsert_opportunities`.
     """
     if not rows:
         return 0
-    written = _rest(
+    _rest(
         "POST", "notifications_sent",
         params={"on_conflict": "workspace_id,opportunity_id,recipient,kind"},
         json=[{**r, "workspace_id": workspace_id} for r in rows],
-        prefer="return=representation,resolution=merge-duplicates",
+        prefer="return=minimal,resolution=merge-duplicates",
     )
-    return len(written or [])
+    return len(rows)
 
 
 def get_member_email(workspace_id: str, user_id: str) -> str | None:
@@ -2317,15 +2409,21 @@ def replace_award_prices(award_result_id: str, ladder: list[dict]) -> int:
     merging on rank would leave a stale L3 sitting under the new one. Nothing references these
     rows, so replacing them costs no history (unlike `answers`, where a rebuild would destroy
     the acceptance receipts).
+
+    `return=minimal` on both halves: every caller (`discovery/ingest`, twice) discards the
+    count, and it is `len(ladder)` anyway — the insert is one transaction, so a short write
+    raises rather than returning fewer rows.
     """
-    _rest("DELETE", "award_prices", params={"award_result_id": f"eq.{award_result_id}"})
+    _rest("DELETE", "award_prices", params={"award_result_id": f"eq.{award_result_id}"},
+          prefer="return=minimal")
     if not ladder:
         return 0
-    written = _rest(
+    _rest(
         "POST", "award_prices",
         json=[{**row, "award_result_id": award_result_id} for row in ladder],
+        prefer="return=minimal",
     )
-    return len(written or [])
+    return len(ladder)
 
 
 # ---------- the categories a seller is registered under (migration 0036) --------------------
@@ -2431,6 +2529,7 @@ def set_match_stage(workspace_id: str, opportunity_id: str, stage: str, when_iso
         params={"workspace_id": f"eq.{workspace_id}",
                 "opportunity_id": f"eq.{opportunity_id}"},
         json={"last_stage": stage, "stage_checked_at": when_iso},
+        prefer="return=minimal",
     )
 
 
@@ -2469,7 +2568,11 @@ def create_pursuit(workspace_id: str, opportunity_id: str, user_id: str) -> dict
         params={"on_conflict": "workspace_id,opportunity_id"},
         json={"workspace_id": workspace_id, "opportunity_id": opportunity_id,
               "created_by": user_id, "owner": user_id},
-        headers={"Prefer": "resolution=merge-duplicates,return=representation"},
+        # `prefer=`, not `headers=`: `_rest` has no `headers` parameter, so the original
+        # spelling raised TypeError on every call — and `tenders._apply_pursuit_context`
+        # swallows every exception into a log line, so the pursuit link failed in silence.
+        # Representation is genuinely needed here: the caller returns the new pursuit's id.
+        prefer="resolution=merge-duplicates,return=representation",
     ) or []
     return rows[0] if rows else {}
 
@@ -2501,6 +2604,9 @@ def link_pursuit_tender(workspace_id: str, pursuit_id: str, tender_id: str) -> d
         "PATCH", "pursuits",
         params={"workspace_id": f"eq.{workspace_id}", "id": f"eq.{pursuit_id}"},
         json={"tender_id": tender_id, "state": "ingested"},
-        headers={"Prefer": "return=representation"},
+        # See `create_pursuit`: `headers=` is not a parameter of `_rest`. Kept as
+        # representation because the return value distinguishes "patched" from "no such
+        # pursuit in this workspace", which is the workspace guard's whole answer.
+        prefer="return=representation",
     ) or []
     return rows[0] if rows else None

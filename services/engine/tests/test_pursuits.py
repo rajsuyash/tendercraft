@@ -4,6 +4,13 @@ The engine writes with the service role, which bypasses RLS, so every assertion 
 the scope column appearing in the key and in the filter. RLS is the second line; these tests
 pin the first. Cross-workspace behaviour against real policies lives in
 tests/isolation/test_pursuit_isolation.py.
+
+The stubs below take `prefer=`, which is what `db._rest` actually accepts. They used to take
+`headers=` — and so did the two production calls, which `_rest` has never had a parameter for,
+so `create_pursuit` and `link_pursuit_tender` raised TypeError on every real invocation while
+these tests stayed green against a stub that agreed with them. `tenders._apply_pursuit_context`
+swallows every exception into a log line, so nothing anywhere reported it. A stub's signature
+is an assumption about a function in another file: copy it from that file.
 """
 
 from app import db
@@ -13,9 +20,9 @@ def test_create_pursuit_scopes_the_conflict_target(monkeypatch):
     """A conflict target omitting workspace_id can reassign another workspace's row (0027)."""
     captured: dict = {}
 
-    def _fake_rest(method, table, params=None, json=None, headers=None):
+    def _fake_rest(method, table, params=None, json=None, prefer=None):
         captured.update({"method": method, "table": table,
-                         "params": params or {}, "json": json, "headers": headers or {}})
+                         "params": params or {}, "json": json, "prefer": prefer})
         return [{"id": "p-1", "workspace_id": "ws-1", "opportunity_id": "o-1",
                  "tender_id": None, "state": "pursuing"}]
 
@@ -36,18 +43,18 @@ def test_create_pursuit_merges_rather_than_erroring(monkeypatch):
     captured: dict = {}
     monkeypatch.setattr(
         db, "_rest",
-        lambda m, t, params=None, json=None, headers=None: (
-            captured.update({"headers": headers or {}}) or [{"id": "p-1"}]
+        lambda m, t, params=None, json=None, prefer=None: (
+            captured.update({"prefer": prefer}) or [{"id": "p-1"}]
         ),
     )
     db.create_pursuit("ws-1", "o-1", "user-1")
-    assert "merge-duplicates" in captured["headers"].get("Prefer", "")
+    assert "merge-duplicates" in (captured["prefer"] or "")
 
 
 def test_create_pursuit_returns_empty_when_the_write_returns_nothing(monkeypatch):
     """PostgREST can answer with no representation; the caller must not IndexError."""
     monkeypatch.setattr(db, "_rest",
-                        lambda m, t, params=None, json=None, headers=None: [])
+                        lambda m, t, params=None, json=None, prefer=None: [])
     assert db.create_pursuit("ws-1", "o-1", "user-1") == {}
 
 
@@ -55,7 +62,7 @@ def test_link_tender_filters_on_workspace(monkeypatch):
     captured: dict = {}
     monkeypatch.setattr(
         db, "_rest",
-        lambda m, t, params=None, json=None, headers=None: (
+        lambda m, t, params=None, json=None, prefer=None: (
             captured.update({"method": m, "params": params or {}, "json": json})
             or [{"id": "p-1", "tender_id": "t-9", "state": "ingested"}]
         ),
@@ -75,7 +82,7 @@ def test_get_pursuit_is_workspace_scoped(monkeypatch):
     captured: dict = {}
     monkeypatch.setattr(
         db, "_rest",
-        lambda m, t, params=None, json=None, headers=None: (
+        lambda m, t, params=None, json=None, prefer=None: (
             captured.update({"params": params or {}}) or []
         ),
     )
@@ -90,7 +97,7 @@ def test_get_pursuit_embeds_the_opportunity(monkeypatch):
     captured: dict = {}
     monkeypatch.setattr(
         db, "_rest",
-        lambda m, t, params=None, json=None, headers=None: (
+        lambda m, t, params=None, json=None, prefer=None: (
             captured.update({"params": params or {}})
             or [{"id": "p-1", "opportunities": {"portal_ref_no": "GEM/2026/B/1"}}]
         ),
@@ -107,7 +114,7 @@ def test_get_match_is_scoped_by_workspace_not_by_watched_markets(monkeypatch):
     captured: dict = {}
     monkeypatch.setattr(
         db, "_rest",
-        lambda m, t, params=None, json=None, headers=None: (
+        lambda m, t, params=None, json=None, prefer=None: (
             captured.update({"params": params or {}}) or []
         ),
     )
