@@ -463,8 +463,8 @@ The dashboard SQL editor runs the same statement if you would rather not source 
 **Row 3 needs two readings, and nothing in this repo keeps a size history.** Take a baseline now
 and record it here, or 2026-10-20 has nothing to subtract from:
 
-- baseline `[ledger: database MB, baseline → fill on first reading]`,
-  taken `[ledger: baseline date → fill on first reading]`
+- baseline `66.7 MB (pg_database_size, Management API, 2026-09-17)`,
+  taken `2026-09-17`
 - 55 MB immediately after the 2026-09-14 vacuum, for reference (`docs/known-pitfalls.md`).
 
 #### Row 4 — Pro-only add-ons
