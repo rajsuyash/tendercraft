@@ -358,9 +358,11 @@ def score_relevance() -> int:
     orig = rel.generate_json
     orig_jev = jev_mod.band_tenders
     for c in inject:
+        # "The model is unusable" now means BOTH banders: with Jev up, injecting only a
+        # Gemini failure leaves the row correctly model-banded and never reaches the
+        # deterministic keyword floor these cases exist to test.
         rel.generate_json = _raise  # type: ignore[assignment]
-        if c["inject"] == "jev_down":
-            jev_mod.band_tenders = lambda *a, **k: {}  # type: ignore[assignment]
+        jev_mod.band_tenders = lambda *a, **k: {}  # type: ignore[assignment]
         ok = False
         try:
             i = c["input"]
