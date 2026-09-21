@@ -10,6 +10,7 @@ invention). Never edit cases/thresholds to make a run pass — thresholds are hu
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -306,13 +307,23 @@ def score_relevance() -> int:
         pipeline/relevance.py — the same cite-or-flag rule the drafter follows (G-5).
     """
     from app.discovery import relevance as orchestrator
+    from pipeline import jev as jev_mod
     from pipeline import relevance as rel
 
     cases = load_cases("relevance")
     normal = [c for c in cases if not c.get("inject")]
     inject = [c for c in cases if c.get("inject")]
 
+    # The per-call token line lives on this logger. Only this logger: root INFO would switch on
+    # httpx's per-request line too (docs/known-pitfalls.md, orchestrating subagents).
+    pipeline_log = logging.getLogger("tendercraft.pipeline")
+    pipeline_log.setLevel(logging.INFO)
+    pipeline_log.addHandler(logging.StreamHandler(sys.stdout))
+
     passed = 0
+    # Without a key Jev is off and this is a Gemini-only run — say so, so the scores below
+    # cannot be read as a Jev result.
+    print(f"\njev: configured={jev_mod.available()}")
     print("\n== Relevance golden set (live) ==")
     for c in normal:
         i = c["input"]
@@ -345,8 +356,11 @@ def score_relevance() -> int:
     print("\n== Fault injection (deterministic fallback) ==")
     inject_passed = 0
     orig = rel.generate_json
+    orig_jev = jev_mod.band_tenders
     for c in inject:
         rel.generate_json = _raise  # type: ignore[assignment]
+        if c["inject"] == "jev_down":
+            jev_mod.band_tenders = lambda *a, **k: {}  # type: ignore[assignment]
         ok = False
         try:
             i = c["input"]
@@ -364,6 +378,7 @@ def score_relevance() -> int:
             ok = False
         finally:
             rel.generate_json = orig  # type: ignore[assignment]
+            jev_mod.band_tenders = orig_jev  # type: ignore[assignment]
         inject_passed += ok
         print(f"  {c['id']:14} {'PASS' if ok else 'FAIL'}  ({c['inject']} -> keyword fallback)")
 
