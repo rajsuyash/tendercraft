@@ -37,11 +37,26 @@ DEFAULT_BUDGET = int(os.environ.get("RELEVANCE_BUDGET", "40"))
 BAND_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
+def _bander_token() -> str:
+    """Which model will answer, as a hash ingredient."""
+    try:
+        from ...pipeline import jev
+    except ImportError:  # pragma: no cover - import shape differs only under odd packaging
+        from pipeline import jev  # type: ignore[no-redef]
+
+    return f"bander=jev:{jev.MODEL}" if jev.available() else "bander=gemini"
+
+
 def input_hash(
     capability: str, keywords: list[str], opportunity: dict[str, Any], language: str = "en"
 ) -> str:
     """Everything the band depends on. Change any of it and the band is recomputed; change
-    nothing and it is not."""
+    nothing and it is not.
+
+    The bander is one of those things (added 2026-09-21): the first Jev deploy re-banded 0 of 47
+    open rows, because a band Gemini had already written hashed identically under Jev and was
+    skipped as unchanged — so a new model could never see the feed it was deployed to improve.
+    """
     material = "\x1f".join(
         [
             (capability or "").strip(),
@@ -52,6 +67,7 @@ def input_hash(
             # changed language would keep every stale-language explanation forever, since the
             # cache would see nothing as having changed.
             language,
+            _bander_token(),
         ]
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]

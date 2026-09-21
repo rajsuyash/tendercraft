@@ -350,6 +350,37 @@ class TestAFallbackBandIsNeverCached:
         assert all(not k.startswith("_") for k in patches["a"])
 
 
+class TestTheBanderIsPartOfTheCacheKey:
+    """Found on the first Jev deploy, 2026-09-21: the sweep finished in 68 s and re-banded 0 of
+    47 open in-scope rows.
+
+    The hash carried everything the band depends on except WHICH MODEL produced it, so every row
+    Gemini had already banded hashed the same under Jev and `bands_for` skipped it — for good.
+    A new bander could therefore never see the existing feed, which is the one thing swapping a
+    bander is for. No error anywhere; the rows keep a plausible band from the old model.
+    """
+
+    OPP = {"id": "a", "title": "Steel Wire Rope 19mm", "category_codes": ["Steel Wire Rope"]}
+
+    def test_the_hash_differs_between_the_jev_and_gemini_banders(self, monkeypatch):
+        from app.discovery.relevance import input_hash
+
+        monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+        gemini = input_hash("Manufacturer of steel wire rope", ["rope"], self.OPP)
+        monkeypatch.setenv("TYPESAFE_API_KEY", "not-a-real-key")
+        assert input_hash("Manufacturer of steel wire rope", ["rope"], self.OPP) != gemini
+
+    def test_the_hash_differs_when_the_jev_model_changes(self, monkeypatch):
+        from app.discovery.relevance import input_hash
+        from pipeline import jev
+
+        monkeypatch.setenv("TYPESAFE_API_KEY", "not-a-real-key")
+        monkeypatch.setattr(jev, "MODEL", "jev-latest")
+        before = input_hash("Manufacturer of steel wire rope", ["rope"], self.OPP)
+        monkeypatch.setattr(jev, "MODEL", "jev-some-later-version")
+        assert input_hash("Manufacturer of steel wire rope", ["rope"], self.OPP) != before
+
+
 class TestOurExplanationsFollowTheMarketLanguage:
     """The rationale is OUR commentary, so it is written in the workspace's market language.
 
