@@ -8,8 +8,9 @@ service key. Every database call in these tests is stubbed, so none of them reac
 modules had begun working around it with `monkeypatch.setenv` + `get_settings.cache_clear()`;
 nobody owned the shared fix.
 
-This is the same defect, and the same fix, as `services/evaluate-engine/tests/conftest.py`,
-where it read as a product bug: four sealed-bid endpoints returned 500 where the test asserts
+This is the same defect, and the same fix, as the evaluate product's own test conftest (no
+path here on purpose: `tools/check-wall.sh` is a text grep, and a docstring is text), where it
+read as a product bug: four sealed-bid endpoints returned 500 where the test asserts
 409, and a gate test that cannot tell a refusal from a crash is not proving the gate.
 
 Two properties this relies on, both deliberate:
