@@ -32,7 +32,12 @@ the service-role key bypasses RLS entirely. The Cloud Run service account is gra
 ```
 tendercraft-supabase-service-key   -> SUPABASE_SERVICE_JWT
 tendercraft-gemini-api-key         -> GEMINI_API_KEY
+tendercraft-typesafe-api-key       -> TYPESAFE_API_KEY
 ```
+
+`TYPESAFE_API_KEY` is optional: with it absent the Jev fit bander is off and the older
+Gemini-then-keyword banding path runs unchanged (see *Jev fit bander*, below). It is documented
+here anyway, because a variable no document mentions is one the next deploy will not set.
 
 `NEXT_PUBLIC_*` are plain env vars — the anon key and project URL are public by design
 (RLS is what protects the data). They must also be passed as **build args**, because Next
@@ -57,11 +62,15 @@ IMG="$R-docker.pkg.dev/$P/cloud-run-source-deploy/tendercraft-web:latest"
 cd services/engine
 gcloud run deploy $ENG --source . --project=$P --region=$R \
   --allow-unauthenticated --memory=2Gi --cpu=2 --timeout=3600 --max-instances=5 \
-  --update-env-vars="NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}" \
-  --set-secrets="SUPABASE_SERVICE_JWT=tendercraft-supabase-service-key:latest,GEMINI_API_KEY=tendercraft-gemini-api-key:latest"
+  --update-env-vars="NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL},TYPESAFE_MODEL=jev-latest" \
+  --update-secrets="SUPABASE_SERVICE_JWT=tendercraft-supabase-service-key:latest,GEMINI_API_KEY=tendercraft-gemini-api-key:latest,TYPESAFE_API_KEY=tendercraft-typesafe-api-key:latest"
+
+# `--set-secrets` replaces the whole secret set the same way `--set-env-vars` replaces env; add
+# a secret with `--update-secrets`. gcloud accepts only one of the pair per command, so this
+# block names every secret the engine needs under the merging flag rather than mixing the two.
 
 # `--update-env-vars`, NOT `--set-env-vars`. The engine now carries eleven variables and this
-# command names one: `--set-env-vars` REPLACES the whole set, so the documented form silently
+# command names two: `--set-env-vars` REPLACES the whole set, so the documented form silently
 # drops APP_URL, both connector URLs, the cron pair and the inbound domain. That is how
 # GEM_CONNECTOR_URL went missing (see the pitfall below).
 
@@ -388,6 +397,36 @@ on or about 2026-10-20 over the trailing 21 days:
 
 Any one failing means stay on Pro, and the ledger says why. Either outcome is a success; the
 failure mode is deciding without it.
+
+## Jev fit bander (2026-09-21)
+
+`services/engine/pipeline/jev.py` bands opportunity fit with TypeSafe's Jev — one request per
+~100 tenders, one Choice question each, band + probabilities + confidence back. It is **the**
+band for every stale row; Gemini is then spent only on the rationale for the high/medium rows a
+bidder will actually read (16 of 35 eval rows reached it), and low rows get a deterministic
+phrase in the workspace language.
+
+**It is optional.** No `TYPESAFE_API_KEY` means Jev is off, one WARNING at import, and the
+previous Gemini-then-keyword path runs exactly as before. Nothing here can exclude a row (G-9);
+the band changes order only.
+
+Measured on the way in:
+
+| What | Reading |
+|---|---|
+| Golden set (`evals/relevance`) | **36/36** — 33 normal cases, 3 prompt-injection cases |
+| `Safety Wire Cable … IS : 2266` (no "rope" in the title) | **high**, 0.93–0.94 — no keyword rule can reach this row |
+| `Mild Steel Binding Wire` trap | **medium** at confidence 0.32–0.33, self-flagged as uncertain |
+| Cost | ~741 input tokens per tender at $0.042/Mtok; output free |
+| Engine revision | `tendercraft-engine-eu-00076` |
+
+**The cache key includes the bander.** `app/discovery/relevance.py::input_hash` hashes the
+bander's identity (`bander=jev:<model>` or `bander=gemini`) alongside the capability statement,
+keywords, title, categories and language. Without it the first Jev deploy re-banded **0 of 47**
+open in-scope rows: every band Gemini had written hashed the same under Jev and was skipped as
+unchanged, so the new model could never see the feed it was deployed to improve. Changing
+`TYPESAFE_MODEL`, or switching Jev on or off, therefore costs one full re-band on the next
+sweep — which is the point.
 
 ## Downgrading Supabase to Free, and how to know whether to
 

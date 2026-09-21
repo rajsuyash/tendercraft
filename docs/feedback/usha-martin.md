@@ -155,6 +155,28 @@ Measured by reading the code on 2026-08-07, not estimated.
 > actually submitted bids.** The rewrite-trend line additionally needs ten human-edited
 > sections and will say "unknown" until then, which is the screen being honest.
 
+> **Updated 2026-09-21 — the feed now reads every in-scope tender, not the forty cheapest to
+> explain.** The band comes from TypeSafe's Jev (`pipeline/jev.py`), one request per ~100
+> tenders, so **every** in-scope open row is banded on every run; Gemini is kept for the
+> rationale on the high and medium rows a bidder will actually read (16 of 35 eval rows reached
+> it), and the rest carry a deterministic phrase. Cost is ~741 input tokens per tender at
+> $0.042/Mtok. The golden set is **36/36** — 33 normal cases and 3 prompt-injection cases.
+>
+> What it buys UML specifically is the row no keyword rule can reach: `Safety Wire Cable …
+> 7x7 … IS : 2266 - 2002, Grade 1770` bands **high at 0.93–0.94** on a title that never uses
+> the word "rope" — 7x7 is a rope construction, 1770 a rope grade, IS 2266 their own registered
+> standard. The same model puts the `Mild Steel Binding Wire` trap at **medium with confidence
+> 0.32–0.33**, which is the wrong band said quietly rather than the wrong band said
+> confidently. Nothing here excludes a row (G-9); the band changes order only.
+>
+> **And the first deploy re-banded nothing, which is worth recording because the symptom was
+> silence.** The sweep completed in 68 s and re-scored **0 of 47** open in-scope rows: the
+> relevance cache key hashed the capability statement, keywords, title, categories and language
+> — everything except WHICH MODEL produced the band. Every row Gemini had already banded hashed
+> identically under Jev and was skipped as unchanged, so the new bander could never see the
+> existing feed. Fixed by putting the bander's identity in the hash; switching model, or
+> switching Jev off, now costs one full re-band on the next sweep.
+
 | # | Ask | Status | Evidence |
 |---|---|---|---|
 | 1 | Lead identification → CRM, circulated to Zonal Heads | **Routing built; acquisition half still blocked** | Feed, connector, relevance banding and the rules gate were already live. **Added 2026-08-14:** `PATCH /api/opportunities/{id}` now enforces workspace membership on an assignee and can clear one, and the feed renders an Owner column and a watch star (`components/OpportunityFeed.tsx::Routing`). *Circulated to the respective Zonal Heads* is answered with no CRM. **Still missing:** inbound email (M11), which needs three forwarded GeM alerts from UML. **Added 2026-08-16:** outbound alerting — `deterministic/notify.py` (band threshold governs the inbox, never the feed), `mailer.py` with Resend primary and SMTP fallback, `GET/POST /api/notifications/{settings,dispatch}`. So a relevant tender does now email a human; it reaches them from our crawl, not from GeM's alert email, and **only when something calls `dispatch`.** |
