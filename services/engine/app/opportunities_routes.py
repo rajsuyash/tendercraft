@@ -73,12 +73,26 @@ async def list_opportunities(
             user.workspace_id, state, limit=limit, markets=markets,
             open_only=(state == "in_scope" and not include_closed),
         )
+        # Counted over tenders that can still be bid on — the same window `get_feed` above
+        # filters the list with. The all-time counts beside them describe the bucket since the
+        # corpus began, which is why the two were read as contradicting each other: "4313 in
+        # your feed" sat above 47 rows, and nothing on the strip said the tiles were counting
+        # history. Both rows now say which question they answered.
+        in_scope_open = db.count_feed(user.workspace_id, "in_scope", markets, open_only=True)
+        excluded_open = db.count_feed(user.workspace_id, "excluded", markets, open_only=True)
         return {
             "state": state,
             "items": rows,
             "counts": {
                 "in_scope": db.count_feed(user.workspace_id, "in_scope", markets),
                 "excluded": db.count_feed(user.workspace_id, "excluded", markets),
+                "in_scope_open": in_scope_open,
+                "excluded_open": excluded_open,
+                # Derived exactly as the all-time "Swept" tile is (in_scope + excluded, summed
+                # in the browser). There is no separate corpus counter behind that number, and
+                # inventing a second definition of "swept" for the open row would reintroduce
+                # the confusion this change exists to remove.
+                "swept_open": in_scope_open + excluded_open,
                 "likely_eligible": db.count_eligible(user.workspace_id, markets),
                 # The one that earns its place on the strip: rare, and it means "do not spend
                 # an afternoon on this". Kept alongside rather than replacing the other so the

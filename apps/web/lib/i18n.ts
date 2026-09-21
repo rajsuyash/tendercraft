@@ -74,6 +74,14 @@ const FR: Record<string, string> = {
   "against your": "face à votre",
   "Hidden by your rules": "Masqués par vos règles",
   "never by the system": "jamais par le système",
+  // The second coverage row: the same three quantities over tenders still open. "clôturé" is
+  // already this dictionary's word for a passed deadline, so these say "en cours" for its
+  // opposite rather than introducing a third term for the same axis.
+  "Open on the portals": "En cours sur les portails",
+  "deadline not yet passed": "date limite non dépassée",
+  "Open in your feed": "En cours dans votre flux",
+  "what the list below shows": "ce qu'affiche la liste ci-dessous",
+  "Open but hidden by your rules": "En cours mais masqués par vos règles",
   "In scope": "Retenus",
   Excluded: "Écartés",
   "Only my keywords": "Uniquement mes mots-clés",

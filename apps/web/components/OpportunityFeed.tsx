@@ -93,6 +93,13 @@ type FeedData = {
     states_a_turnover_bar?: number;
     /** In-scope matches whose tender has already closed, counted over the whole bucket. */
     closed?: number;
+    /** The same three quantities over tenders that can still be bid on — deadline not yet
+     *  passed, or no deadline recorded. The all-time figures above count the bucket since the
+     *  corpus began, which is why they read as contradicting the table: 4313 in the feed above
+     *  47 rows, because the list drops closed tenders in the database before the limit. */
+    in_scope_open?: number;
+    excluded_open?: number;
+    swept_open?: number;
   };
   /** The countries this workspace watches, from the server. NOT inferred from the rendered
    *  rows: an inferred scope described the page instead of the choice, so the coverage strip
@@ -774,6 +781,37 @@ export function OpportunityFeed({
           note={t("never by the system")}
         />
       </section>
+
+      {/* The same quantities over tenders that can still be bid on. The row above counts the
+          bucket since the corpus began; the table below shows only open tenders, because
+          `get_feed` drops closed rows in the database before the limit. Read together those
+          two facts explained "4313 in your feed" above 47 rows — apart, they read as a bug.
+          Rendered only when the server actually sent the figures: a `?? 0` here would report
+          an older engine's silence as "nothing is open", which is the lie this row exists to
+          stop. */}
+      {data.counts?.swept_open !== undefined && (
+        <section
+          data-open-now
+          aria-label="Feed coverage — open now"
+          className="mt-2 grid grid-cols-2 overflow-hidden rounded-card border border-hairline bg-surface md:grid-cols-3"
+        >
+          <Coverage
+            value={data.counts.swept_open}
+            label={t("Open on the portals")}
+            note={t("deadline not yet passed")}
+          />
+          <Coverage
+            value={data.counts.in_scope_open ?? 0}
+            label={t("Open in your feed")}
+            note={t("what the list below shows")}
+          />
+          <Coverage
+            value={data.counts.excluded_open ?? 0}
+            label={t("Open but hidden by your rules")}
+            note={t("never by the system")}
+          />
+        </section>
+      )}
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <nav className="flex gap-2" data-feed-tabs>
