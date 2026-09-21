@@ -1648,6 +1648,15 @@ def upsert_opportunity_matches(workspace_id: str, rows: list[dict]) -> int:
     return len(rows)
 
 
+#: "Still biddable", spelled once. `get_feed` filters the list with it and `count_feed` counts
+#: with it, so the coverage tile and the table beneath it cannot come to mean different things —
+#: four counters describing one object will disagree (docs/known-pitfalls.md).
+#: `closing_at is null` is INSIDE the open set on purpose: a portal that never filled the field
+#: has not told us the tender is over, and treating unknown as closed is the same silent miss
+#: arriving through the fix.
+OPEN_WINDOW = "(closing_at.is.null,closing_at.gte.now())"
+
+
 def _market_scope(markets: list[str] | None) -> dict[str, str]:
     """PostgREST params that scope a `opportunity_matches` read to the watched countries.
 
@@ -1698,7 +1707,7 @@ def get_feed(
         # `!inner` or the filter merely NULLs the embedded object instead of dropping the row —
         # the row would still occupy a slot in the limit, which is the whole defect.
         scope = {**scope, "select": "*,opportunities!inner(*)",
-                 "opportunities.or": "(closing_at.is.null,closing_at.gte.now())"}
+                 "opportunities.or": OPEN_WINDOW}
     return (
         _rest(
             "GET",
@@ -1764,11 +1773,23 @@ def _count_matches(
     return int((r.headers.get("Content-Range", "*/0")).split("/")[-1] or 0)
 
 
-def count_feed(workspace_id: str, state: str, markets: list[str] | None = None) -> int:
+def count_feed(
+    workspace_id: str, state: str, markets: list[str] | None = None, open_only: bool = False
+) -> int:
     """Exact count for the Excluded bucket. F-FR12 requires the number to be always visible —
     "142 hidden by 3 of your rules" is the affordance that stops the feed feeling like a
-    black box, so it cannot be approximated or omitted."""
-    return _count_matches(workspace_id, {"state": f"eq.{state}"}, markets)
+    black box, so it cannot be approximated or omitted.
+
+    `open_only` answers the other question the strip needs. Without it the tiles count the
+    bucket since the corpus began while the table shows only what can still be bid on, so a
+    workspace read "4313 in your feed" above 47 rows — both numbers correct, neither saying
+    which question it answered. Same predicate as `get_feed`; `_count_matches` adds the
+    `!inner` the embedded filter needs to DROP a row rather than null its embed.
+    """
+    filters = {"state": f"eq.{state}"}
+    if open_only:
+        filters["opportunities.or"] = OPEN_WINDOW
+    return _count_matches(workspace_id, filters, markets)
 
 
 def count_feed_closed(workspace_id: str, markets: list[str] | None = None) -> int:
