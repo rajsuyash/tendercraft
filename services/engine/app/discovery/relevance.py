@@ -12,7 +12,10 @@ Two things make this affordable on a 48,000-tender portal:
   * **an input hash short-circuits re-scoring** — the band is a function of the vendor's
     capability text, their keywords and the tender's own title/categories, so if none of those
     changed the answer cannot have. Without it, every rule edit would re-band the whole feed
-    (PRD §4.1's cost policy).
+    (PRD §4.1's cost policy). Every stale row is then handed to `pipeline.relevance.score`,
+    where `budget` bounds the *rationale* calls rather than the banding: Jev bands the whole
+    list in one request, and only the rows a bidder will read cost a generative call. With no
+    Jev key that same budget bounds Gemini's banding, exactly as it did before.
 """
 
 from __future__ import annotations
@@ -113,13 +116,15 @@ def bands_for(
         log.info("relevance: %d banded by keyword (no capability statement)", len(stale))
         return patches
 
-    to_score = sorted(stale, key=lambda o: o.get("closing_at") or "9999")[:budget]
     try:
         from ...pipeline import relevance as model_relevance
     except ImportError:  # pragma: no cover - import shape differs only under odd packaging
         from pipeline import relevance as model_relevance  # type: ignore[no-redef]
 
-    scored = model_relevance.score(capability, keywords, to_score, language)
+    # Every stale row goes down. With Jev configured they are all banded in one pass and
+    # `budget` caps only the Gemini rationale calls; without it, score() applies the same cap
+    # to Gemini banding, so the bill is bounded either way.
+    scored = model_relevance.score(capability, keywords, stale, language, explain_budget=budget)
     for opportunity_id, result in scored.items():
         patch = patches.get(opportunity_id)
         if patch is None:

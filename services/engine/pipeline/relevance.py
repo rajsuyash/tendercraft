@@ -21,6 +21,9 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.deterministic.discovery import phrase
+
+from . import jev
 from .client import ModelError, generate_json
 from .schemas import RELEVANCE_SCHEMA
 
@@ -131,20 +134,75 @@ def score_batch(
     return ordered
 
 
-def score(
-    capability_statement: str,
-    keywords: list[str],
-    opportunities: list[dict],
-    language: str = "en",
+def _phrase_result(o: dict, jb: jev.JevBand, language: str) -> RelevanceResult:
+    return RelevanceResult(
+        opportunity_id=jb.opportunity_id, band=jb.band,
+        rationale=phrase("jev_band", language, band=jb.band, confidence=round(jb.confidence * 100)),
+        matched_capability="", confidence=jb.confidence,
+    )
+
+
+def _gemini_only(
+    capability_statement, keywords, opportunities, language, budget
 ) -> dict[str, RelevanceResult]:
-    """Band a list of tenders, batched. Partial failure is partial output, never an exception —
-    a batch that fails leaves those tenders unbanded for the caller's deterministic fallback."""
+    """The pre-Jev path, unchanged: Gemini bands up to `budget` rows, batched."""
     out: dict[str, RelevanceResult] = {}
-    for start in range(0, len(opportunities), BATCH_SIZE):
-        batch = opportunities[start : start + BATCH_SIZE]
+    for start in range(0, min(len(opportunities), budget), BATCH_SIZE):
+        batch = opportunities[start : min(start + BATCH_SIZE, budget)]
         try:
             for result in score_batch(capability_statement, keywords, batch, language):
                 out[result.opportunity_id] = result
         except ModelError as exc:
             log.warning("relevance: batch of %d failed (%s) — falling back", len(batch), exc)
+    return out
+
+
+def score(
+    capability_statement: str,
+    keywords: list[str],
+    opportunities: list[dict],
+    language: str = "en",
+    explain_budget: int = 40,
+) -> dict[str, RelevanceResult]:
+    """Band every row; explain the ones worth reading.
+
+    Jev (if configured) bands ALL rows in one pass. Its band is final. Gemini is then asked, for
+    high/medium rows only and soonest-closing first, up to `explain_budget` rows, to write the
+    rationale and quote the matched capability — its own band is counted as a disagreement and
+    otherwise ignored. Everything else carries a deterministic phrase in the workspace language.
+    Without Jev, or for rows a Jev chunk failed on, the old Gemini-then-keyword path applies.
+    Partial failure is partial output, never an exception; the caller keyword-bands the rest.
+    """
+    opportunities = sorted(opportunities, key=lambda o: o.get("closing_at") or "9999")
+    if not jev.available():
+        return _gemini_only(capability_statement, keywords, opportunities, language, explain_budget)
+
+    bands = jev.band_tenders(capability_statement, keywords, opportunities)
+    out: dict[str, RelevanceResult] = {}
+    unbanded = [o for o in opportunities if str(o["id"]) not in bands]
+    if unbanded:
+        out.update(_gemini_only(capability_statement, keywords, unbanded, language, explain_budget))
+
+    banded = [o for o in opportunities if str(o["id"]) in bands]
+    for o in banded:
+        out[str(o["id"])] = _phrase_result(o, bands[str(o["id"])], language)
+
+    to_explain = [o for o in banded if bands[str(o["id"])].band != "low"][:explain_budget]
+    disagreements = 0
+    for start in range(0, len(to_explain), BATCH_SIZE):
+        batch = to_explain[start : start + BATCH_SIZE]
+        try:
+            for r in score_batch(capability_statement, keywords, batch, language):
+                jb = bands[r.opportunity_id]
+                if r.band != jb.band:
+                    disagreements += 1
+                out[r.opportunity_id] = RelevanceResult(
+                    opportunity_id=r.opportunity_id, band=jb.band, rationale=r.rationale,
+                    matched_capability=r.matched_capability, confidence=jb.confidence,
+                )
+        except ModelError as exc:
+            log.warning("relevance: rationale batch of %d failed (%s) — phrase kept",
+                        len(batch), exc)
+    log.info("relevance: jev banded=%d explained=%d unbanded=%d disagreements=%d",
+             len(banded), len(to_explain), len(unbanded), disagreements)
     return out

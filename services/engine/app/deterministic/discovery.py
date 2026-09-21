@@ -118,6 +118,7 @@ PHRASES: dict[str, dict[str, str]] = {
             "your profile shows {actual}{tail}. Turnover only."
         ),
         "mse_tail": " — an MSE turnover relaxation is offered on this bid",
+        "jev_band": "Fit model banded this {band} (confidence {confidence}%).",
     },
     "fr": {
         "no_keyword": "Aucun de vos mots-clés ne correspond à cet avis",
@@ -143,6 +144,10 @@ PHRASES: dict[str, dict[str, str]] = {
             "votre profil indique {actual}{tail}. Chiffre d'affaires uniquement."
         ),
         "mse_tail": "",
+        "jev_band": (
+            "Le modèle d'adéquation classe cet appel d'offres {band} "
+            "(confiance {confidence} %)."
+        ),
     },
 }
 
