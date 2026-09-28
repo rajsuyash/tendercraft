@@ -6,22 +6,26 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
-from . import analysis, db, export_service
+from . import analysis, db, export_service, jobs, tasks
 from .auth import AuthedUser, get_current_user
+from .cron_auth import verify_cron_caller
 from .deterministic import submission
 from .deterministic.lock import evaluate_lock
 from .deterministic.readiness import OVERRIDDEN_DECISIONS, compute_readiness
 from .deterministic.types import CoverageStatus, Criterion, RequirementLevel, SourceAnchor
 from .envelope import ApiError, ok
+
+log = logging.getLogger("tendercraft.engine")
 
 router = APIRouter()
 CurrentUser = Annotated[AuthedUser, Depends(get_current_user)]
@@ -117,32 +121,49 @@ def set_decision(tender_id: str, criterion_id: str, body: DecisionIn, user: Curr
     return ok(_readiness_payload(user.workspace_id, tender_id))
 
 
-def _prepare(workspace_id: str, tender_id: str) -> dict:
+PREPARE_STAGES = ("lock", "analysis", "draft")
+
+
+def _run_prepare_job(job_id: str) -> None:
+    """The work, resumable. Each stage checks the job before paying for it again.
+
+    A Cloud Tasks redelivery must not re-run analysis over hundreds of criteria and re-pay for
+    the model calls already made — `jobs.should_run`/`finish_stage` is the resume point.
+    """
     from .analyze_routes import _bid_date
     from .proposal_routes import do_generate
 
+    row = db.get_job(job_id)
+    if not row:
+        raise ApiError(404, "JOB_NOT_FOUND", "job not found")
+    workspace_id, tender_id = row["workspace_id"], row["tender_id"]
     criteria = db.get_criteria(tender_id, workspace_id, select=db.CRITERIA_WITHOUT_REQUIREMENT)
-    # 1. Lock the TOM (human confirmation of low-confidence items is enforced by the gate).
-    lock = evaluate_lock([_to_domain(c) for c in criteria])
-    if not lock.ok:
-        raise ApiError(409, "LOCK_BLOCKED", " | ".join(lock.blockers))
-    db.set_tender_locked(tender_id, workspace_id, datetime.now(UTC).isoformat())
 
-    # 2. Eligibility analysis (matches criteria against the structured profile).
-    profile = db.get_profile_context(workspace_id)
-    # The deadline decides which financial years "the last three years" means and whether a
-    # certificate was valid on the day. None is legal: the date-dependent checks then say
-    # needs-review rather than guessing a window.
-    bid_date = _bid_date(db.get_tender(tender_id, workspace_id) or {})
-    db.save_analysis(
-        workspace_id, tender_id,
-        analysis.analyze(criteria, profile, bid_date, workspace_id),
-    )
+    if jobs.should_run(job_id, "lock"):
+        jobs.begin_stage(job_id, "lock")
+        lock = evaluate_lock([_to_domain(c) for c in criteria])
+        if not lock.ok:
+            raise ApiError(409, "LOCK_BLOCKED", " | ".join(lock.blockers))
+        db.set_tender_locked(tender_id, workspace_id, datetime.now(UTC).isoformat())
+        jobs.finish_stage(job_id, "lock")
 
-    # 3. Draft-match against the content library.
-    do_generate(workspace_id, tender_id)
+    if jobs.should_run(job_id, "analysis"):
+        jobs.begin_stage(job_id, "analysis")
+        profile = db.get_profile_context(workspace_id)
+        # The deadline decides which financial years "the last three years" means and whether
+        # a certificate was valid on the day. None is legal: the date-dependent checks then
+        # say needs-review rather than guessing a window.
+        bid_date = _bid_date(db.get_tender(tender_id, workspace_id) or {})
+        db.save_analysis(
+            workspace_id, tender_id,
+            analysis.analyze(criteria, profile, bid_date, workspace_id),
+        )
+        jobs.finish_stage(job_id, "analysis")
 
-    return _readiness_payload(workspace_id, tender_id)
+    if jobs.should_run(job_id, "draft"):
+        jobs.begin_stage(job_id, "draft")
+        do_generate(workspace_id, tender_id)
+        jobs.finish_stage(job_id, "draft")
 
 
 @router.get("/api/tenders/{tender_id}/submission")
@@ -238,9 +259,70 @@ def submission_state(tender_id: str, user: CurrentUser) -> dict:
     })
 
 
-@router.post("/api/tenders/{tender_id}/prepare")
+@router.post("/api/tenders/{tender_id}/prepare", status_code=202)
 async def prepare(tender_id: str, user: CurrentUser) -> dict:
+    """Start the work and return. The answer outlives this request.
+
+    The lock gate runs here, synchronously, because it is deterministic, instant, and the one
+    outcome the user can act on immediately. Everything after it is minutes of model calls and
+    belongs to a job — a 450-criterion tender measured 418s on 2026-09-28, longer than any
+    browser (or the web tier's proxy) should be asked to hold a connection open.
+    """
     if not db.get_tender(tender_id, user.workspace_id):
         raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
-    # Lock + analyze + generate are blocking (DB + several model calls) — keep off the loop.
-    return ok(await run_in_threadpool(_prepare, user.workspace_id, tender_id))
+
+    criteria = db.get_criteria(tender_id, user.workspace_id,
+                                select=db.CRITERIA_WITHOUT_REQUIREMENT)
+    lock = evaluate_lock([_to_domain(c) for c in criteria])
+    if not lock.ok:
+        raise ApiError(409, "LOCK_BLOCKED", " | ".join(lock.blockers))
+
+    # `jobs.start` returns the ALREADY-active job on a second click rather than raising — check
+    # for that BEFORE calling it, because a state/started_at heuristic on the returned row can't
+    # reliably tell "just created" from "still sitting queued, not yet claimed by the worker".
+    already_running = db.get_active_job_for_tender(user.workspace_id, tender_id, "prepare")
+    job = jobs.start(user.workspace_id, tender_id, "prepare")
+    if not already_running:
+        tasks.enqueue_job(job["id"])
+    return ok({"job_id": job["id"], "state": job.get("state", "queued"),
+               "stage": job.get("stage")})
+
+
+@router.get("/api/tenders/{tender_id}/prepare/status")
+def prepare_status(tender_id: str, user: CurrentUser) -> dict:
+    if not db.get_tender(tender_id, user.workspace_id):
+        raise ApiError(404, "TENDER_NOT_FOUND", "tender not found in your workspace")
+    job = db.get_active_job_for_tender(user.workspace_id, tender_id, "prepare") \
+        or db.get_last_job_for_tender(user.workspace_id, tender_id, "prepare")
+    if not job:
+        return ok({"state": "none"})
+    return ok({
+        "job_id": job["id"], "state": job["state"], "stage": job.get("stage"),
+        "done_stages": job.get("done_stages") or [],
+        "error": ({"code": job["error_code"], "message": job["error_message"]}
+                  if job.get("error_code") else None),
+    })
+
+
+@router.post("/internal/jobs/run")
+async def run_job(payload: dict, authorization: str | None = Header(default=None)) -> dict:
+    """Cloud Tasks delivers here. Same OIDC verification as the cron endpoints (cron_auth.py)
+    — this endpoint writes across workspaces, so that check is the only thing standing between
+    a task queue and a cross-workspace write."""
+    caller = verify_cron_caller(authorization)
+    job_id = str(payload.get("job_id") or "")
+    if not job_id:
+        raise ApiError(400, "JOB_ID_REQUIRED", "job_id is required")
+    log.info("jobs: run %s requested by %s", job_id, caller)
+
+    def work() -> dict:
+        jobs.claim(job_id)
+        try:
+            _run_prepare_job(job_id)
+        except Exception as exc:  # noqa: BLE001 — every failure is recorded, never swallowed
+            jobs.fail(job_id, exc)
+            raise
+        jobs.succeed(job_id)
+        return {"job_id": job_id, "state": "succeeded"}
+
+    return ok(await run_in_threadpool(work))
