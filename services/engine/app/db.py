@@ -248,6 +248,45 @@ def set_tender_locked(tender_id: str, workspace_id: str, locked_at: str) -> None
     )
 
 
+# ---------- background jobs (migration 0048) ----------
+def create_job(workspace_id: str, tender_id: str | None, kind: str) -> dict:
+    # Representation kept: the caller (`jobs.start`) needs the server-assigned id.
+    rows = _rest("POST", "jobs",
+                 json={"workspace_id": workspace_id, "tender_id": tender_id, "kind": kind})
+    return rows[0] if rows else {}
+
+
+def get_job(job_id: str, workspace_id: str | None = None) -> dict | None:
+    params = {"id": f"eq.{job_id}", "select": "*", "limit": "1"}
+    if workspace_id:
+        params["workspace_id"] = f"eq.{workspace_id}"
+    rows = _rest("GET", "jobs", params=params)
+    return rows[0] if rows else None
+
+
+def get_active_job_for_tender(workspace_id: str, tender_id: str, kind: str) -> dict | None:
+    rows = _rest("GET", "jobs", params={
+        "workspace_id": f"eq.{workspace_id}", "tender_id": f"eq.{tender_id}",
+        "kind": f"eq.{kind}", "state": "in.(queued,running)",
+        "select": "*", "order": "created_at.desc", "limit": "1",
+    })
+    return rows[0] if rows else None
+
+
+def get_last_job_for_tender(workspace_id: str, tender_id: str, kind: str) -> dict | None:
+    rows = _rest("GET", "jobs", params={
+        "workspace_id": f"eq.{workspace_id}", "tender_id": f"eq.{tender_id}",
+        "kind": f"eq.{kind}", "select": "*", "order": "created_at.desc", "limit": "1",
+    })
+    return rows[0] if rows else None
+
+
+def update_job(job_id: str, patch: dict) -> dict:
+    _rest("PATCH", "jobs", params={"id": f"eq.{job_id}"}, json=patch,
+          prefer="return=minimal")
+    return {**(get_job(job_id) or {}), **patch}
+
+
 # ---------- vendor profile (Module C) ----------
 def get_profile_context(workspace_id: str) -> dict:
     """Assemble the full structured profile for eligibility evaluation."""
