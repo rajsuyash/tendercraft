@@ -176,8 +176,14 @@ def test_trivial_gaps_are_not_reported():
 
 def test_one_empty_section_is_named_by_its_own_score_not_by_a_verdict():
     """A high total must not hide a section nobody wrote: the breakdown says which, and the
-    suggestion says what to do, without the product claiming the bid would be rejected."""
-    secs = [_sec(k) for k in ALL_KEYS if k != "qa"]
+    suggestion says what to do, without the product claiming the bid would be rejected.
+
+    Excludes "manufacturing_qa" along with "qa": they are the goods/services twin for the
+    same dimension (app/deterministic/rubric.py), and a real outline only ever selects one
+    of the two (services vs. schedule signal) — leaving the other fully "present" here would
+    dilute the emptiness this test is checking for with a section no real tender generates
+    alongside "qa"."""
+    secs = [_sec(k) for k in ALL_KEYS if k not in ("qa", "manufacturing_qa")]
     secs.append(_sec("qa", present=False, status="placeholder", approved=False, words=0))
     r = score_proposal(secs, cv_count=5, matching_experience=5, valid_cert_fraction=1.0)
     assert r.total > 65                                    # the rest of the document is done
@@ -187,8 +193,13 @@ def test_one_empty_section_is_named_by_its_own_score_not_by_a_verdict():
 
 
 def test_a_section_with_no_word_target_is_not_penalised_on_depth():
-    """A section carrying no word target (a table) must not be scored on length."""
-    r = score_proposal([_sec("qa", words=20, target=0)])
+    """A section carrying no word target (a table) must not be scored on length.
+
+    Scoped to the "qa" outline alone (its goods twin, "manufacturing_qa", was never
+    selected) — an unscoped call would score the dimension over BOTH twin sections and dilute
+    this feature with the twin's permanently-missing depth, which is the exact bug
+    `score_proposal`'s outline filtering exists to prevent (see its docstring)."""
+    r = score_proposal([_sec("qa", words=20, target=0)], outline_keys=frozenset({"qa"}))
     qa = next(d for d in r.dimensions if d.key == "qa")
     assert qa.features["depth"] == 1.0
 
@@ -280,5 +291,32 @@ def test_a_narrowed_rubric_can_still_reach_a_hundred():
         for d in in_scope(DIMENSIONS, keys) for d_key in d.sections
     ]
     r = score_proposal(feats, cv_count=9, matching_experience=9, required_experience=3,
+                       valid_cert_fraction=1.0, outline_keys=keys)
+    assert round(r.total) == 100
+
+
+def test_a_goods_only_outline_can_also_reach_a_hundred():
+    """The same property, on the goods side of the twin sections added for wire-rope-shaped
+    tenders. `solution_architecture`, `methodology`, `qa` and `support_sla` each now carry a
+    goods section alongside their IT one (`goods_technical`/`delivery`/`manufacturing_qa`/
+    `warranty`) — a naive score over the FULL `dim.sections` would count the IT twin, which a
+    goods outline never selects, as a permanently missing section and cap every one of those
+    dimensions below its own weight. `score_proposal` must score only the sections THIS
+    outline actually chose."""
+    from app.deterministic.rubric import DIMENSIONS, SectionFeatures, in_scope, score_proposal
+
+    keys = frozenset({"understanding", "goods_technical", "manufacturing_qa", "delivery",
+                      "warranty", "risk", "project_citations"})
+    assert {"solution_architecture", "methodology", "qa", "support_sla"} <= {
+        d.key for d in in_scope(DIMENSIONS, keys)
+    }, "the goods sections must land in the same dimensions as their IT twins"
+
+    feats = [
+        SectionFeatures(key=k, present=True, status="drafted", word_count=1_000,
+                        target_words=1_000, claim_verifiability=1.0, subsection_count=6,
+                        approved=True)
+        for k in keys
+    ]
+    r = score_proposal(feats, cv_count=0, matching_experience=0, required_experience=0,
                        valid_cert_fraction=1.0, outline_keys=keys)
     assert round(r.total) == 100

@@ -271,14 +271,20 @@ export const SECTION_GROUPS: {
  *  These are shown at full weight. The engine renormalises them per tender over the sections
  *  the tender actually selected, so a rope supply bid is not marked down for a team section it
  *  never needed. Nothing here is a pass mark. */
+// MIRRORED from services/engine/app/deterministic/rubric.py::DIMENSIONS — labels and
+// weights must stay in sync (a UI array mirroring a server list WILL drift; see that
+// module's docstring for the incident that made this comment necessary). Since 2026-09-28,
+// four dimensions each cover a goods section alongside its IT one (a tender's outline
+// selects one, never both — app/deterministic/outline.py), so "Proposed solution..." also
+// covers a goods technical offer and "Support, SLA & O&M" also covers goods warranty.
 export const RUBRIC_DIMENSIONS: { label: string; weight: number }[] = [
-  { label: "Proposed solution & technology", weight: 20 },
+  { label: "Proposed solution / technical offer", weight: 20 },
   { label: "Approach, methodology & work plan", weight: 15 },
   { label: "Team composition & key personnel", weight: 15 },
   { label: "Relevant experience & past performance", weight: 15 },
   { label: "Understanding of scope", weight: 10 },
   { label: "Quality assurance & testing", weight: 8 },
-  { label: "Support, SLA & O&M", weight: 7 },
+  { label: "Support, warranty & after-sales", weight: 7 },
   { label: "Training & capacity building", weight: 6 },
   { label: "Risk management & mitigation", weight: 4 },
 ];

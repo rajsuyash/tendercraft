@@ -87,10 +87,14 @@ class Dimension:
 DIMENSIONS: tuple[Dimension, ...] = (
     Dimension("scope_understanding", "Understanding of scope", 10, ("understanding",),
               {"presence": 0.3, "depth": 0.4, "citation_integrity": 0.1, "approved": 0.2}),
-    Dimension("solution_architecture", "Proposed solution & technology", 20, ("solution",),
+    # Goods bids draft `goods_technical` instead of `solution` (app/sections.py) — same slot,
+    # same emphasis, so the dimension carries both keys rather than gaining a twin.
+    Dimension("solution_architecture", "Proposed solution / technical offer", 20,
+              ("solution", "goods_technical"),
               {"presence": 0.3, "depth": 0.4, "citation_integrity": 0.1, "approved": 0.2}),
+    # Goods bids draft `delivery` instead of `approach_methodology`/`workplan`.
     Dimension("methodology", "Approach, methodology & work plan", 15,
-              ("approach_methodology", "workplan"),
+              ("approach_methodology", "workplan", "delivery"),
               {"presence": 0.25, "depth": 0.35, "subsections": 0.15,
                "citation_integrity": 0.05, "approved": 0.2}),
     Dimension("team", "Team composition & key personnel", 15,
@@ -99,11 +103,14 @@ DIMENSIONS: tuple[Dimension, ...] = (
     Dimension("experience", "Relevant experience & past performance", 15,
               ("project_citations",),
               {"presence": 0.2, "matching_records": 0.8}),
-    Dimension("qa", "Quality assurance & testing", 8, ("qa",),
+    # Goods bids draft `manufacturing_qa` instead of `qa`.
+    Dimension("qa", "Quality assurance & testing", 8, ("qa", "manufacturing_qa"),
               {"presence": 0.3, "depth": 0.4, "cert_backing": 0.1, "approved": 0.2}),
     Dimension("training", "Training & capacity building", 6, ("training",),
               {"presence": 0.35, "depth": 0.45, "approved": 0.2}),
-    Dimension("support_sla", "Support, SLA & O&M", 7, ("support_sla",),
+    # Goods bids draft `warranty` instead of `support_sla`.
+    Dimension("support_sla", "Support, warranty & after-sales", 7,
+              ("support_sla", "warranty"),
               {"presence": 0.35, "depth": 0.45, "approved": 0.2}),
     Dimension("risk", "Risk management & mitigation", 4, ("risk",),
               {"presence": 0.35, "depth": 0.45, "approved": 0.2}),
@@ -259,6 +266,16 @@ def score_proposal(
     suggestions: list[Suggestion] = []
 
     for dim in in_scope(DIMENSIONS, outline_keys):
+        # A dimension may now carry a goods section and a services section for the same
+        # slot (e.g. "solution" / "goods_technical") — see DIMENSIONS above. `in_scope` only
+        # asks whether ANY of a dimension's sections were selected, so scoring on the FULL
+        # `dim.sections` would count the tender's unrequested twin as a permanently missing
+        # section and cap a goods-only outline below 100. Score only the sections THIS
+        # tender's outline actually selected; `None` (no outline derived) keeps every
+        # section, matching the pre-outline behaviour exactly.
+        relevant = dim.sections if outline_keys is None else tuple(
+            k for k in dim.sections if k in outline_keys
+        )
         # A section that was never generated earns nothing on ANY feature — note
         # claim_verifiability=0.0, not the 1.0 default ("no claims, so all verified"),
         # which is right for real content but would pay marks for absent content.
@@ -266,7 +283,7 @@ def score_proposal(
             by_key.get(k)
             or SectionFeatures(k, present=False, status="missing", word_count=0,
                                target_words=1, claim_verifiability=0.0, subsection_count=0)
-            for k in dim.sections
+            for k in relevant
         ]
         vals = _feature_values(
             dim, secs, cv_count, matching_experience, required_experience, valid_cert_fraction

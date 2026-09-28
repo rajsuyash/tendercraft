@@ -37,11 +37,21 @@ WHICH WAY TO BE WRONG. Over-inclusion costs a thin section the bidder can delete
 costs a section the buyer asked for and the bid does not contain, which is a rejected bid.
 So the patterns are tuned to be narrow rather than absent, and every included section names
 the row that put it there — a section the user did not expect is answerable rather than
-arbitrary. One known over-inclusion survives on the wire-rope bid: a local-content
-declaration listing "after sales service support like AMC/CMC etc." among things EXCLUDED
-from local content pulls in the Support/SLA section. The clause is genuinely in the tender,
-the reason is shown, and reading "excluded from" as a negation is not something a pattern
-can do.
+arbitrary.
+
+NO GOODS/SERVICES CLASSIFIER EVEN FOR SECTION CHOICE (2026-09-28). The IT-services sections
+— approach & methodology, QA, work plan, support/SLA — were universal or near-universal, so
+they rendered on every goods tender too (a rope bid does not run UAT or a helpdesk). Rather
+than add the classifier this file already argues against, a DERIVED signal, `services`, is
+computed from signals already detected: it fires whenever `solution` or `personnel` fired,
+because both are genuine services indicators measured zero-hit on every goods tender in the
+corpus. The IT-services sections now additionally require `services`; four goods-shaped
+sections (technical offer, manufacturing QA, delivery, warranty) require `schedule` instead.
+This also resolves the one known over-inclusion below it replaced: the local-content
+declaration's "after sales service support like AMC/CMC etc." still raises `support` on a
+rope bid, but the Support/SLA section now also needs `services`, which that bid never
+raises — so the section stops appearing even though the underlying `support` signal (a
+genuine row in the tender) still fires and is still reported honestly by `absent()`.
 """
 
 from __future__ import annotations
@@ -164,6 +174,14 @@ def detect_signals(
             if name not in found and pattern.search(text):
                 found[name] = Signal(name, f"{_quote(text)} at {anchor}")
 
+    # `services` is DERIVED, not detected from a row of its own — no clause states "this is
+    # a services tender." It fires whenever a genuine services indicator already fired
+    # (`solution` or `personnel`, both measured zero-hit on every goods tender in the
+    # corpus), and its `because` reuses that signal's own reason rather than inventing one.
+    if "solution" in found or "personnel" in found:
+        origin = found.get("solution") or found["personnel"]
+        found["services"] = Signal("services", f"services work: {origin.because}")
+
     return found
 
 
@@ -223,6 +241,7 @@ _SIGNAL_MEANING = {
     "support": "it asks for no ongoing support, SLA or maintenance",
     "workplan": "it states no plan, milestones or delivery schedule",
     "eval_heads": "it publishes no evaluation weights",
+    "services": "it asks for no software, system or staffed services work",
 }
 
 

@@ -66,13 +66,26 @@ SECTION_SPECS: tuple[SectionSpec, ...] = (
                 SectionKind.NARRATIVE, 3000,
                 "solution architecture technology platform infrastructure security integration",
                 requires=frozenset({"solution"})),
+    # Goods bids: the same slot in the document, but conformance to a specification rather
+    # than a software architecture. Gated on `schedule` — a schedule of items is what makes
+    # a tender a goods tender — never on the absence of `solution`, so a package asking for
+    # both (rare, but seen) gets both sections.
+    SectionSpec("goods_technical", "Technical Offer and Conformance to Specification", 42,
+                SectionKind.NARRATIVE, 1500,
+                "technical specification standards conformance grade construction "
+                "test certificate",
+                requires=frozenset({"schedule"})),
     SectionSpec("approach_methodology", "Form 7(c): Technical Approach and Methodology", 50,
                 SectionKind.NARRATIVE, 2500,
-                "implementation methodology phases delivery governance"),
+                "implementation methodology phases delivery governance",
+                requires=frozenset({"services"})),
     SectionSpec("workplan", "Form 8: Proposed Work Plan", 60,
                 SectionKind.NARRATIVE, 800,
                 "timeline milestones deliverables work breakdown",
-                requires=frozenset({"workplan"})),
+                # Goods tenders can raise the `workplan` signal too (a delivery schedule is a
+                # plan), but this section is written for phased IT delivery — see its brief.
+                # `delivery` below is the goods-shaped section for the same underlying signal.
+                requires=frozenset({"workplan", "services"})),
     SectionSpec("team_composition", "Form 9: Team Composition", 70,
                 SectionKind.COMPLIANCE, 0, requires=frozenset({"personnel"})),
     SectionSpec("cvs", "Form 10: Curriculum Vitae of Key Personnel", 80,
@@ -83,7 +96,14 @@ SECTION_SPECS: tuple[SectionSpec, ...] = (
                 SectionKind.COMPLIANCE, 0),
     SectionSpec("qa", "Quality Assurance and Testing Approach", 110,
                 SectionKind.NARRATIVE, 1200,
-                "quality assurance testing UAT defect management standards"),
+                "quality assurance testing UAT defect management standards",
+                requires=frozenset({"services"})),
+    # Goods bids: plant/process QA rather than software QA. Same `schedule` gate as
+    # `goods_technical`.
+    SectionSpec("manufacturing_qa", "Manufacturing Capability, Quality Assurance and Testing",
+                112, SectionKind.NARRATIVE, 1500,
+                "manufacturing process quality control testing inspection certification",
+                requires=frozenset({"schedule"})),
     SectionSpec("training", "Training and Capacity Building", 120,
                 SectionKind.NARRATIVE, 1000,
                 "training capacity building user manuals handholding",
@@ -91,7 +111,23 @@ SECTION_SPECS: tuple[SectionSpec, ...] = (
     SectionSpec("support_sla", "Support, SLA and Operations & Maintenance", 130,
                 SectionKind.NARRATIVE, 1200,
                 "support helpdesk SLA maintenance warranty operations",
-                requires=frozenset({"support"})),
+                # `support` alone used to over-include this section: a rope bid's
+                # local-content declaration lists "after sales service support ... AMC/CMC"
+                # among what is EXCLUDED from local content, which still raises `support`
+                # honestly (its EXISTENCE is a signal) but is not staffed support/SLA work —
+                # `services` closes that gap without reading the clause's wording.
+                requires=frozenset({"support", "services"})),
+    # Goods bids: warranty and after-sales replacement, not an ongoing SLA/helpdesk.
+    SectionSpec("warranty", "Warranty and After-Sales Support", 132,
+                SectionKind.NARRATIVE, 700,
+                "warranty guarantee period after-sales replacement defective",
+                requires=frozenset({"schedule"})),
+    # Goods bids: packing, marking, transit and delivery to the consignee — the goods-shaped
+    # answer to the same underlying delivery-schedule signal that also triggers `workplan`.
+    SectionSpec("delivery", "Delivery, Packing and Logistics", 134,
+                SectionKind.NARRATIVE, 800,
+                "delivery schedule packing marking transit consignee logistics",
+                requires=frozenset({"schedule"})),
     SectionSpec("risk", "Risk Management and Mitigation", 140,
                 SectionKind.NARRATIVE, 1000,
                 "risk mitigation contingency dependencies"),

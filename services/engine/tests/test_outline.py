@@ -228,3 +228,94 @@ def test_a_signal_with_no_written_meaning_still_produces_a_sentence():
     rather than to a blank."""
     assert absent([Spec("x", requires=frozenset({"quantum"}))], {})[0].because == (
         "it raises no quantum signal")
+
+
+# --- goods vs. services, end to end against the real catalogue (app.sections.SECTION_SPECS) ----
+#
+# No goods/services classifier (module docstring). `services` is DERIVED from `solution` or
+# `personnel` already firing, and it is what keeps the IT-shaped sections off a tender that
+# never raised either — these tests exercise the real catalogue rather than a local Spec, so
+# a drifted `requires` on an actual SectionSpec fails here, not just in isolation.
+
+
+AMC_FORM_CLAUSE = crit(
+    "Details of local value addition are as follows: ____________________ "
+    "excluding after sales service support like AMC/CMC etc."
+)
+DELIVERY_SCHEDULE_CLAUSE = crit(
+    "The bidder shall adhere to the delivery schedule specified in the schedule "
+    "of requirements."
+)
+SOLUTION_CLAUSE = crit(
+    "The agency is expected to use a CAPI system integrated with advanced AI/ML software."
+)
+CV_CLAUSE = crit("Curriculum Vitae of the key personnel shall be submitted in Form 10.")
+SCHEDULE_LINES = [{"schedule_ref": "Schedule-A", "item_ref": "1"}]
+
+GOODS_SECTIONS = frozenset({"goods_technical", "manufacturing_qa", "delivery", "warranty"})
+SERVICES_ONLY_SECTIONS = frozenset({"approach_methodology", "qa", "workplan", "support_sla"})
+
+
+def _outline_keys(criteria, line_items=()):
+    from app.sections import SECTION_SPECS
+
+    signals = detect_signals(criteria, line_items)
+    return {e.key for e in derive(SECTION_SPECS, signals)}
+
+
+def test_a_goods_tender_gets_the_goods_sections_and_not_the_it_ones():
+    """Forms + a schedule line + a local-content AMC clause + a delivery-schedule clause —
+    the shape of a real wire-rope bid. No `solution` or `personnel` clause anywhere, so
+    `services` never fires."""
+    keys = _outline_keys(
+        [AMC_FORM_CLAUSE, DELIVERY_SCHEDULE_CLAUSE], SCHEDULE_LINES
+    )
+    assert GOODS_SECTIONS <= keys
+    assert "item_compliance" in keys
+    assert not (SERVICES_ONLY_SECTIONS & keys)
+    assert "solution" not in keys
+    assert "training" not in keys
+
+
+def test_a_services_tender_gets_the_it_sections_and_not_the_goods_ones():
+    """A software clause and a CV clause: `solution` and `personnel` both fire, so `services`
+    fires from either, and neither `schedule` nor `forms` is ever raised."""
+    keys = _outline_keys([SOLUTION_CLAUSE, CV_CLAUSE])
+    assert {"approach_methodology", "qa"} <= keys
+    assert not (GOODS_SECTIONS & keys)
+    assert "item_compliance" not in keys
+
+
+def test_a_mixed_tender_gets_both():
+    """A tender can genuinely ask for goods and staffed services in the same package —
+    `services` and `schedule` are independent signals, never mutually exclusive by
+    construction."""
+    keys = _outline_keys([SOLUTION_CLAUSE], SCHEDULE_LINES)
+    assert "solution" in keys
+    assert GOODS_SECTIONS <= keys
+    assert {"approach_methodology", "qa"} <= keys
+
+
+def test_a_bare_purchase_order_gets_neither_goods_nor_services_sections():
+    """No signal at all: the outline is the universal spine and nothing gated — matching the
+    corpus measurement in the module docstring."""
+    from app.sections import SECTION_SPECS
+
+    keys = _outline_keys([])
+    universal = {s.key for s in SECTION_SPECS if not getattr(s, "requires", frozenset())}
+    assert keys == universal
+    assert not (GOODS_SECTIONS & keys)
+    assert not (SERVICES_ONLY_SECTIONS & keys)
+    assert "solution" not in keys
+
+
+def test_absent_explains_a_missing_services_signal_in_words():
+    """A bidder reading why `approach_methodology` is not in their goods proposal must see a
+    sentence, not the token `services`."""
+    from app.sections import SPEC_BY_KEY
+
+    signals = detect_signals([AMC_FORM_CLAUSE, DELIVERY_SCHEDULE_CLAUSE], SCHEDULE_LINES)
+    [entry] = [a for a in absent(list(SPEC_BY_KEY.values()), signals)
+              if a.key == "approach_methodology"]
+    assert entry.missing == "services"
+    assert entry.because == "it asks for no software, system or staffed services work"
