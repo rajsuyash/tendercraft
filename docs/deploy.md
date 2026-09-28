@@ -78,8 +78,12 @@ gcloud run deploy $ENG --source . --project=$P --region=$R \
 cd ../..
 gcloud builds submit --config=cloudbuild.web.yaml --project=$P --region=$R \
   --substitutions="_SB_URL=${NEXT_PUBLIC_SUPABASE_URL},_SB_ANON=${NEXT_PUBLIC_SUPABASE_ANON_KEY},_IMAGE=${IMG}"
+# --timeout must be >= the engine's, because /api/tenders/{id}/prepare proxies a call that
+# ran 418s on a 450-criterion tender. At 300s Cloud Run killed the WEB request and the browser
+# rendered "Action failed" over an engine call that returned 200. Interim: the permanent fix
+# moves prepare to a background job and this proxy stops being long-lived.
 gcloud run deploy $WEB --image="$IMG" --project=$P --region=$R \
-  --allow-unauthenticated --memory=1Gi --cpu=1 --timeout=300 --max-instances=5 \
+  --allow-unauthenticated --memory=1Gi --cpu=1 --timeout=3600 --max-instances=5 \
   --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL},NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY},ENGINE_URL=${E}"
 ```
 
