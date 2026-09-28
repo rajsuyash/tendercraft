@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ocrNote, type Readiness } from "./ReadinessHub";
+import { jobStageLabel, ocrNote, type Readiness } from "./ReadinessHub";
 
 const base = { summary: {}, items: [] } as unknown as Readiness;
 
@@ -31,5 +31,19 @@ describe("what the readiness screen says about the scanned pages", () => {
     const note = ocrNote({ ...base, ocr_completed_at: "2026-09-15T10:00:00Z", ocr_pages_recovered: 0 });
     expect(note?.reupload).toBe(true);
     expect(note?.text).toContain("could not be read");
+  });
+});
+
+describe("what the prepare-job status line says for a stage key", () => {
+  test("a known stage renders in words, not the raw key", () => {
+    expect(jobStageLabel("lock")).toBe("Locking the requirement model");
+    expect(jobStageLabel("analysis")).toBe("Checking eligibility against your profile");
+    expect(jobStageLabel("draft")).toBe("Drafting from your knowledge base");
+  });
+
+  test("no stage yet, or a stage the UI does not name, reads as Queued", () => {
+    expect(jobStageLabel(null)).toBe("Queued");
+    expect(jobStageLabel(undefined)).toBe("Queued");
+    expect(jobStageLabel("some-future-stage")).toBe("Queued");
   });
 });

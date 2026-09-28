@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { saveErrorMessage } from "@/components/BidVocabulary";
 import { KnowledgeUpload } from "@/components/KnowledgeUpload";
@@ -82,6 +82,30 @@ export function ocrNote(readiness: Readiness): OcrNote | null {
   };
 }
 
+export type JobState = "queued" | "running" | "succeeded" | "failed";
+export interface JobError {
+  code: string;
+  message: string;
+}
+
+// Words for a stage key, never the raw key — `lock`/`analysis`/`draft` are the engine's
+// internal names (docs/superpowers/plans/2026-09-28-prepare-background-job.md Task 4).
+const STAGE_LABEL: Record<string, string> = {
+  lock: "Locking the requirement model",
+  analysis: "Checking eligibility against your profile",
+  draft: "Drafting from your knowledge base",
+};
+
+/** What the status line says while a prepare job is in flight. Exported and pure so it can be
+ *  tested the same way `ocrNote` is, without rendering the component. */
+export function jobStageLabel(stage: string | null | undefined): string {
+  if (stage && STAGE_LABEL[stage]) return STAGE_LABEL[stage];
+  return "Queued";
+}
+
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS = 40 * 60_000;
+
 const DECISIONS: { key: Decision; label: string }[] = [
   { key: "resolve", label: "I’ll resolve" },
   { key: "ignore", label: "Ignore & proceed" },
@@ -139,6 +163,106 @@ export function ReadinessHub({
   const [error, setError] = useState<string | null>(null);
   const [comments, setComments] = useState<Record<string, string>>({});
   const { summary, items } = readiness;
+
+  // The prepare job: 202 → job_id, then poll GET .../prepare/status until it lands on a
+  // terminal state. `busy === "prepare"` stays set for the whole run, which is what keeps
+  // both Analyze/Re-match buttons disabled without a second flag.
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobState, setJobState] = useState<JobState | null>(null);
+  const [jobStage, setJobStage] = useState<string | null>(null);
+  const [jobError, setJobError] = useState<JobError | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollDeadline = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollTimer.current) clearInterval(pollTimer.current);
+    };
+  }, []);
+
+  function stopPolling() {
+    if (pollTimer.current) {
+      clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  }
+
+  async function pollStatus(id: string) {
+    if (pollDeadline.current !== null && Date.now() > pollDeadline.current) {
+      stopPolling();
+      setJobState("failed");
+      setJobError({
+        code: "JOB_TIMEOUT",
+        message: `Still running after 40 minutes. Job ${id} may still finish — check back or contact support with this id.`,
+      });
+      setBusy(null);
+      return;
+    }
+    let res: Response;
+    try {
+      res = await fetch(`/api/tenders/${tenderId}/prepare/status`);
+    } catch {
+      return; // transient network hiccup — keep polling, the next tick will try again
+    }
+    const body = await res.json().catch(() => null);
+    if (!body) return; // unparseable single tick — keep polling rather than declare failure
+    if (!body.ok) {
+      stopPolling();
+      setJobState("failed");
+      setJobError(body.error ?? { code: "UNKNOWN", message: "No response from the server" });
+      setBusy(null);
+      return;
+    }
+    const data = body.data;
+    setJobState(data.state);
+    setJobStage(data.stage ?? null);
+    if (data.state === "succeeded") {
+      stopPolling();
+      setBusy(null);
+      router.refresh();
+    } else if (data.state === "failed") {
+      stopPolling();
+      setBusy(null);
+      setJobError(data.error ?? { code: "JOB_FAILED", message: "The job failed with no further detail." });
+    }
+  }
+
+  async function startPrepare() {
+    setBusy("prepare");
+    setError(null);
+    setJobError(null);
+    setJobState(null);
+    setJobStage(null);
+    setJobId(null);
+    let res: Response;
+    try {
+      res = await fetch(`/api/tenders/${tenderId}/prepare`, { method: "POST" });
+    } catch {
+      setError("No response from the server");
+      setBusy(null);
+      return;
+    }
+    const body = await res.json().catch(() => null);
+    if (res.status === 202 && body?.ok) {
+      const data = body.data;
+      setJobId(data.job_id);
+      setJobState(data.state);
+      setJobStage(data.stage ?? null);
+      pollDeadline.current = Date.now() + POLL_TIMEOUT_MS;
+      pollTimer.current = setInterval(() => void pollStatus(data.job_id), POLL_INTERVAL_MS);
+      return;
+    }
+    // Every non-202 response is either a synchronous success (nothing currently returns one)
+    // or an error the server named — 409 LOCK_BLOCKED included. Rendering the string "Action
+    // failed" over either of those is what made a 200 look like a failure on 2026-09-28.
+    if (res.ok && body?.ok) {
+      router.refresh();
+      setBusy(null);
+      return;
+    }
+    setError(body?.error?.message ?? "No response from the server");
+    setBusy(null);
+  }
 
   // Editable tender name — the only fix for the "Untitled tender" fallback
   // (deterministic/tender_meta.display_title). `title` only changes once the server
@@ -269,6 +393,31 @@ export function ReadinessHub({
 
   const confirmItems = items.filter((i) => i.priority === "confirm");
   const checklist = items.filter((i) => i.priority !== "confirm");
+
+  /** The job status line shown under either the first-run or re-match button. Null once no
+   *  job has ever been started this session, or once the polled job landed on `succeeded`
+   *  (the page has already refreshed by then). */
+  function renderPrepareStatus() {
+    if (!jobId) return null;
+    if (jobError) {
+      return (
+        <div className="mt-2">
+          <p data-job-state="failed" className="text-sm text-danger">
+            {jobError.message}
+          </p>
+          <p className="text-xs text-muted">{jobError.code}</p>
+        </div>
+      );
+    }
+    if (jobState === "queued" || jobState === "running") {
+      return (
+        <p data-job-state={jobState} className="mt-2 text-xs text-muted">
+          {jobStageLabel(jobStage)}
+        </p>
+      );
+    }
+    return null;
+  }
 
   return (
     <main className="p-page">
@@ -477,7 +626,7 @@ export function ReadinessHub({
             lists exactly what&apos;s missing.
           </p>
           <button
-            onClick={() => post(`/api/tenders/${tenderId}/prepare`, "prepare")}
+            onClick={() => void startPrepare()}
             disabled={confirmItems.length > 0 || busy !== null}
             data-analyze-match
             className="mt-4 rounded bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover disabled:opacity-50"
@@ -487,23 +636,19 @@ export function ReadinessHub({
           {confirmItems.length > 0 && (
             <p className="mt-2 text-xs text-muted">Confirm the requirements above first.</p>
           )}
+          {renderPrepareStatus()}
           {error && <p className="mt-2 text-sm text-danger">{error}</p>}
         </section>
       ) : (
         <>
-          {busy === "prepare" && (
-            <p className="mb-3 text-xs text-muted">
-              Re-matching — re-running eligibility checks and re-drafting from your knowledge base.
-              This calls the AI per requirement and can take 15–30s.
-            </p>
-          )}
+          {renderPrepareStatus()}
 
           {/* generate — the counts this strip used to show duplicated SubmissionMeter above
            * it (same underlying readiness summary, different granularity). Kept the actions. */}
           <div className="mb-6 flex flex-wrap items-center justify-end gap-3 rounded-card border border-border bg-surface p-card">
             <div className="flex gap-2">
               <button
-                onClick={() => post(`/api/tenders/${tenderId}/prepare`, "prepare")}
+                onClick={() => void startPrepare()}
                 disabled={busy !== null}
                 className="rounded border border-border px-3 py-1.5 text-sm font-medium text-muted hover:text-ink disabled:opacity-50"
               >
