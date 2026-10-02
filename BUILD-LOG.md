@@ -147,3 +147,15 @@ Also found: `evals/eligibility-matcher/` has 5 golden cases that have never run 
 **Evidence**: 355 engine + 43 live isolation tests, three consecutive clean full-suite runs, 100% branch on `app/deterministic`, ruff/typecheck/lint/vitest clean. Six migrations applied live (0009–0014) with row counts verified identical across the rename.
 
 **Named blockers, not built** (see the readiness ledger artifact): documents destroyed on ingest; ingestion holds the HTTP request past every proxy timeout; no rate limiting; no deploy artifact; no observability; audit not exportable; no data export/deletion/retention; no SSO. And the one that stops a security review cold — every tender document goes to the Google AI Studio endpoint, which has no region pinning or residency guarantee, while the DB sits in `eu-north-1` against a PRD requiring Indian residency.
+
+## 2026-10-02 · Cloud Run cost cut — min-instances 1 → 0
+
+**Why.** The GCP bill jumped from €5.14 (charged 2026-08-01) to €44.12 (charged 2026-10-01). Billing → Reports grouped by SKU (account `01DA5A-3BD796-4C3580`, 2026-07-01 → 10-02) showed €75.01 net, of which **€61.89 (83%) was the two "Services Min Instance" CPU and memory SKUs** — warm instances of `tendercraft-engine-eu` and `tendercraft-web-eu` sitting idle. Cloud Monitoring showed ~720 billable hours per 30 days on each of the two; real request CPU and memory cost only ~€6. The 2026-10-01 "past due" email was a first card decline; payment went through 34 minutes later.
+
+**Change.** Both services set to `--min-instances=0`. Nothing else touched (throttling, maxScale 5, image, env). New revisions: engine `00079-59m`, web `00078-n2d`, each at 100% traffic.
+
+**Evidence.** Describe after the change shows no `minScale` on either service. Smoke test: web `/login` 200 in 2.09s (cold start), engine `/health` 200 in 0.10s. Expected saving ≈ €35/month — **an estimate**; confirm on the November billing report.
+
+**Trade-off.** First request after an idle period pays a cold start. The engine's post-response `_extract_quietly` spec read can now be lost when an idle instance is shut down, not just delayed. It fails safely (`specs_extracted_at` stays NULL; the manual button re-runs it). The proper fix is a background job, not min-instances=1 — see `docs/superpowers/plans/2026-09-28-prepare-background-job.md`.
+
+**Docs.** Full record in `docs/cost-change-2026-10-02.md` (SKU table, risks, rollback). `docs/deploy.md` § Cost posture got a pointer line. Not yet updated: the "min-instances is 1" comments in `services/engine/app/tenders.py` (the file has other in-progress uncommitted work). Nothing committed.

@@ -134,6 +134,9 @@ gcloud run services update $ENG --project=$P --region=$R \
 
 ## Cost posture
 
+> **2026-10-02: min-instances set back to 0 on both services for cost — see
+> `docs/cost-change-2026-10-02.md`. The correction block below is now historical.**
+
 > **Corrected 2026-09-14 — this said `min-instances` is 0 on both, and it is 1 on both.**
 > Read off the live services rather than the runbook: engine and web are each `minScale: 1`
 > (engine `maxScale: 5`), so neither scales to zero and neither has the cold start described
