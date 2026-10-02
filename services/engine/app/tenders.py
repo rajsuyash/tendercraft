@@ -267,8 +267,8 @@ def _extract_quietly(workspace_id: str, tender_id: str) -> None:
     """
     # ponytail: no jobs table. Cloud Run throttles CPU once the response is flushed
     # (--no-cpu-throttling is not set), so a queued read can STALL until the next request
-    # wakes the instance — min-instances is 1 on the engine (measured 2026-09-14; the 0 in
-    # docs/deploy.md is stale), so it is rarely lost outright. State stays honest either
+    # wakes the instance — and min-instances is 0 on the engine since 2026-10-02 (cost; see
+    # docs/cost-change-2026-10-02.md), so it can be lost outright. State stays honest either
     # way: specs_extracted_at remains NULL and the manual button covers it. Add a jobs
     # table if stalled reads start showing up in the logs.
     try:
@@ -370,7 +370,7 @@ def _ocr_quietly(workspace_id: str, tender_id: str,
     """
     # ponytail: no jobs table, same ceiling as _extract_quietly — Cloud Run throttles CPU once
     # the response is flushed, so a queued pass can stall until the next request wakes the
-    # instance. min-instances is 1 on the engine, so it is rarely lost outright, and state
+    # instance, or be lost outright (min-instances is 0 since 2026-10-02), and state
     # stays honest either way: ocr_completed_at remains NULL. Add a jobs table if stalled
     # passes start showing up in the logs.
     try:
