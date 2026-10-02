@@ -1,0 +1,14 @@
+[
+  {
+    "slug": "FIX_DEMO_001",
+    "folder": "FIX DEMO 001",
+    "tender_ref": "FIX/2024/001",
+    "bid_end": {"value": "01-01-2024 10:00:00", "source": "fixture"}
+  },
+  {
+    "slug": "FIX_DEMO_LATER",
+    "folder": "FIX DEMO LATER",
+    "tender_ref": "FIX/2025/002",
+    "bid_end": {"value": "01-01-2025 10:00:00", "source": "fixture"}
+  }
+]

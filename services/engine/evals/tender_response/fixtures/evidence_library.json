@@ -1,0 +1,24 @@
+{
+  "evidence": [
+    {
+      "evidence_id": "EV-FIX-001",
+      "document_type": "Turnover Certificate",
+      "title": "Turnover Certificate FY23",
+      "issuer": "Chartered Accountant",
+      "subject": "Annual turnover / years of operation",
+      "canonical_path": "FIX DEMO 001/Other Doc/turnover_cert.pdf",
+      "sha256": "deadbeef",
+      "other_copies": [],
+      "valid_from": "2023-04-01",
+      "valid_until": "2024-03-31",
+      "requirement_types_satisfied": ["Experience"],
+      "requirement_ids_satisfied": [
+        {"tender_slug": "FIX_DEMO_001", "requirement_id": "FIX-REQ-002"}
+      ],
+      "reuse_class": "Type A",
+      "facts_derived": ["CF-FIX-001"],
+      "notes": ""
+    }
+  ],
+  "expiry_incidents": []
+}

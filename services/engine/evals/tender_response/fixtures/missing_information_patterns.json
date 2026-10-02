@@ -1,0 +1,40 @@
+[
+  {
+    "pattern_id": "MIP-FIX-001",
+    "pattern": "EMD payment proof not retained in the archive",
+    "requirement_types": ["EMD"],
+    "pattern_kind": "information_request",
+    "severity": "high",
+    "count": 1,
+    "could_be_auto_resolved_from": "",
+    "why_it_matters": "",
+    "what_the_system_should_ask_the_administrator": "",
+    "occurrences": [
+      {
+        "tender_slug": "FIX_DEMO_001",
+        "requirement_id": "FIX-REQ-001",
+        "status": "NOT_FOUND_IN_ARCHIVE",
+        "what_was_missing": "EMD payment instrument"
+      }
+    ]
+  },
+  {
+    "pattern_id": "MIP-FIX-002",
+    "pattern": "a compliance-check-kind pattern — must be ignored by the missing-info metric",
+    "requirement_types": ["Declaration"],
+    "pattern_kind": "compliance_check",
+    "severity": "low",
+    "count": 1,
+    "could_be_auto_resolved_from": "",
+    "why_it_matters": "",
+    "what_the_system_should_ask_the_administrator": "",
+    "occurrences": [
+      {
+        "tender_slug": "FIX_DEMO_001",
+        "requirement_id": "FIX-REQ-003",
+        "status": "ADDRESSED",
+        "what_was_missing": "n/a"
+      }
+    ]
+  }
+]

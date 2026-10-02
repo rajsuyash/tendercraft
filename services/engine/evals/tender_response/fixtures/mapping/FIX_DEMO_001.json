@@ -1,0 +1,35 @@
+[
+  {
+    "requirement_id": "FIX-REQ-001",
+    "requirement_summary": "EMD Rs 50000",
+    "um_response_documents": [],
+    "evidence_documents": [],
+    "response_type": "None found",
+    "match_basis": "no EMD instrument in archive",
+    "confidence": "medium",
+    "status": "NOT_FOUND_IN_ARCHIVE",
+    "notes": ""
+  },
+  {
+    "requirement_id": "FIX-REQ-002",
+    "requirement_summary": "3 yrs manufacturing experience",
+    "um_response_documents": ["FIX-DOC-001"],
+    "evidence_documents": ["EV-FIX-001"],
+    "response_type": "Reusable evidence",
+    "match_basis": "turnover cert shows years of operation",
+    "confidence": "high",
+    "status": "ADDRESSED",
+    "notes": ""
+  },
+  {
+    "requirement_id": "FIX-REQ-003",
+    "requirement_summary": "Local content 50%",
+    "um_response_documents": ["FIX-DOC-002"],
+    "evidence_documents": [],
+    "response_type": "Tender-specific writing",
+    "match_basis": "declaration filed",
+    "confidence": "high",
+    "status": "ADDRESSED",
+    "notes": ""
+  }
+]

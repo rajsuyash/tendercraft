@@ -1,0 +1,17 @@
+[
+  {
+    "template_id": "TMP-FIX-001",
+    "family": "Local Content Declaration",
+    "template_type": "Type B — standard template",
+    "instances": [
+      {
+        "tender_slug": "FIX_DEMO_001",
+        "path": "FIX DEMO 001/Other Doc/local.pdf",
+        "pages": "1",
+        "date_in_doc": null,
+        "bid_number_in_doc": null,
+        "bid_number_correct": null
+      }
+    ]
+  }
+]

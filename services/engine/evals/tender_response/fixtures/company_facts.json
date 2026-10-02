@@ -1,0 +1,38 @@
+[
+  {
+    "fact_id": "CF-FIX-001",
+    "category": "Legal entity",
+    "field": "Legal name",
+    "value": "FIXTURE MANUFACTURING LIMITED",
+    "value_redacted": false,
+    "source_document": "FIX DEMO 001/Other Doc/turnover_cert.pdf",
+    "source_page": 1,
+    "source_quote": "Legal Name: FIXTURE MANUFACTURING LIMITED",
+    "also_seen_in": [],
+    "valid_from": null,
+    "valid_until": null,
+    "as_of": null,
+    "verification_status": "DOCUMENTARY",
+    "conflicts": [],
+    "confidence": "high",
+    "notes": ""
+  },
+  {
+    "fact_id": "CF-FIX-002",
+    "category": "Certification",
+    "field": "ISO 9001",
+    "value": "valid",
+    "value_redacted": false,
+    "source_document": "FIX DEMO LATER/Other Doc/iso.pdf",
+    "source_page": 1,
+    "source_quote": "ISO 9001:2015 certified",
+    "also_seen_in": [],
+    "valid_from": null,
+    "valid_until": null,
+    "as_of": null,
+    "verification_status": "DOCUMENTARY",
+    "conflicts": [],
+    "confidence": "high",
+    "notes": ""
+  }
+]
