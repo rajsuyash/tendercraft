@@ -72,3 +72,17 @@ gcloud run services update tendercraft-web-eu --min-instances=1 --region=europe-
 
 Artifact Registry holds ~21.8 GiB of images. A cleanup policy (keep the last N) would trim
 roughly €0.60/month.
+
+## Follow-ups (same day)
+
+- **Measured, not estimated:** Cloud Monitoring `billable_instance_time` shows both services at
+  60 billable min/hour up to the new revisions (created 16:04–16:05 UTC), then **zero** for the
+  three hours after. The euro saving still needs the November billing report.
+- **Budget guard:** budget "GCP monthly guard (post min-instances cut)" on billing account
+  `01DA5A-3BD796-4C3580` — €15/month, email at 50% and 100% of actual spend and at 100% of
+  forecast. If idle billing comes back, this fires before the invoice does.
+- **Artifact Registry cleanup policy** on both `cloud-run-source-deploy` repos (europe-north1,
+  asia-south1): delete versions older than 30 days, but always keep each package's 10 most
+  recent (Keep wins over Delete), so every service's live image and recent rollbacks survive.
+  Before: europe-north1 14.0 GB (74 engine + 72 web images). Applied by Google asynchronously.
+- `services/engine/app/tenders.py` comments updated in `d12d9a0`.
